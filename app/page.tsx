@@ -2,7 +2,6 @@ import React from 'react';
 import { Metadata } from 'next';
 import { getDictionary, isValidLocale } from '@/lib/i18n';
 import { Locale, DEFAULT_LOCALE, LOCALES } from '@/lib/i18n/types';
-import { getCurrentSubscriber } from '@/lib/auth/session';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { HomeClient } from '@/components/HomeClient';
@@ -53,73 +52,39 @@ export default async function HomePage({ searchParams }: PageProps) {
   const t = getDictionary(locale);
 
   const initialTab = typeof params.tab === 'string' ? params.tab : 'tests';
-  const initialTest = typeof params.test === 'string' ? params.test : 'mic';
-
-  const subscriber = await getCurrentSubscriber();
+  const initialTest = typeof params.test === 'string' ? params.test : 'microphone-test';
 
   // JSON-LD Structured Data
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@graph': [
-      {
-        '@type': 'WebApplication',
-        name: 'DeviceTry',
-        url: 'https://devicetry.com',
-        applicationCategory: 'UtilitiesApplication',
-        operatingSystem: 'All',
-        offers: [
-          {
-            '@type': 'Offer',
-            price: '0.00',
-            priceCurrency: 'USD',
-            description: 'Free browser-based hardware diagnostics without registration.',
-          },
-          {
-            '@type': 'Offer',
-            price: '9.00',
-            priceCurrency: 'USD',
-            description: 'DeviceTry Pro: Cloud history, custom PDF branding, and inventory tracking.',
-          },
-        ],
-      },
-      {
-        '@type': 'FAQPage',
-        mainEntity: [
-          {
-            '@type': 'Question',
-            name: 'Does DeviceTry record or store my webcam or microphone streams?',
-            acceptedAnswer: {
-              '@type': 'Answer',
-              text: 'No. All audio and video streams are processed completely in your browser memory via WebRTC and Web Audio APIs. Streams are never uploaded to any cloud server.',
-            },
-          },
-          {
-            '@type': 'Question',
-            name: 'Can browser tests replace hardware bench diagnostics?',
-            acceptedAnswer: {
-              '@type': 'Answer',
-              text: 'DeviceTry evaluates what the operating system and browser receive from connected peripherals. It identifies permission blocks, dead sensors, broken keys, stick drift, and audio distortion without voiding warranties.',
-            },
-          },
-        ],
-      },
-    ],
+    '@type': 'WebApplication',
+    name: 'DeviceTry - Hardware & Peripheral Diagnostic Suite',
+    applicationCategory: 'UtilitiesApplication',
+    operatingSystem: 'All (Browser-Based)',
+    browserRequirements: 'Requires modern browser with WebRTC and Web Audio support',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+    description: t.seo.metaDescHome,
   };
 
+  const isRtl = LOCALES[locale].dir === 'rtl';
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
-      {/* Inject Structured Data */}
+    <div
+      dir={LOCALES[locale].dir}
+      className={`min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans ${
+        isRtl ? 'rtl' : 'ltr'
+      }`}
+    >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <Navbar
-        t={t}
-        currentLocale={locale}
-        isPro={subscriber?.isPro}
-        userEmail={subscriber?.user.email}
-      />
+      <Navbar t={t} currentLocale={locale} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <HomeClient
@@ -127,9 +92,6 @@ export default async function HomePage({ searchParams }: PageProps) {
           locale={locale}
           initialTab={initialTab}
           initialTest={initialTest}
-          isPro={subscriber?.isPro}
-          workspaceId={subscriber?.workspace.id}
-          companyName={subscriber?.workspace.branding_company_name || undefined}
         />
       </main>
 

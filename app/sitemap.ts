@@ -1,4 +1,5 @@
 import { MetadataRoute } from 'next';
+import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://devicetry.com';
@@ -6,22 +7,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const pages = [
     '',
-    '/pro',
     '/about',
     '/privacy',
     '/terms',
     '/contact',
-  ];
-
-  const tests = [
-    'mic',
-    'webcam',
-    'keyboard',
-    'mouse',
-    'speakers',
-    'display',
-    'gamepad',
-    'battery',
   ];
 
   const sitemapEntries: MetadataRoute.Sitemap = [];
@@ -33,16 +22,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
         url: `${baseUrl}${page}?lang=${lang}`,
         lastModified: new Date(),
         changeFrequency: page === '' ? 'daily' : 'weekly',
-        priority: page === '' ? 1.0 : page === '/pro' ? 0.9 : 0.7,
+        priority: page === '' ? 1.0 : 0.7,
       });
     });
   });
 
-  // Dedicated test deep links
-  tests.forEach((test) => {
+  // Dedicated test deep links for all 38 tools
+  TOOLS_REGISTRY.forEach((tool) => {
     locales.forEach((lang) => {
       sitemapEntries.push({
-        url: `${baseUrl}/?test=${test}&lang=${lang}`,
+        url: `${baseUrl}/?test=${tool.slug}&lang=${lang}`,
         lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.8,

@@ -7,13 +7,9 @@ import {
   XCircle,
   HelpCircle,
   Printer,
-  Save,
   ArrowRight,
   ArrowLeft,
   RotateCcw,
-  Sparkles,
-  Download,
-  AlertCircle,
 } from 'lucide-react';
 import { Translations, Locale } from '@/lib/i18n/types';
 import { MicrophoneTester } from '../tests/MicrophoneTester';
@@ -26,7 +22,6 @@ import { GamepadTester } from '../tests/GamepadTester';
 import { BatteryTester } from '../tests/BatteryTester';
 import { saveLocalInspection } from '@/lib/testing/localHistory';
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
-import { isProEnabled } from '@/lib/config/mode';
 
 interface GuidedInspectionFlowProps {
   t: Translations;
@@ -61,10 +56,14 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
   },
 };
 
-export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyName }: GuidedInspectionFlowProps) {
-  const [selectedSuiteKey, setSelectedSuiteKey] = useState<string>('pre_call');
-  const [activeStepIndex, setActiveStepIndex] = useState<number>(-1); // -1 = selection screen
-  const [deviceLabel, setDeviceLabel] = useState<string>('Primary Laptop');
+export function GuidedInspectionFlow({
+  t,
+  locale,
+  companyName,
+}: GuidedInspectionFlowProps) {
+  const [selectedSuiteKey, setSelectedSuiteKey] = useState<string>('used_hardware');
+  const [activeStepIndex, setActiveStepIndex] = useState<number>(-1); // -1 = config screen
+  const [deviceLabel, setDeviceLabel] = useState<string>('');
   const [operatorName, setOperatorName] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
@@ -76,22 +75,14 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
     resultsRef.current = results;
   }, [results]);
 
-  const [savedToCloud, setSavedToCloud] = useState<boolean>(false);
-  const [savingCloud, setSavingCloud] = useState<boolean>(false);
-  const [saveCloudError, setSaveCloudError] = useState<string | null>(null);
-
   const suite = PRESET_SUITES[selectedSuiteKey];
   const activeStepKey = suite.steps[activeStepIndex];
   const isFinished = activeStepIndex >= suite.steps.length;
-
-  const proActive = isProEnabled() && isPro;
 
   const startSuite = () => {
     setActiveStepIndex(0);
     setResults({});
     resultsRef.current = {};
-    setSavedToCloud(false);
-    setSaveCloudError(null);
   };
 
   const handleStepResult = (
@@ -181,39 +172,6 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
 
   const overallStatus = calculateReportStatus(suite.steps, results);
 
-  const saveInspectionToCloud = async () => {
-    if (!proActive || !workspaceId) return;
-    setSavingCloud(true);
-    setSaveCloudError(null);
-
-    try {
-      const res = await fetch('/api/inspections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceLabel,
-          operatorName,
-          locale,
-          summaryStatus: overallStatus,
-          testsResults: results,
-          notes,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setSaveCloudError(data.error || 'Failed to save to cloud.');
-      } else {
-        setSavedToCloud(true);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Network error';
-      setSaveCloudError(msg);
-    } finally {
-      setSavingCloud(false);
-    }
-  };
-
   return (
     <div className="w-full">
       {/* MODE 1: Suite Preset Selection */}
@@ -228,236 +186,246 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
             </p>
           </div>
 
-          {/* Preset Cards */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(PRESET_SUITES).map(([key, s]) => (
-              <div
-                key={key}
-                onClick={() => setSelectedSuiteKey(key)}
-                className={`p-5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                  selectedSuiteKey === key
-                    ? 'border-[#0F766E] bg-[#F0FDF4] dark:bg-[#062420] shadow-sm'
-                    : 'border-[#DFE5EB] dark:border-[#223043] bg-[#F6F7F9] dark:bg-[#192332] hover:border-[#0F766E]'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-sm text-[#142033] dark:text-[#E9EEF4]">
-                      {s.title}
-                    </h3>
-                    {selectedSuiteKey === key && (
-                      <CheckCircle className="w-4 h-4 text-[#0F766E] dark:text-[#14B8A6]" />
-                    )}
-                  </div>
-                  <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-2 leading-relaxed">
-                    {s.desc}
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-[#DFE5EB] dark:border-[#223043] flex flex-wrap gap-1.5">
-                  {s.steps.map((st) => (
-                    <span
-                      key={st}
-                      className="px-2 py-0.5 rounded text-[11px] font-medium bg-white dark:bg-[#131B27] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043]"
-                    >
-                      {st}
-                    </span>
-                  ))}
-                </div>
+          <div className="mt-6 space-y-6">
+            <div>
+              <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-3 uppercase tracking-wider">
+                {t.inspection.selectPreset}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Object.entries(PRESET_SUITES).map(([k, s]) => (
+                  <button
+                    key={k}
+                    onClick={() => setSelectedSuiteKey(k)}
+                    className={`p-4 rounded-xl border text-left rtl:text-right transition-all cursor-pointer flex flex-col justify-between ${
+                      selectedSuiteKey === k
+                        ? 'border-[#0F766E] bg-[#E6F4F2]/30 dark:bg-[#133230]/40 ring-1 ring-[#0F766E]'
+                        : 'border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] hover:border-slate-400'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-semibold text-sm text-[#142033] dark:text-[#E9EEF4]">
+                        {s.title}
+                      </h4>
+                      <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 leading-relaxed">
+                        {s.desc}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {s.steps.map((st) => (
+                        <span
+                          key={st}
+                          className="px-2 py-0.5 rounded bg-[#F6F7F9] dark:bg-[#192332] text-[10px] font-mono text-[#5F6B7A] dark:text-[#9AA6B8] border border-[#DFE5EB] dark:border-[#223043] uppercase"
+                        >
+                          {st}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {/* Metadata: Device Label & Operator */}
-          <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
-                {t.report.deviceIdentifier}
-              </label>
-              <input
-                type="text"
-                value={deviceLabel}
-                onChange={(e) => setDeviceLabel(e.target.value)}
-                placeholder={t.report.deviceIdentifierPlaceholder || 'e.g. MacBook Air M2 or Dell XPS 15'}
-                className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
-              />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
-                {t.report.testedBy}
-              </label>
-              <input
-                type="text"
-                value={operatorName}
-                onChange={(e) => setOperatorName(e.target.value)}
-                placeholder="e.g. Alex Tech or Buyer"
-                className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
-              />
-            </div>
-          </div>
+            {/* Inspection Context Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#DFE5EB] dark:border-[#223043]">
+              <div>
+                <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
+                  {t.report.deviceIdentifier}
+                </label>
+                <input
+                  type="text"
+                  value={deviceLabel}
+                  onChange={(e) => setDeviceLabel(e.target.value)}
+                  placeholder={t.report.deviceIdentifierPlaceholder}
+                  className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                />
+              </div>
 
-          <div className="mt-6 flex justify-end">
-            <button
-              id="btn-begin-inspection"
-              onClick={startSuite}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer shadow-sm"
-            >
-              {t.hero.ctaPrimary}
-              <ArrowRight className="w-4 h-4 rtl:rotate-180" />
-            </button>
+              <div>
+                <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
+                  {t.report.testedBy}
+                </label>
+                <input
+                  type="text"
+                  value={operatorName}
+                  onChange={(e) => setOperatorName(e.target.value)}
+                  placeholder="e.g. IT Technician / Staff"
+                  className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                id="btn-start-inspection-flow"
+                onClick={startSuite}
+                className="px-6 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+              >
+                {t.inspection.presetComprehensive}
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODE 2: In-Progress Guided Step */}
+      {/* MODE 2: Active Guided Step */}
       {activeStepIndex >= 0 && !isFinished && (
         <div className="space-y-6">
-          {/* Step Progress Header */}
+          {/* Progress Tracker Bar */}
           <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-semibold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-wider">
-                {t.inspection.stepCount} {activeStepIndex + 1} / {suite.steps.length}
+              <span className="text-[11px] font-bold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-wider">
+                {suite.title}
               </span>
-              <h3 className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] capitalize">
-                {activeStepKey} Test
+              <h3 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] mt-0.5">
+                {t.inspection.stepCount} ({activeStepIndex + 1} / {suite.steps.length}): {activeStepKey.toUpperCase()}
               </h3>
             </div>
 
+            {/* Stepper Dots */}
             <div className="flex items-center gap-2">
+              {suite.steps.map((st, i) => (
+                <div
+                  key={st}
+                  className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${
+                    i === activeStepIndex
+                      ? 'bg-[#0F766E] text-white ring-2 ring-emerald-300'
+                      : i < activeStepIndex
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Render Current Tester with pass/fail telemetry hook */}
+          <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
+            {activeStepKey === 'mic' && (
+              <MicrophoneTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('mic', res)}
+              />
+            )}
+            {activeStepKey === 'webcam' && (
+              <WebcamTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('webcam', res)}
+              />
+            )}
+            {activeStepKey === 'speakers' && (
+              <SpeakersTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('speakers', res)}
+              />
+            )}
+            {activeStepKey === 'keyboard' && (
+              <KeyboardTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('keyboard', res)}
+              />
+            )}
+            {activeStepKey === 'mouse' && (
+              <MouseTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('mouse', res)}
+              />
+            )}
+            {activeStepKey === 'display' && (
+              <DisplayTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('display', res)}
+              />
+            )}
+            {activeStepKey === 'gamepad' && (
+              <GamepadTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('gamepad', res)}
+              />
+            )}
+            {activeStepKey === 'battery' && (
+              <BatteryTester
+                t={t}
+                onRecordResult={(res) => handleStepResult('battery', res)}
+              />
+            )}
+
+            {/* Step Advancement Controls */}
+            <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] flex items-center justify-between">
               <button
                 onClick={skipStep}
-                className="px-3 py-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer"
+                className="px-4 py-2 text-xs font-medium text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer"
               >
                 {t.inspection.skipTest}
               </button>
 
-              <button
-                id="btn-next-step"
-                onClick={nextStep}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-xs rounded-lg transition-colors cursor-pointer"
-              >
-                {t.common.next}
-                <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
-              </button>
+              <div className="flex items-center gap-3">
+                {activeStepIndex > 0 && (
+                  <button
+                    onClick={() => setActiveStepIndex((prev) => prev - 1)}
+                    className="px-4 py-2 border border-[#DFE5EB] dark:border-[#223043] rounded-lg text-xs font-medium text-[#142033] dark:text-[#E9EEF4] hover:bg-slate-50 dark:hover:bg-[#192332] cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                    Previous
+                  </button>
+                )}
+
+                <button
+                  id="btn-next-inspection-step"
+                  onClick={nextStep}
+                  className="px-6 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                >
+                  {activeStepIndex === suite.steps.length - 1
+                    ? t.inspection.finishInspection
+                    : t.inspection.viewReport}
+                  <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* Active Tester Component */}
-          {activeStepKey === 'mic' && (
-            <MicrophoneTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('mic', r)}
-            />
-          )}
-          {activeStepKey === 'webcam' && (
-            <WebcamTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('webcam', r)}
-            />
-          )}
-          {activeStepKey === 'speakers' && (
-            <SpeakersTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('speakers', r)}
-            />
-          )}
-          {activeStepKey === 'keyboard' && (
-            <KeyboardTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('keyboard', r)}
-            />
-          )}
-          {activeStepKey === 'mouse' && (
-            <MouseTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('mouse', r)}
-            />
-          )}
-          {activeStepKey === 'display' && (
-            <DisplayTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('display', r)}
-            />
-          )}
-          {activeStepKey === 'gamepad' && (
-            <GamepadTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('gamepad', r)}
-            />
-          )}
-          {activeStepKey === 'battery' && (
-            <BatteryTester
-              t={t}
-              onRecordResult={(r) => handleStepResult('battery', r)}
-            />
-          )}
         </div>
       )}
 
-      {/* MODE 3: Finished Inspection Summary & Printable Report */}
+      {/* MODE 3: Finished Inspection Report */}
       {isFinished && (
         <div className="space-y-6">
-          {/* Action Bar (Print / Cloud Save / Restart) */}
+          {/* Action Ribbon (Print / Reset) */}
           <div className="no-print bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 id="btn-print-report"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#142033] dark:bg-[#E9EEF4] text-white dark:text-[#142033] font-medium text-xs rounded-lg transition-colors cursor-pointer"
+                className="px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-xs"
               >
                 <Printer className="w-4 h-4" />
                 {t.report.printReport}
               </button>
-
-              {proActive && !savedToCloud && (
-                <button
-                  id="btn-cloud-save-report"
-                  onClick={saveInspectionToCloud}
-                  disabled={savingCloud}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  {savingCloud ? 'Saving to Cloud...' : t.report.saveToProCloud}
-                </button>
-              )}
-
-              {proActive && savedToCloud && (
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  Saved to Cloud Workspace
-                </span>
-              )}
             </div>
 
             <button
               onClick={() => setActiveStepIndex(-1)}
-              className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Start New Inspection
+              New Inspection
             </button>
           </div>
 
-          {saveCloudError && (
-            <div className="no-print p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 text-xs">
-              {saveCloudError}
-            </div>
-          )}
-
-          {/* Printable Structured Certificate / Report Card */}
-          <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-8 shadow-sm print:border-none print:shadow-none print:p-0">
-            {/* Header / Pro Branding */}
+          {/* Printable Report Canvas */}
+          <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-8 shadow-sm">
+            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-[#DFE5EB] dark:border-[#223043] gap-4">
               <div>
                 <span className="text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-widest">
-                  {companyName ? `${companyName} • ` : ''}Browser Device Inspection Summary
+                  {companyName ? `${companyName} • ` : ''}{t.report.title}
                 </span>
                 <h2 className="text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] mt-1">
                   {deviceLabel || 'Hardware Inspection'}
                 </h2>
                 <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 font-mono-num">
-                  Date: {new Date().toLocaleDateString(locale, { dateStyle: 'full' })} | Operator:{' '}
+                  {t.report.inspectionDate}: {new Date().toLocaleDateString(locale, { dateStyle: 'full' })} | {t.report.testedBy}:{' '}
                   {operatorName || 'Anonymous Visitor'}
                 </p>
               </div>
@@ -552,9 +520,9 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
               />
             </div>
 
-            {/* Honest Hardware Notice Required by Prompt */}
+            {/* Scope notice */}
             <div className="mt-6 p-4 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-              <strong>Notice of Browser-Based Scope:</strong> This report records empirical browser-based test observations and user-confirmed sensory checks. It is not a certified lab diagnostic or hardware warranty.
+              <strong>{t.report.disclaimerTitle}:</strong> {t.report.disclaimerText}
             </div>
           </div>
         </div>

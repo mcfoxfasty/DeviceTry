@@ -3,22 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ShieldCheck,
-  Globe,
-  User,
-  Menu,
-  X,
-  ClipboardCheck,
-} from 'lucide-react';
+import { Globe, Menu, X, ClipboardCheck, Sparkles, Wrench } from 'lucide-react';
 import { Translations, Locale, LOCALES } from '@/lib/i18n/types';
-import { isProEnabled } from '@/lib/config/mode';
+import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
 
 interface NavbarProps {
   t: Translations;
   currentLocale: Locale;
-  isPro?: boolean;
-  userEmail?: string;
 }
 
 function setLocaleCookie(newLocale: Locale) {
@@ -27,11 +18,10 @@ function setLocaleCookie(newLocale: Locale) {
   }
 }
 
-export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
+export function Navbar({ t, currentLocale }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [langMenuOpen, setLangMenuOpen] = useState<boolean>(false);
   const router = useRouter();
-  const proMode = isProEnabled();
 
   const changeLocale = (newLocale: Locale) => {
     setLangMenuOpen(false);
@@ -46,17 +36,10 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
         {/* Brand Logo & Tag */}
         <div className="flex items-center gap-6">
           <Link href={`/?lang=${currentLocale}`} className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-lg bg-[#0F766E] flex items-center justify-center text-white shadow-xs group-hover:bg-[#0D665F] transition-colors">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-lg text-[#142033] dark:text-[#E9EEF4] tracking-tight">
-                DeviceTry
-              </span>
-              <span className="hidden sm:inline-block ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6]">
-                Browser Native
-              </span>
-            </div>
+            <DeviceTryLogo size={36} />
+            <span className="hidden sm:inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6]">
+              38 Diagnostics
+            </span>
           </Link>
 
           {/* Desktop Nav Links */}
@@ -71,19 +54,11 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
 
             <Link
               href={`/?tab=tests&lang=${currentLocale}`}
-              className="px-3 py-1.5 rounded-md hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F6F7F9] dark:hover:bg-[#192332] transition-colors"
+              className="px-3 py-1.5 rounded-md hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F6F7F9] dark:hover:bg-[#192332] transition-colors flex items-center gap-1.5"
             >
-              {t.nav.tools}
+              <Wrench className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#14B8A6]" />
+              {t.nav.tools} (38)
             </Link>
-
-            {proMode && (
-              <Link
-                href={`/pro?lang=${currentLocale}`}
-                className="px-3 py-1.5 rounded-md hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F6F7F9] dark:hover:bg-[#192332] transition-colors"
-              >
-                {t.nav.pricing}
-              </Link>
-            )}
 
             <Link
               href={`/about?lang=${currentLocale}`}
@@ -94,7 +69,7 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
           </nav>
         </div>
 
-        {/* Right side controls: Language Switcher + Pro Badge / Auth */}
+        {/* Right side controls: Language Switcher */}
         <div className="flex items-center gap-3">
           {/* Multilingual Selector */}
           <div className="relative">
@@ -127,22 +102,6 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
             )}
           </div>
 
-          {/* Logged in Pro Workspace if Pro mode is active */}
-          {proMode && userEmail && (
-            <Link
-              href={`/pro/workspace?lang=${currentLocale}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] hover:border-[#0F766E] border border-[#DFE5EB] dark:border-[#223043] rounded-lg text-xs font-medium transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-[#0F766E]" />
-              <span className="hidden sm:inline-block truncate max-w-[120px]">{userEmail}</span>
-              {isPro && (
-                <span className="bg-[#0F766E] text-white text-[10px] font-bold px-1.5 py-0.2 rounded">
-                  PRO
-                </span>
-              )}
-            </Link>
-          )}
-
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -169,17 +128,8 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2 text-[#5F6B7A] dark:text-[#9AA6B8]"
           >
-            {t.nav.tools}
+            {t.nav.tools} (38)
           </Link>
-          {proMode && (
-            <Link
-              href={`/pro?lang=${currentLocale}`}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-[#0F766E] dark:text-[#14B8A6] font-medium"
-            >
-              {t.nav.pricing}
-            </Link>
-          )}
           <Link
             href={`/about?lang=${currentLocale}`}
             onClick={() => setMobileMenuOpen(false)}
@@ -187,15 +137,6 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
           >
             {t.nav.about}
           </Link>
-          {proMode && userEmail && (
-            <Link
-              href={`/pro/workspace?lang=${currentLocale}`}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-[#0F766E] dark:text-[#14B8A6] font-medium"
-            >
-              {t.nav.dashboard}
-            </Link>
-          )}
         </div>
       )}
     </header>

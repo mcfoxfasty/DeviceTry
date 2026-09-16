@@ -2,10 +2,9 @@ import React from 'react';
 import { Metadata } from 'next';
 import { getDictionary, isValidLocale } from '@/lib/i18n';
 import { Locale, DEFAULT_LOCALE } from '@/lib/i18n/types';
-import { getCurrentSubscriber } from '@/lib/auth/session';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { Cpu, ShieldCheck, Video, ShoppingBag, Wrench, CheckCircle } from 'lucide-react';
+import { Cpu, Video, ShoppingBag, Wrench, CheckCircle } from 'lucide-react';
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -23,16 +22,10 @@ export default async function AboutPage({ searchParams }: PageProps) {
   const langParam = typeof params.lang === 'string' ? params.lang : DEFAULT_LOCALE;
   const locale: Locale = isValidLocale(langParam) ? langParam : DEFAULT_LOCALE;
   const t = getDictionary(locale);
-  const subscriber = await getCurrentSubscriber();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
-      <Navbar
-        t={t}
-        currentLocale={locale}
-        isPro={subscriber?.isPro}
-        userEmail={subscriber?.user.email}
-      />
+      <Navbar t={t} currentLocale={locale} />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         <div className="text-center max-w-2xl mx-auto">
@@ -62,33 +55,37 @@ export default async function AboutPage({ searchParams }: PageProps) {
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-[#0F766E]" />
-              2. Buying and Selling Used Hardware
+              2. Buying or Selling Used Computer Hardware
             </h2>
             <p>
-              When purchasing a refurbished laptop from eBay, Facebook Marketplace, or an independent shop, testing all components within the 10-minute return window is critical. Our <strong>Guided Inspection Flow</strong> walks users through microphone clarity, webcam autofocus, keyboard matrix integrity, mouse switch chatter, stereo speaker channels, dead pixels, and battery health, producing a verifiable, printable condition certificate.
+              When exchanging laptops on secondary marketplaces, buyers and sellers need transparent verification that keys don&apos;t chatter, the display has zero stuck subpixels, the microphone records voice clearly, and the battery health is reporting valid discharge rates.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <Wrench className="w-4 h-4 text-[#0F766E]" />
-              3. Deep Browser API Integration
+              3. Troubleshooting Audio & Peripheral Malfunctions
             </h2>
             <p>
-              DeviceTry interacts directly with browser runtime standards:
+              Is the game controller drifting? Is the mouse wheel misfiring? DeviceTry isolates hardware input events directly in JavaScript, eliminating guesswork and vendor-bloat driver suites.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <div className="p-3 bg-[#F6F7F9] dark:bg-[#192332] rounded-lg border border-[#DFE5EB] dark:border-[#223043]">
-                <p className="font-semibold text-[#142033] dark:text-[#E9EEF4]">Web Audio & AnalyserNode</p>
-                <p className="text-[11px] mt-1">Computes real-time FFT spectrums and RMS amplitude without transmitting sample buffers across the internet.</p>
-              </div>
-
-              <div className="p-3 bg-[#F6F7F9] dark:bg-[#192332] rounded-lg border border-[#DFE5EB] dark:border-[#223043]">
-                <p className="font-semibold text-[#142033] dark:text-[#E9EEF4]">Gamepad & Input APIs</p>
-                <p className="text-[11px] mt-1">Polls analog stick displacement down to 0.001 precision to reveal potentiometer dead zones and stick drift.</p>
-              </div>
-            </div>
           </section>
+
+          <div className="border-t border-[#DFE5EB] dark:border-[#223043] pt-6 flex flex-wrap gap-4 text-xs font-medium text-[#142033] dark:text-[#E9EEF4]">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#0F766E]" />
+              38 Pure Client Diagnostic Tools
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#0F766E]" />
+              Zero Cloud Media Storage
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#0F766E]" />
+              Works on Windows, macOS, Linux, ChromeOS & Mobile
+            </div>
+          </div>
         </div>
       </main>
 
