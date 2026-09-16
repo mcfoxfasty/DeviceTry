@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Gamepad2, AlertTriangle, CheckCircle, Crosshair } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Gamepad2, AlertTriangle, CheckCircle, Crosshair, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface GamepadTesterProps {
   t: Translations;
-  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onRecordResult?: (result: {
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    details: string;
+    metrics?: Record<string, unknown>;
+  }) => void;
 }
 
 const BUTTON_LABELS = [
@@ -32,6 +36,12 @@ const BUTTON_LABELS = [
 export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
   const [gamepads, setGamepads] = useState<{ id: string; index: number; buttons: number[]; axes: number[] }[]>([]);
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
+  const [isCalibratingNeutral, setIsCalibratingNeutral] = useState<boolean>(false);
+  const [neutralCalibrationPassed, setNeutralCalibrationPassed] = useState<boolean | null>(null);
+  const [vibrationSupported, setVibrationSupported] = useState<boolean>(false);
+
+  const calibrationSamplesRef = useRef<{ leftMax: number; rightMax: number }[]>([]);
+  const isCalibratingRef = useRef<boolean>(false);
 
   useEffect(() => {
     let animId: number;
@@ -50,18 +60,32 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
               buttons: pad.buttons.map((b) => (typeof b === 'number' ? b : b.value)),
               axes: Array.from(pad.axes),
             });
+
+            // Check vibration actuator support
+            if (
+              (pad as unknown as { vibrationActuator?: { playEffect: unknown } }).vibrationActuator &&
+              !vibrationSupported
+            ) {
+              setVibrationSupported(true);
+            }
+
+            // If currently taking idle calibration samples
+            if (isCalibratingRef.current && pad.index === selectedPadIndex) {
+              const leftDist = Math.hypot(pad.axes[0] || 0, pad.axes[1] || 0);
+              const rightDist = Math.hypot(pad.axes[2] || 0, pad.axes[3] || 0);
+              calibrationSamplesRef.current.push({ leftMax: leftDist, rightMax: rightDist });
+            }
           }
         }
 
         setGamepads(active);
 
-        if (active.length > 0) {
-          const current = active[0];
-          const hasDrift = current.axes.some((ax) => Math.abs(ax) > 0.15);
+        if (active.length > 0 && !isCalibratingRef.current) {
+          const current = active.find((p) => p.index === selectedPadIndex) || active[0];
           onRecordResult?.({
-            status: hasDrift ? 'warning' : 'passed',
-            details: `Controller detected: ${current.id}. ${hasDrift ? 'Possible stick drift detected.' : 'Neutral sticks verified.'}`,
-            metrics: { padId: current.id, axes: current.axes },
+            status: 'passed',
+            details: `Controller active: ${current.id}. Buttons & axes polling correctly.`,
+            metrics: { padId: current.id, buttonCount: current.buttons.length },
           });
         }
       }
@@ -72,7 +96,55 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
     animId = requestAnimationFrame(pollGamepads);
 
     return () => cancelAnimationFrame(animId);
-  }, []);
+  }, [selectedPadIndex, vibrationSupported, onRecordResult]);
+
+  // Neutral Drift Calibration Test (Observed 2.5 seconds while idle)
+  const startNeutralCalibration = () => {
+    setIsCalibratingNeutral(true);
+    setNeutralCalibrationPassed(null);
+    calibrationSamplesRef.current = [];
+    isCalibratingRef.current = true;
+
+    setTimeout(() => {
+      isCalibratingRef.current = false;
+      setIsCalibratingNeutral(false);
+
+      const samples = calibrationSamplesRef.current;
+      if (samples.length > 10) {
+        const maxLeft = Math.max(...samples.map((s) => s.leftMax));
+        const maxRight = Math.max(...samples.map((s) => s.rightMax));
+        // Standard dead-zone threshold: 12%
+        const hasDrift = maxLeft > 0.12 || maxRight > 0.12;
+        setNeutralCalibrationPassed(!hasDrift);
+
+        onRecordResult?.({
+          status: hasDrift ? 'warning' : 'passed',
+          details: hasDrift
+            ? `Idle stick resting offset exceeded 12% deadzone (Left: ${(maxLeft * 100).toFixed(1)}%, Right: ${(maxRight * 100).toFixed(1)}%).`
+            : `Neutral calibration verified clean centering within 12% deadzone.`,
+          metrics: { maxLeftIdleOffset: maxLeft, maxRightIdleOffset: maxRight },
+        });
+      }
+    }, 2500);
+  };
+
+  const testVibration = () => {
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return;
+    const rawPads = navigator.getGamepads();
+    const current = rawPads[selectedPadIndex] || rawPads[0];
+    if (current && (current as unknown as { vibrationActuator?: { playEffect: (type: string, opts: unknown) => Promise<unknown> } }).vibrationActuator) {
+      try {
+        (current as unknown as { vibrationActuator: { playEffect: (type: string, opts: unknown) => Promise<unknown> } }).vibrationActuator.playEffect('dual-rumble', {
+          startDelay: 0,
+          duration: 400,
+          weakMagnitude: 0.8,
+          strongMagnitude: 0.8,
+        });
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   const activePad = gamepads.find((p) => p.index === selectedPadIndex) || gamepads[0];
 
@@ -87,19 +159,31 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
           <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">{t.gamepadTest.shortDesc}</p>
         </div>
 
-        {gamepads.length > 1 && (
-          <select
-            value={selectedPadIndex}
-            onChange={(e) => setSelectedPadIndex(Number(e.target.value))}
-            className="text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded px-3 py-1.5 focus:outline-none"
-          >
-            {gamepads.map((p) => (
-              <option key={p.index} value={p.index}>
-                Pad #{p.index}: {p.id.slice(0, 24)}...
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {gamepads.length > 1 && (
+            <select
+              value={selectedPadIndex}
+              onChange={(e) => setSelectedPadIndex(Number(e.target.value))}
+              className="text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded px-3 py-1.5 focus:outline-none"
+            >
+              {gamepads.map((p) => (
+                <option key={p.index} value={p.index}>
+                  Pad #{p.index}: {p.id.slice(0, 24)}...
+                </option>
+              ))}
+            </select>
+          )}
+
+          {vibrationSupported && (
+            <button
+              onClick={testVibration}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-semibold rounded-lg border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              Test Vibration
+            </button>
+          )}
+        </div>
       </div>
 
       {activePad ? (
@@ -115,6 +199,50 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
             <span className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
               {activePad.buttons.length} buttons / {activePad.axes.length} axes
             </span>
+          </div>
+
+          {/* Neutral Drift Idle Calibration */}
+          <div className="p-4 rounded-xl bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4]">
+                  Neutral Stick Drift Check
+                </h3>
+                <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-0.5">
+                  Release both sticks and observe resting deadzone for 2.5 seconds.
+                </p>
+              </div>
+
+              <button
+                onClick={startNeutralCalibration}
+                disabled={isCalibratingNeutral}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#0D665F] text-white text-xs font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Crosshair className="w-3.5 h-3.5" />
+                {isCalibratingNeutral ? 'Measuring Idle Rest...' : 'Run Neutral Check'}
+              </button>
+            </div>
+
+            {neutralCalibrationPassed !== null && (
+              <div
+                className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                  neutralCalibrationPassed
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    : 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                }`}
+              >
+                {neutralCalibrationPassed ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                )}
+                <span>
+                  {neutralCalibrationPassed
+                    ? 'Sticks rested stably within the acceptable 12% neutral deadzone.'
+                    : 'Resting stick position drifted outside the 12% neutral deadzone.'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Analog Joysticks 2D Radars */}

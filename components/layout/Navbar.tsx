@@ -2,25 +2,17 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
   Globe,
   User,
-  Sparkles,
   Menu,
   X,
-  Mic,
-  Camera,
-  Keyboard,
-  Mouse,
-  Volume2,
-  Monitor,
-  Gamepad2,
-  Battery,
   ClipboardCheck,
 } from 'lucide-react';
 import { Translations, Locale, LOCALES } from '@/lib/i18n/types';
+import { isProEnabled } from '@/lib/config/mode';
 
 interface NavbarProps {
   t: Translations;
@@ -39,7 +31,7 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [langMenuOpen, setLangMenuOpen] = useState<boolean>(false);
   const router = useRouter();
-  const pathname = usePathname();
+  const proMode = isProEnabled();
 
   const changeLocale = (newLocale: Locale) => {
     setLangMenuOpen(false);
@@ -84,12 +76,14 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
               {t.nav.tools}
             </Link>
 
-            <Link
-              href={`/pro?lang=${currentLocale}`}
-              className="px-3 py-1.5 rounded-md hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F6F7F9] dark:hover:bg-[#192332] transition-colors"
-            >
-              {t.nav.pricing}
-            </Link>
+            {proMode && (
+              <Link
+                href={`/pro?lang=${currentLocale}`}
+                className="px-3 py-1.5 rounded-md hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F6F7F9] dark:hover:bg-[#192332] transition-colors"
+              >
+                {t.nav.pricing}
+              </Link>
+            )}
 
             <Link
               href={`/about?lang=${currentLocale}`}
@@ -133,8 +127,8 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
             )}
           </div>
 
-          {/* Logged in Pro Workspace */}
-          {userEmail && (
+          {/* Logged in Pro Workspace if Pro mode is active */}
+          {proMode && userEmail && (
             <Link
               href={`/pro/workspace?lang=${currentLocale}`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] hover:border-[#0F766E] border border-[#DFE5EB] dark:border-[#223043] rounded-lg text-xs font-medium transition-colors"
@@ -177,13 +171,15 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
           >
             {t.nav.tools}
           </Link>
-          <Link
-            href={`/pro?lang=${currentLocale}`}
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-[#0F766E] dark:text-[#14B8A6] font-medium"
-          >
-            {t.nav.pricing}
-          </Link>
+          {proMode && (
+            <Link
+              href={`/pro?lang=${currentLocale}`}
+              onClick={() => setMobileMenuOpen(false)}
+              className="block py-2 text-[#0F766E] dark:text-[#14B8A6] font-medium"
+            >
+              {t.nav.pricing}
+            </Link>
+          )}
           <Link
             href={`/about?lang=${currentLocale}`}
             onClick={() => setMobileMenuOpen(false)}
@@ -191,7 +187,7 @@ export function Navbar({ t, currentLocale, isPro, userEmail }: NavbarProps) {
           >
             {t.nav.about}
           </Link>
-          {userEmail && (
+          {proMode && userEmail && (
             <Link
               href={`/pro/workspace?lang=${currentLocale}`}
               onClick={() => setMobileMenuOpen(false)}

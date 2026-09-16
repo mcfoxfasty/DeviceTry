@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const token = req.cookies.get(SESSION_COOKIE_OPTIONS.name)?.value;
     if (token) {
       const tokenHash = await hashToken(token);
-      await db.deleteSessionByTokenHash(tokenHash);
+      await db.deleteSession(tokenHash);
     }
 
     const res = NextResponse.json({ success: true });

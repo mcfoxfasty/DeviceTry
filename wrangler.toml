@@ -1,0 +1,34 @@
+name = "devicetry"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Enable temporary workers.dev URL before custom domain is attached
+workers_dev = true
+
+# Static assets generated during build
+assets = { directory = ".open-next/assets", binding = "ASSETS" }
+
+# Cloudflare D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "devicetry-production"
+database_id = "00000000-0000-0000-0000-000000000000" # Replace with `wrangler d1 create devicetry-production` ID
+migrations_dir = "migrations"
+
+[vars]
+NEXT_PUBLIC_APP_MODE = "FREE_ONLY"
+
+# Preview / Staging Environment
+[env.preview]
+name = "devicetry-preview"
+workers_dev = true
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "devicetry-preview"
+database_id = "11111111-1111-1111-1111-111111111111"
+migrations_dir = "migrations"
+
+[env.preview.vars]
+NEXT_PUBLIC_APP_MODE = "PRO_ENABLED"

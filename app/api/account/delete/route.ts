@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSubscriber, SESSION_COOKIE_OPTIONS } from '@/lib/auth/session';
 import { db } from '@/lib/db/adapter';
+import { isProEnabled } from '@/lib/config/mode';
 
 export async function POST(req: NextRequest) {
+  if (!isProEnabled()) {
+    return NextResponse.json({ error: 'Pro features are disabled in FREE_ONLY mode.' }, { status: 404 });
+  }
+
   try {
     const subscriber = await getCurrentSubscriber();
     if (!subscriber) {
@@ -17,7 +22,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await db.deleteAccountAndData(subscriber.user.id);
+    await db.deleteUserAndWorkspace(subscriber.user.id);
 
     const res = NextResponse.json({ success: true, message: 'Account and associated data deleted permanently.' });
     res.cookies.set({

@@ -1,19 +1,13 @@
+import { TestResultItem, ReportSummaryStatus } from './reportStatus';
+
 export interface LocalInspectionItem {
   id: string;
   createdAt: number;
   locale: string;
   deviceLabel: string;
   operatorName?: string;
-  summaryStatus: 'passed' | 'warning' | 'failed' | 'inconclusive';
-  testsResults: Record<
-    string,
-    {
-      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported' | 'skipped';
-      classification: 'browser' | 'user' | 'inconclusive' | 'unsupported' | 'skipped';
-      details?: string;
-      metrics?: Record<string, unknown>;
-    }
-  >;
+  summaryStatus: ReportSummaryStatus;
+  testsResults: Record<string, TestResultItem>;
   notes?: string;
 }
 

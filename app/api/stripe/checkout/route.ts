@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSubscriber } from '@/lib/auth/session';
 import { createCheckoutSession } from '@/lib/stripe/billing';
+import { isProEnabled } from '@/lib/config/mode';
 
 export async function POST(req: NextRequest) {
+  if (!isProEnabled()) {
+    return NextResponse.json({ error: 'Pro features are disabled in FREE_ONLY mode.' }, { status: 404 });
+  }
+
   try {
     const subscriber = await getCurrentSubscriber();
     if (!subscriber) {

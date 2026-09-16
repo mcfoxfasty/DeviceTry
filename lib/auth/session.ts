@@ -1,16 +1,29 @@
 import { cookies } from 'next/headers';
 import { db } from '../db/adapter';
-import { User, Workspace } from '../db/schema';
+import { User, Workspace, Subscription } from '../db/schema';
+import { isProMode } from '../config/mode';
 
-const SESSION_COOKIE_NAME = 'devtry_session';
-const SESSION_SECRET = process.env.AUTH_SESSION_SECRET || 'devtry-default-secure-fallback-secret-2026';
+export const SESSION_COOKIE_NAME = 'devtry_session';
+
+function getSessionSecret(): string {
+  const secret = process.env.AUTH_SESSION_SECRET;
+  if (!secret) {
+    if (isProMode()) {
+      throw new Error('AUTH_SESSION_SECRET is required when NEXT_PUBLIC_APP_MODE=PRO_ENABLED.');
+    }
+    // In FREE_ONLY mode, return a dummy string if invoked (though auth is disabled)
+    return 'free-only-mode-dummy-auth-secret';
+  }
+  return secret;
+}
 
 /**
  * Hash raw token with Web Crypto SHA-256
  */
 export async function hashToken(token: string): Promise<string> {
+  const secret = getSessionSecret();
   const encoder = new TextEncoder();
-  const data = encoder.encode(token + SESSION_SECRET);
+  const data = encoder.encode(token + secret);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -65,6 +78,15 @@ export async function hashPassword(password: string): Promise<string> {
   return `${saltHex}:${hashHex}`;
 }
 
+function constantTimeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
 /**
  * Verify password against salt:hash
  */
@@ -102,43 +124,57 @@ export async function verifyPassword(password: string, storedHash: string): Prom
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-  return computedHashHex === originalHashHex;
+  return constantTimeCompare(computedHashHex, originalHashHex);
 }
 
 export interface CurrentSubscriber {
   user: User;
   workspace: Workspace;
   isPro: boolean;
+  subscription: Subscription | null;
   subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'incomplete' | 'none';
   renewsAt?: number;
 }
 
 /**
- * Authoritatively get current logged-in subscriber from HttpOnly cookie
+ * Authoritatively get current logged-in subscriber from HttpOnly cookie.
+ * In FREE_ONLY mode, returns null immediately without error.
  */
 export async function getCurrentSubscriber(): Promise<CurrentSubscriber | null> {
+  if (!isProMode()) {
+    return null;
+  }
+
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!token) return null;
 
     const tokenHash = await hashToken(token);
-    const session = await db.getSessionByTokenHash(tokenHash);
-    if (!session) return null;
+    const sessionRes = await db.getSessionByTokenHash(tokenHash);
+    if (!sessionRes) return null;
 
-    const user = await db.getUserById(session.user_id);
-    if (!user) return null;
-
-    const workspace = await db.getWorkspaceForUser(user.id);
+    const { user } = sessionRes;
+    const workspace = await db.getWorkspaceByUserId(user.id);
     if (!workspace) return null;
 
     const subscription = await db.getSubscription(workspace.id);
-    const isPro = subscription ? subscription.status === 'active' || subscription.status === 'canceled' : false;
+
+    // Pro is active if:
+    // 1. status is 'active'
+    // 2. OR status is 'canceled' but current_period_end is still in the future
+    const now = Date.now();
+    const isPro = Boolean(
+      subscription &&
+        ((subscription.status === 'active') ||
+          (subscription.status === 'canceled' && subscription.current_period_end > now))
+    );
 
     return {
       user,
       workspace,
       isPro,
+      subscription: subscription || null,
       subscriptionStatus: subscription ? subscription.status : 'none',
       renewsAt: subscription?.current_period_end,
     };

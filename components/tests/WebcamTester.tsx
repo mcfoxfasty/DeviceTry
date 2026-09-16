@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, CameraOff, RefreshCw, Download, AlertTriangle, CheckCircle, Video } from 'lucide-react';
+import { Camera, CameraOff, Download, AlertTriangle, CheckCircle, Video } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface WebcamTesterProps {
   t: Translations;
-  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onRecordResult?: (result: {
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    details: string;
+    metrics?: Record<string, unknown>;
+  }) => void;
 }
 
 export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -19,12 +22,16 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
   // Video stream metrics
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null);
   const [observedFps, setObservedFps] = useState<number | null>(null);
+  const [fpsSupported, setFpsSupported] = useState<boolean>(true);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
+  // Stable references for deterministic cleanup without stale closures
+  const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoFrameCallbackIdRef = useRef<number | null>(null);
   const fpsFrameCountRef = useRef<number>(0);
   const fpsLastTimeRef = useRef<number>(0);
-  const animationFrameRef = useRef<number | null>(null);
+  const snapshotUrlRef = useRef<string | null>(null);
 
   const loadCameras = async () => {
     try {
@@ -38,6 +45,93 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     } catch {
       // ignore
     }
+  };
+
+  const stopCamera = () => {
+    // 1. Cancel requestVideoFrameCallback if supported and active
+    if (
+      videoRef.current &&
+      videoFrameCallbackIdRef.current !== null &&
+      'cancelVideoFrameCallback' in videoRef.current
+    ) {
+      try {
+        (
+          videoRef.current as unknown as {
+            cancelVideoFrameCallback: (id: number) => void;
+          }
+        ).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+      } catch {
+        // ignore
+      }
+      videoFrameCallbackIdRef.current = null;
+    }
+
+    // 2. Stop and release all tracks on streamRef
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
+      streamRef.current = null;
+    }
+
+    // 3. Clear video element source
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setResolution(null);
+    setObservedFps(null);
+    setPermissionState('idle');
+  };
+
+  const measureFpsWithVideoFrameCallback = (videoEl: HTMLVideoElement) => {
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
+      setFpsSupported(false);
+      setObservedFps(null);
+      return;
+    }
+
+    setFpsSupported(true);
+    fpsFrameCountRef.current = 0;
+    fpsLastTimeRef.current = performance.now();
+
+    const callback = (
+      now: DOMHighResTimeStamp,
+      _metadata: Record<string, unknown>
+    ) => {
+      if (!streamRef.current || !videoRef.current) return;
+
+      fpsFrameCountRef.current++;
+      const elapsed = now - fpsLastTimeRef.current;
+
+      if (elapsed >= 1000) {
+        const fps = Math.round((fpsFrameCountRef.current * 1000) / elapsed);
+        setObservedFps(fps);
+        fpsFrameCountRef.current = 0;
+        fpsLastTimeRef.current = now;
+      }
+
+      if (
+        videoRef.current &&
+        'requestVideoFrameCallback' in videoRef.current
+      ) {
+        videoFrameCallbackIdRef.current = (
+          videoRef.current as unknown as {
+            requestVideoFrameCallback: (cb: typeof callback) => number;
+          }
+        ).requestVideoFrameCallback(callback);
+      }
+    };
+
+    videoFrameCallbackIdRef.current = (
+      videoEl as unknown as {
+        requestVideoFrameCallback: (cb: typeof callback) => number;
+      }
+    ).requestVideoFrameCallback(callback);
   };
 
   const startCamera = async (deviceId?: string) => {
@@ -54,7 +148,7 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
       };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(mediaStream);
+      streamRef.current = mediaStream;
       setPermissionState('granted');
       await loadCameras();
 
@@ -62,17 +156,18 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
           if (videoRef.current) {
-            setResolution({
-              width: videoRef.current.videoWidth,
-              height: videoRef.current.videoHeight,
-            });
-            measureFps();
+            const w = videoRef.current.videoWidth;
+            const h = videoRef.current.videoHeight;
+            setResolution({ width: w, height: h });
+            measureFpsWithVideoFrameCallback(videoRef.current);
+
             onRecordResult?.({
               status: 'passed',
-              details: `Camera operational at ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
+              details: `Camera operational at ${w}x${h}. Video frame arrival confirmed.`,
               metrics: {
-                width: videoRef.current.videoWidth,
-                height: videoRef.current.videoHeight,
+                width: w,
+                height: h,
+                deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
               },
             });
           }
@@ -82,7 +177,7 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
       const error = err as Error;
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionState('denied');
-        setErrorMessage(t.micTest.deniedMessage);
+        setErrorMessage(t.common.permissionDenied);
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setPermissionState('error');
         setErrorMessage(t.common.deviceUnavailable);
@@ -97,45 +192,15 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     }
   };
 
-  const stopCamera = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setResolution(null);
-    setObservedFps(null);
-  };
-
-  const measureFps = () => {
-    fpsFrameCountRef.current = 0;
-    fpsLastTimeRef.current = performance.now();
-
-    const loop = (now: number) => {
-      fpsFrameCountRef.current++;
-      const elapsed = now - fpsLastTimeRef.current;
-
-      if (elapsed >= 1000) {
-        const fps = Math.round((fpsFrameCountRef.current * 1000) / elapsed);
-        setObservedFps(fps);
-        fpsFrameCountRef.current = 0;
-        fpsLastTimeRef.current = now;
-      }
-
-      animationFrameRef.current = requestAnimationFrame(loop);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(loop);
-  };
-
   const takeSnapshot = () => {
     if (!videoRef.current || !resolution) return;
+
+    if (snapshotUrlRef.current) {
+      URL.revokeObjectURL(snapshotUrlRef.current);
+      snapshotUrlRef.current = null;
+      setSnapshotUrl(null);
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = resolution.width;
     canvas.height = resolution.height;
@@ -143,13 +208,23 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     if (!ctx) return;
 
     ctx.drawImage(videoRef.current, 0, 0, resolution.width, resolution.height);
-    const url = canvas.toDataURL('image/jpeg', 0.92);
-    setSnapshotUrl(url);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        snapshotUrlRef.current = url;
+        setSnapshotUrl(url);
+      }
+    }, 'image/jpeg', 0.92);
   };
 
+  // Unmount & route cleanup
   useEffect(() => {
     return () => {
       stopCamera();
+      if (snapshotUrlRef.current) {
+        URL.revokeObjectURL(snapshotUrlRef.current);
+        snapshotUrlRef.current = null;
+      }
     };
   }, []);
 
@@ -172,8 +247,8 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
               disabled={permissionState === 'requesting'}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Video className="w-4 h-4" />
-              {permissionState === 'requesting' ? t.micTest.requesting : t.webcamTest.startPrompt}
+              <Camera className="w-4 h-4" />
+              {permissionState === 'requesting' ? t.common.loading : t.common.startTest}
             </button>
           ) : (
             <button
@@ -188,14 +263,14 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
         </div>
       </div>
 
-      {/* Device Selector */}
+      {/* Camera Selector */}
       {devices.length > 1 && permissionState === 'granted' && (
         <div className="mt-4 flex items-center gap-3">
-          <label htmlFor="cam-device-select" className="text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">
+          <label htmlFor="camera-device-select" className="text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">
             {t.webcamTest.selectCamera}
           </label>
           <select
-            id="cam-device-select"
+            id="camera-device-select"
             value={selectedDeviceId}
             onChange={(e) => {
               setSelectedDeviceId(e.target.value);
@@ -205,14 +280,14 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
           >
             {devices.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Camera ${d.deviceId.slice(0, 5)}`}
+                {d.label || 'Default Camera'}
               </option>
             ))}
           </select>
         </div>
       )}
 
-      {/* Error / Denied Banner */}
+      {/* Error & Permission alerts */}
       {permissionState === 'denied' && (
         <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
@@ -233,89 +308,103 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
         </div>
       )}
 
-      {/* Video Viewport & Real-time Metrics */}
+      {/* Video Viewport & Technical Telemetry */}
       {permissionState === 'granted' ? (
-        <div className="mt-6 space-y-4">
-          <div className="relative aspect-video max-w-2xl mx-auto rounded-lg overflow-hidden bg-black border border-[#DFE5EB] dark:border-[#223043]">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
+        <div className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Live Video Monitor */}
+            <div className="lg:col-span-2 relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border border-[#DFE5EB] dark:border-[#223043] shadow-inner">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
 
-            {/* Overlaid Stream Metrics */}
-            <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded text-xs font-mono-num flex items-center gap-3">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                LIVE
-              </span>
-              {resolution && (
-                <span>
-                  <bdi>{resolution.width} × {resolution.height}</bdi>
-                </span>
-              )}
-              {observedFps !== null && (
-                <span>
-                  <bdi>{observedFps} FPS</bdi>
-                </span>
-              )}
+              {/* Live Overlay Badge */}
+              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-xs text-white text-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 font-mono">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span>LIVE FEED</span>
+              </div>
             </div>
 
-            {/* Snapshot trigger */}
-            <div className="absolute bottom-3 right-3">
-              <button
-                id="btn-take-snapshot"
-                onClick={takeSnapshot}
-                className="px-3 py-1.5 bg-white/90 hover:bg-white text-[#142033] font-medium text-xs rounded shadow transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Camera className="w-3.5 h-3.5 text-[#0F766E]" />
-                {t.webcamTest.takeSnapshot}
-              </button>
-            </div>
-          </div>
+            {/* Telemetry & Controls Panel */}
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#5F6B7A] dark:text-[#9AA6B8]">
+                  {t.common.status}
+                </h3>
 
-          {/* Snapshot review */}
-          {snapshotUrl && (
-            <div className="p-4 rounded-lg bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src={snapshotUrl}
-                  alt="Camera test snapshot"
-                  className="w-20 h-14 object-cover rounded border border-[#DFE5EB] dark:border-[#223043]"
-                />
-                <div>
-                  <p className="text-xs font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-[#DFE5EB] dark:border-[#223043]">
+                    <span className="text-[#5F6B7A] dark:text-[#9AA6B8]">{t.webcamTest.deliveredResolution}</span>
+                    <span className="font-mono-num font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                      {resolution ? `${resolution.width} × ${resolution.height}` : '—'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-[#DFE5EB] dark:border-[#223043]">
+                    <span className="text-[#5F6B7A] dark:text-[#9AA6B8]">{t.webcamTest.observedFps}</span>
+                    <span className="font-mono-num font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                      {observedFps !== null ? (
+                        `${observedFps} FPS`
+                      ) : !fpsSupported ? (
+                        <span className="text-[11px] font-normal text-[#8996A6]">Unsupported</span>
+                      ) : (
+                        'Measuring...'
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    id="btn-take-snapshot"
+                    onClick={takeSnapshot}
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-white dark:bg-[#131B27] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-semibold rounded-lg border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#14B8A6]" />
                     {t.webcamTest.takeSnapshot}
-                  </p>
-                  <p className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-                    {resolution ? `${resolution.width}×${resolution.height} JPG` : ''}
-                  </p>
+                  </button>
                 </div>
               </div>
 
-              <a
-                href={snapshotUrl}
-                download="devicetry-camera-snapshot.jpg"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0F766E] hover:bg-[#0D665F] text-white text-xs font-medium rounded-md transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                {t.webcamTest.downloadSnapshot}
-              </a>
+              {/* Snapshot Preview */}
+              {snapshotUrl && (
+                <div className="p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]">
+                  <div className="flex items-center justify-between mb-2 text-xs font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                    <span>{t.webcamTest.takeSnapshot}</span>
+                    <a
+                      href={snapshotUrl}
+                      download="devicetry-webcam-snapshot.jpg"
+                      className="text-[#0F766E] dark:text-[#14B8A6] hover:underline flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      {t.webcamTest.downloadSnapshot}
+                    </a>
+                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={snapshotUrl}
+                    alt="Webcam Snapshot"
+                    className="w-full h-auto rounded-lg border border-[#DFE5EB] dark:border-[#223043]"
+                  />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       ) : (
         <div className="mt-6 p-8 border border-dashed border-[#DFE5EB] dark:border-[#223043] rounded-lg text-center">
-          <Camera className="w-10 h-10 text-[#5F6B7A] dark:text-[#9AA6B8] mx-auto mb-2 opacity-50" />
+          <Video className="w-10 h-10 text-[#5F6B7A] dark:text-[#9AA6B8] mx-auto mb-2 opacity-50" />
           <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] max-w-md mx-auto">
             {t.webcamTest.startPrompt}
           </p>
         </div>
       )}
 
-      {/* Troubleshooting & Interpretation */}
+      {/* Technical Interpretation & Troubleshooting */}
       <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
         <div>
           <h3 className="font-semibold text-[#142033] dark:text-[#E9EEF4] text-sm mb-1.5">

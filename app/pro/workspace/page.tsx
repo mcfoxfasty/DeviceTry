@@ -32,13 +32,23 @@ export default async function WorkspacePage({ searchParams }: PageProps) {
   }
 
   // Load initial workspace data
-  const [inspectionsData, devices, templates, subscription, usage] = await Promise.all([
+  const [inspectionsData, devices, templates, subscription] = await Promise.all([
     db.getInspections(subscriber.workspace.id, 100),
     db.getDevices(subscriber.workspace.id),
     db.getTemplates(subscriber.workspace.id),
     db.getSubscription(subscriber.workspace.id),
-    db.getUsage(subscriber.workspace.id),
   ]);
+
+  const usage = {
+    currentMonthCount: inspectionsData.total,
+    maxMonthlyLimit: 200,
+    totalRetained: inspectionsData.total,
+    maxRetainedLimit: 200,
+    devicesCount: devices.length,
+    maxDevicesLimit: 200,
+    templatesCount: templates.length,
+    maxTemplatesLimit: 25,
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">

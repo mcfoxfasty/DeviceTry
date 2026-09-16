@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   CheckCircle,
   AlertTriangle,
@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Sparkles,
   Download,
+  AlertCircle,
 } from 'lucide-react';
 import { Translations, Locale } from '@/lib/i18n/types';
 import { MicrophoneTester } from '../tests/MicrophoneTester';
@@ -24,6 +25,8 @@ import { DisplayTester } from '../tests/DisplayTester';
 import { GamepadTester } from '../tests/GamepadTester';
 import { BatteryTester } from '../tests/BatteryTester';
 import { saveLocalInspection } from '@/lib/testing/localHistory';
+import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
+import { isProEnabled } from '@/lib/config/mode';
 
 interface GuidedInspectionFlowProps {
   t: Translations;
@@ -34,12 +37,6 @@ interface GuidedInspectionFlowProps {
 }
 
 type TestKey = 'mic' | 'webcam' | 'speakers' | 'keyboard' | 'mouse' | 'display' | 'gamepad' | 'battery';
-
-interface TestStep {
-  key: TestKey;
-  title: string;
-  category: 'audio' | 'video' | 'input' | 'display' | 'system';
-}
 
 const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKey[] }> = {
   pre_call: {
@@ -72,17 +69,12 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
   const [notes, setNotes] = useState<string>('');
 
   // Results tracker
-  const [results, setResults] = useState<
-    Record<
-      string,
-      {
-        status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported' | 'skipped';
-        classification: 'browser' | 'user' | 'inconclusive' | 'unsupported' | 'skipped';
-        details?: string;
-        metrics?: Record<string, unknown>;
-      }
-    >
-  >({});
+  const [results, setResults] = useState<Record<string, TestResultItem>>({});
+  const resultsRef = useRef<Record<string, TestResultItem>>({});
+
+  useEffect(() => {
+    resultsRef.current = results;
+  }, [results]);
 
   const [savedToCloud, setSavedToCloud] = useState<boolean>(false);
   const [savingCloud, setSavingCloud] = useState<boolean>(false);
@@ -92,10 +84,14 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
   const activeStepKey = suite.steps[activeStepIndex];
   const isFinished = activeStepIndex >= suite.steps.length;
 
+  const proActive = isProEnabled() && isPro;
+
   const startSuite = () => {
     setActiveStepIndex(0);
     setResults({});
+    resultsRef.current = {};
     setSavedToCloud(false);
+    setSaveCloudError(null);
   };
 
   const handleStepResult = (
@@ -106,68 +102,87 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
       metrics?: Record<string, unknown>;
     }
   ) => {
-    setResults((prev) => ({
-      ...prev,
-      [key]: {
-        ...res,
-        classification:
-          key === 'speakers' || key === 'display' ? 'user' : res.status === 'unsupported' ? 'unsupported' : 'browser',
-      },
-    }));
+    const updated: TestResultItem = {
+      ...res,
+      classification:
+        key === 'speakers' || key === 'display' ? 'user' : res.status === 'unsupported' ? 'unsupported' : 'browser',
+    };
+
+    setResults((prev) => {
+      const next = { ...prev, [key]: updated };
+      resultsRef.current = next;
+      return next;
+    });
   };
 
   const nextStep = () => {
-    if (!results[activeStepKey]) {
+    let currentResults = { ...resultsRef.current };
+
+    if (!currentResults[activeStepKey]) {
       // Mark as inconclusive if user advances without testing
-      setResults((prev) => ({
-        ...prev,
-        [activeStepKey]: {
-          status: 'inconclusive',
-          classification: 'inconclusive',
-          details: 'Inspection step concluded without active device interaction.',
-        },
-      }));
+      const inconclusiveItem: TestResultItem = {
+        status: 'inconclusive',
+        classification: 'inconclusive',
+        details: 'Inspection step concluded without active device interaction.',
+      };
+      currentResults = {
+        ...currentResults,
+        [activeStepKey]: inconclusiveItem,
+      };
+      setResults(currentResults);
+      resultsRef.current = currentResults;
     }
 
     const nextIdx = activeStepIndex + 1;
     setActiveStepIndex(nextIdx);
 
     if (nextIdx >= suite.steps.length) {
-      // Auto-save to local storage on finish
+      // Auto-save to local history on completion with newly updated complete test results
+      const finalStatus = calculateReportStatus(suite.steps, currentResults);
       saveLocalInspection({
         locale,
         deviceLabel: deviceLabel || 'Device',
         operatorName: operatorName || 'Visitor',
-        summaryStatus: getOverallStatus(),
-        testsResults: results,
+        summaryStatus: finalStatus,
+        testsResults: currentResults,
         notes,
       });
     }
   };
 
   const skipStep = () => {
-    setResults((prev) => ({
-      ...prev,
-      [activeStepKey]: {
-        status: 'skipped',
-        classification: 'skipped',
-        details: 'User chose to skip this test during guided inspection.',
-      },
-    }));
+    const skippedItem: TestResultItem = {
+      status: 'skipped',
+      classification: 'skipped',
+      details: 'User chose to skip this test during guided inspection.',
+    };
+    const currentResults = {
+      ...resultsRef.current,
+      [activeStepKey]: skippedItem,
+    };
+    setResults(currentResults);
+    resultsRef.current = currentResults;
+
     const nextIdx = activeStepIndex + 1;
     setActiveStepIndex(nextIdx);
+
+    if (nextIdx >= suite.steps.length) {
+      const finalStatus = calculateReportStatus(suite.steps, currentResults);
+      saveLocalInspection({
+        locale,
+        deviceLabel: deviceLabel || 'Device',
+        operatorName: operatorName || 'Visitor',
+        summaryStatus: finalStatus,
+        testsResults: currentResults,
+        notes,
+      });
+    }
   };
 
-  const getOverallStatus = (): 'passed' | 'warning' | 'failed' | 'inconclusive' => {
-    const statuses = Object.values(results).map((r) => r.status);
-    if (statuses.includes('failed')) return 'failed';
-    if (statuses.includes('warning')) return 'warning';
-    if (statuses.includes('inconclusive')) return 'inconclusive';
-    return 'passed';
-  };
+  const overallStatus = calculateReportStatus(suite.steps, results);
 
   const saveInspectionToCloud = async () => {
-    if (!isPro || !workspaceId) return;
+    if (!proActive || !workspaceId) return;
     setSavingCloud(true);
     setSaveCloudError(null);
 
@@ -179,7 +194,7 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
           deviceLabel,
           operatorName,
           locale,
-          summaryStatus: getOverallStatus(),
+          summaryStatus: overallStatus,
           testsResults: results,
           notes,
         }),
@@ -263,7 +278,7 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
                 type="text"
                 value={deviceLabel}
                 onChange={(e) => setDeviceLabel(e.target.value)}
-                placeholder={t.report.deviceIdentifierPlaceholder || "e.g. MacBook Air M2 or Dell XPS 15"}
+                placeholder={t.report.deviceIdentifierPlaceholder || 'e.g. MacBook Air M2 or Dell XPS 15'}
                 className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
               />
             </div>
@@ -395,7 +410,7 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
                 {t.report.printReport}
               </button>
 
-              {isPro && !savedToCloud && (
+              {proActive && !savedToCloud && (
                 <button
                   id="btn-cloud-save-report"
                   onClick={saveInspectionToCloud}
@@ -407,7 +422,7 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
                 </button>
               )}
 
-              {savedToCloud && (
+              {proActive && savedToCloud && (
                 <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                   <CheckCircle className="w-4 h-4" />
                   Saved to Cloud Workspace
@@ -436,13 +451,14 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-[#DFE5EB] dark:border-[#223043] gap-4">
               <div>
                 <span className="text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-widest">
-                  {companyName ? `${companyName} • ` : ''}Hardware Inspection Certificate
+                  {companyName ? `${companyName} • ` : ''}Browser Device Inspection Summary
                 </span>
                 <h2 className="text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] mt-1">
                   {deviceLabel || 'Hardware Inspection'}
                 </h2>
                 <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 font-mono-num">
-                  Date: {new Date().toLocaleDateString(locale, { dateStyle: 'full' })} | Operator: {operatorName || 'Anonymous Visitor'}
+                  Date: {new Date().toLocaleDateString(locale, { dateStyle: 'full' })} | Operator:{' '}
+                  {operatorName || 'Anonymous Visitor'}
                 </p>
               </div>
 
@@ -450,17 +466,20 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
               <div>
                 <div
                   className={`px-4 py-2 rounded-xl border text-sm font-bold flex items-center gap-2 ${
-                    getOverallStatus() === 'passed'
+                    overallStatus === 'passed'
                       ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                      : getOverallStatus() === 'warning'
+                      : overallStatus === 'warning'
                       ? 'bg-amber-50 text-amber-800 border-amber-300'
-                      : 'bg-red-50 text-red-800 border-red-300'
+                      : overallStatus === 'failed'
+                      ? 'bg-red-50 text-red-800 border-red-300'
+                      : 'bg-slate-50 text-slate-800 border-slate-300'
                   }`}
                 >
-                  {getOverallStatus() === 'passed' && <CheckCircle className="w-5 h-5 text-emerald-600" />}
-                  {getOverallStatus() === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-600" />}
-                  {getOverallStatus() === 'failed' && <XCircle className="w-5 h-5 text-red-600" />}
-                  <span className="uppercase">{getOverallStatus()}</span>
+                  {overallStatus === 'passed' && <CheckCircle className="w-5 h-5 text-emerald-600" />}
+                  {overallStatus === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-600" />}
+                  {overallStatus === 'failed' && <XCircle className="w-5 h-5 text-red-600" />}
+                  {overallStatus === 'inconclusive' && <HelpCircle className="w-5 h-5 text-slate-600" />}
+                  <span className="uppercase">{overallStatus}</span>
                 </div>
               </div>
             </div>
@@ -503,7 +522,11 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
                           </span>
                         </td>
                         <td className="py-3 text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] capitalize">
-                          {res.classification === 'browser' ? t.report.classificationBrowser : t.report.classificationUser}
+                          {res.classification === 'browser'
+                            ? t.report.classificationBrowser
+                            : res.classification === 'user'
+                            ? t.report.classificationUser
+                            : res.classification}
                         </td>
                         <td className="py-3 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
                           {res.details || '—'}
@@ -529,9 +552,9 @@ export function GuidedInspectionFlow({ t, locale, isPro, workspaceId, companyNam
               />
             </div>
 
-            {/* Honest Hardware Notice */}
+            {/* Honest Hardware Notice Required by Prompt */}
             <div className="mt-6 p-4 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-              <strong>Notice of Browser-Based Scope:</strong> This inspection document records observed browser-level media streams, user input events, and confirmed sensory feedback. It does not certify internal hardware manufacturing tolerances, optical lens lab ratings, or battery capacity beyond standard browser APIs.
+              <strong>Notice of Browser-Based Scope:</strong> This report records empirical browser-based test observations and user-confirmed sensory checks. It is not a certified lab diagnostic or hardware warranty.
             </div>
           </div>
         </div>

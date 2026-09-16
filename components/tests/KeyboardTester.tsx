@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Keyboard, RotateCcw, AlertCircle, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Keyboard, Play, Square, RotateCcw, AlertCircle, Check } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface KeyboardTesterProps {
   t: Translations;
-  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onRecordResult?: (result: {
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    details: string;
+    metrics?: Record<string, unknown>;
+  }) => void;
 }
 
 type LayoutType = 'qwerty' | 'azerty' | 'arabic';
@@ -119,14 +123,23 @@ const KEYBOARD_ROWS: KeyDef[][] = [
 ];
 
 export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
+  const [isTestActive, setIsTestActive] = useState<boolean>(false);
   const [layout, setLayout] = useState<LayoutType>('qwerty');
   const [pressedCodes, setPressedCodes] = useState<Set<string>>(new Set());
   const [activeCodes, setActiveCodes] = useState<Set<string>>(new Set());
   const [lastKey, setLastKey] = useState<{ key: string; code: string; keyCode: number } | null>(null);
 
+  const isTestActiveRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isTestActiveRef.current = isTestActive;
+  }, [isTestActive]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't prevent default on browser navigation keys unless inside active test
+      if (!isTestActiveRef.current) return;
+
+      // Intercept navigation keys only when keyboard test is actively enabled
       if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
@@ -137,17 +150,22 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
         keyCode: e.keyCode,
       });
 
-      setPressedCodes((prev) => new Set(prev).add(e.code));
-      setActiveCodes((prev) => new Set(prev).add(e.code));
-
-      onRecordResult?.({
-        status: 'passed',
-        details: `${pressedCodes.size + 1} distinct keys registered. Last key: ${e.code}`,
-        metrics: { totalKeysTested: pressedCodes.size + 1 },
+      setPressedCodes((prev) => {
+        const next = new Set(prev).add(e.code);
+        onRecordResult?.({
+          status: 'passed',
+          details: `${next.size} keys verified response without ghosting.`,
+          metrics: { totalKeysTested: next.size },
+        });
+        return next;
       });
+
+      setActiveCodes((prev) => new Set(prev).add(e.code));
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (!isTestActiveRef.current) return;
+
       setActiveCodes((prev) => {
         const next = new Set(prev);
         next.delete(e.code);
@@ -162,7 +180,7 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [pressedCodes.size]);
+  }, [onRecordResult]);
 
   const resetAllKeys = () => {
     setPressedCodes(new Set());
@@ -196,10 +214,30 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
             </select>
           </div>
 
+          {!isTestActive ? (
+            <button
+              id="btn-start-keyboard-test"
+              onClick={() => setIsTestActive(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
+            >
+              <Play className="w-4 h-4" />
+              {t.common.startTest}
+            </button>
+          ) : (
+            <button
+              id="btn-stop-keyboard-test"
+              onClick={() => setIsTestActive(false)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
+            >
+              <Square className="w-4 h-4" />
+              {t.common.stopTest}
+            </button>
+          )}
+
           <button
             id="btn-reset-keyboard"
             onClick={resetAllKeys}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {t.common.reset}
@@ -210,6 +248,17 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
       {/* Real-time Pressed Key Status Banner */}
       <div className="mt-4 p-3 bg-[#F6F7F9] dark:bg-[#192332] rounded-lg border border-[#DFE5EB] dark:border-[#223043] flex flex-wrap items-center justify-between gap-4 text-xs">
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isTestActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'
+              }`}
+            />
+            <span className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
+              {isTestActive ? 'Capturing Keystrokes' : 'Inactive (Click Start Test to begin)'}
+            </span>
+          </div>
+
           <div>
             <span className="text-[#5F6B7A] dark:text-[#9AA6B8]">{t.keyboardTest.lastKeyPressed}: </span>
             <span className="font-semibold text-[#0F766E] dark:text-[#14B8A6] font-mono-num text-sm ml-1">

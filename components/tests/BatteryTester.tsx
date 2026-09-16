@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Battery, BatteryCharging, AlertCircle, CheckCircle, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -25,6 +25,11 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
   const [chargingTime, setChargingTime] = useState<number | null>(null);
   const [dischargingTime, setDischargingTime] = useState<number | null>(null);
 
+  const onRecordResultRef = useRef(onRecordResult);
+  useEffect(() => {
+    onRecordResultRef.current = onRecordResult;
+  }, [onRecordResult]);
+
   useEffect(() => {
     let batteryManager: BatteryManager | null = null;
 
@@ -33,7 +38,7 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
 
       if (!nav.getBattery) {
         setIsSupported(false);
-        onRecordResult?.({
+        onRecordResultRef.current?.({
           status: 'unsupported',
           details: 'Battery Status API is not exposed by this browser engine.',
         });
@@ -52,7 +57,7 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
           setChargingTime(battery.chargingTime);
           setDischargingTime(battery.dischargingTime);
 
-          onRecordResult?.({
+          onRecordResultRef.current?.({
             status: 'passed',
             details: `Battery level: ${currentLevel}%, Charging: ${battery.charging ? 'Yes' : 'No'}`,
             metrics: {

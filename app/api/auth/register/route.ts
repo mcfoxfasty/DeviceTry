@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/adapter';
 import { hashPassword, hashToken, generateToken, SESSION_COOKIE_OPTIONS } from '@/lib/auth/session';
+import { isProEnabled } from '@/lib/config/mode';
 
 export async function POST(req: NextRequest) {
+  if (!isProEnabled()) {
+    return NextResponse.json({ error: 'Pro features are disabled in FREE_ONLY mode.' }, { status: 404 });
+  }
+
   try {
     const { email, password, name, companyName } = await req.json();
 

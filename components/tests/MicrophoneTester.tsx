@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Play, Square, Download, AlertTriangle, CheckCircle, RefreshCw, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Play, Square, Download, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface MicrophoneTesterProps {
   t: Translations;
-  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onRecordResult?: (result: {
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    details: string;
+    metrics?: Record<string, unknown>;
+  }) => void;
 }
 
 export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -18,19 +21,23 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   const [inputLevel, setInputLevel] = useState<number>(0);
   const [peakLevel, setPeakLevel] = useState<number>(0);
 
-  // Recording state
+  // Recording sample state
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordTimeLeft, setRecordTimeLeft] = useState<number>(5);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
 
+  // Stable references for deterministic cleanup without stale closures
+  const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordedAudioUrlRef = useRef<string | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Load audio input devices
+  // Load audio input devices list
   const loadDevices = async () => {
     try {
       if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -45,6 +52,57 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     }
   };
 
+  const stopMicrophone = () => {
+    // 1. Cancel animation frame loop
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    // 2. Stop countdown timer if recording
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    // 3. Stop MediaRecorder if active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // ignore
+      }
+      mediaRecorderRef.current = null;
+    }
+
+    // 4. Stop and release all tracks on streamRef
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
+      streamRef.current = null;
+    }
+
+    // 5. Close Web Audio Context
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch {
+        // ignore
+      }
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+    setInputLevel(0);
+    setPermissionState('idle');
+    setIsRecording(false);
+  };
+
   const startMicrophone = async (deviceId?: string) => {
     stopMicrophone();
     setPermissionState('requesting');
@@ -57,7 +115,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(mediaStream);
+      streamRef.current = mediaStream;
       setPermissionState('granted');
       await loadDevices();
 
@@ -71,14 +129,15 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
-      // NOTE: We intentionally DO NOT connect to ctx.destination to prevent acoustic feedback!
+      // NOTE: Intentionally DO NOT connect to ctx.destination to prevent acoustic screech / loop feedback
       analyserRef.current = analyser;
 
       drawWaveform();
+
       onRecordResult?.({
         status: 'passed',
-        details: 'Microphone stream successfully captured and level verified.',
-        metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label },
+        details: 'Browser audio input stream active. Signal level and waveform measured.',
+        metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label || 'Microphone' },
       });
     } catch (err: unknown) {
       const error = err as Error;
@@ -99,41 +158,20 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     }
   };
 
-  const stopMicrophone = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    setInputLevel(0);
-  };
-
   // Draw waveform and measure RMS level
   const drawWaveform = () => {
-    if (!analyserRef.current || !canvasRef.current) return;
+    if (!analyserRef.current) return;
     const analyser = analyserRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-
     let currentPeak = 0;
 
     const render = () => {
+      if (!analyserRef.current) return;
       animationFrameRef.current = requestAnimationFrame(render);
       analyser.getByteTimeDomainData(dataArray);
 
-      // Calculate RMS (Root Mean Square) volume level
+      // Calculate RMS volume level
       let sumSquares = 0;
       for (let i = 0; i < bufferLength; i++) {
         const val = (dataArray[i] - 128) / 128;
@@ -149,53 +187,69 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       }
 
       // Render Oscillogram
-      ctx.fillStyle = '#131B27';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#131B27';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#14B8A6';
-      ctx.beginPath();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#14B8A6';
+          ctx.beginPath();
 
-      const sliceWidth = (canvas.width * 1.0) / bufferLength;
-      let x = 0;
+          const sliceWidth = (canvas.width * 1.0) / bufferLength;
+          let x = 0;
 
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * canvas.height) / 2;
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = (v * canvas.height) / 2;
 
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+            x += sliceWidth;
+          }
+
+          ctx.lineTo(canvas.width, canvas.height / 2);
+          ctx.stroke();
         }
-        x += sliceWidth;
       }
-
-      ctx.lineTo(canvas.width, canvas.height / 2);
-      ctx.stroke();
     };
 
     render();
   };
 
-  // 5-second local sample recorder
+  // 5-second sample recording for user self-monitoring
   const startRecordingSample = () => {
-    if (!stream) return;
+    if (!streamRef.current) return;
+
+    if (recordedAudioUrlRef.current) {
+      URL.revokeObjectURL(recordedAudioUrlRef.current);
+      recordedAudioUrlRef.current = null;
+      setRecordedAudioUrl(null);
+    }
+
     try {
       audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(streamRef.current);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
           audioChunksRef.current.push(e.data);
         }
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(audioBlob);
-        setRecordedAudioUrl(url);
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const url = URL.createObjectURL(audioBlob);
+          recordedAudioUrlRef.current = url;
+          setRecordedAudioUrl(url);
+        }
         setIsRecording(false);
       };
 
@@ -203,12 +257,19 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       setIsRecording(true);
       setRecordTimeLeft(5);
 
-      const countdownInterval = setInterval(() => {
+      countdownIntervalRef.current = setInterval(() => {
         setRecordTimeLeft((prev) => {
           if (prev <= 1) {
-            clearInterval(countdownInterval);
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current);
+              countdownIntervalRef.current = null;
+            }
             if (recorder.state === 'recording') {
-              recorder.stop();
+              try {
+                recorder.stop();
+              } catch {
+                // ignore
+              }
             }
             return 0;
           }
@@ -220,11 +281,13 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     }
   };
 
+  // Unmount & route cleanup
   useEffect(() => {
     return () => {
       stopMicrophone();
-      if (recordedAudioUrl) {
-        URL.revokeObjectURL(recordedAudioUrl);
+      if (recordedAudioUrlRef.current) {
+        URL.revokeObjectURL(recordedAudioUrlRef.current);
+        recordedAudioUrlRef.current = null;
       }
     };
   }, []);
