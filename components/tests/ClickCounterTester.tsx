@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mouse, RotateCcw, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -29,9 +29,13 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     startTimeRef.current = null;
   }, [duration]);
 
-  useEffect(() => {
+  // Reset state synchronously when the configuration changes, without an effect.
+  const configKey = useMemo(() => `${duration}:${mode}`, [duration, mode]);
+  const [prevConfigKey, setPrevConfigKey] = useState(configKey);
+  if (prevConfigKey !== configKey) {
+    setPrevConfigKey(configKey);
     resetTest();
-  }, [duration, mode, resetTest]);
+  }
 
   const finishTest = useCallback((finalCount: number, elapsedSecs: number) => {
     if (timerRef.current) clearInterval(timerRef.current);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Play, Square, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -13,7 +13,6 @@ interface ToolComponentProps {
 export function ContrastCheckerTester({ onResultUpdate }: ToolComponentProps) {
   const [fgColor, setFgColor] = useState<string>('#0F766E');
   const [bgColor, setBgColor] = useState<string>('#FFFFFF');
-  const [contrastRatio, setContrastRatio] = useState<number>(4.5);
 
   const getLuminance = (hex: string) => {
     const clean = hex.replace('#', '');
@@ -27,25 +26,21 @@ export function ContrastCheckerTester({ onResultUpdate }: ToolComponentProps) {
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
   };
 
-  const calculateRatio = useCallback(() => {
-    try {
-      const l1 = getLuminance(fgColor);
-      const l2 = getLuminance(bgColor);
-      const lighter = Math.max(l1, l2);
-      const darker = Math.min(l1, l2);
-      const ratio = (lighter + 0.05) / (darker + 0.05);
-      const rounded = parseFloat(ratio.toFixed(2));
-      setContrastRatio(rounded);
-      if (onResultUpdate) {
-        const passed = rounded >= 4.5 ? 'passed' : rounded >= 3.0 ? 'warning' : 'failed';
-        onResultUpdate(passed, `Contrast ratio: ${rounded}:1`);
-      }
-    } catch {}
-  }, [fgColor, bgColor, onResultUpdate]);
+  const computeRatio = (fg: string, bg: string): number => {
+    const l1 = getLuminance(fg);
+    const l2 = getLuminance(bg);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return parseFloat(((lighter + 0.05) / (darker + 0.05)).toFixed(2));
+  };
+
+  const contrastRatio = useMemo(() => computeRatio(fgColor, bgColor), [fgColor, bgColor]);
 
   useEffect(() => {
-    calculateRatio();
-  }, [calculateRatio]);
+    const passed = contrastRatio >= 4.5 ? 'passed' : contrastRatio >= 3.0 ? 'warning' : 'failed';
+    onResultUpdate?.(passed, `Contrast ratio: ${contrastRatio}:1`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contrastRatio]);
 
   const passesAANormal = contrastRatio >= 4.5;
   const passesAALarge = contrastRatio >= 3.0;

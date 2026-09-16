@@ -73,7 +73,7 @@ export function Footer({ t, currentLocale }: FooterProps) {
             <li><Link href={`/?test=speakers-test&lang=${currentLocale}`} className="hover:text-[#0F766E] dark:hover:text-[#14B8A6]">{t.speakersTest.title}</Link></li>
             <li><Link href={`/?test=dead-pixel-test&lang=${currentLocale}`} className="hover:text-[#0F766E] dark:hover:text-[#14B8A6]">Dead Pixel Test</Link></li>
             <li><Link href={`/?test=gamepad-test&lang=${currentLocale}`} className="hover:text-[#0F766E] dark:hover:text-[#14B8A6]">{t.gamepadTest.title}</Link></li>
-            <li><Link href={`/?test=battery-test&lang=${currentLocale}`} className="hover:text-[#0F766E] dark:hover:text-[#14B8A6]">{t.batteryTest.title}</Link></li>
+            <li><Link href={`/test/battery-monitor?lang=${currentLocale}`} className="hover:text-[#0F766E] dark:hover:text-[#14B8A6]">{t.batteryTest.title}</Link></li>
           </ul>
         </div>
 

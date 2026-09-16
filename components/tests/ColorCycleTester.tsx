@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Play, Square, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -17,19 +17,23 @@ export function ColorCycleTester({ onResultUpdate }: ToolComponentProps) {
   const [cycleIndex, setCycleIndex] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const colors = [
-    '#FF0000', // Red
-    '#00FF00', // Green
-    '#0000FF', // Blue
-    '#FFFF00', // Yellow
-    '#00FFFF', // Cyan
-    '#FF00FF', // Magenta
-    '#FFFFFF', // White
-    '#000000', // Black
-  ];
+  const colors = useMemo(
+    () => [
+      '#FF0000', // Red
+      '#00FF00', // Green
+      '#0000FF', // Blue
+      '#FFFF00', // Yellow
+      '#00FFFF', // Cyan
+      '#FF00FF', // Magenta
+      '#FFFFFF', // White
+      '#000000', // Black
+    ],
+    []
+  );
 
   const stopCycle = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
     setIsRunning(false);
   }, []);
 
@@ -37,11 +41,7 @@ export function ColorCycleTester({ onResultUpdate }: ToolComponentProps) {
     stopCycle();
     setIsRunning(true);
     timerRef.current = setInterval(() => {
-      setCycleIndex((prev) => {
-        const next = (prev + 1) % colors.length;
-        setCurrentColor(colors[next]);
-        return next;
-      });
+      setCycleIndex((prev) => (prev + 1) % colors.length);
     }, speedMs);
 
     if (onResultUpdate) {
@@ -49,14 +49,16 @@ export function ColorCycleTester({ onResultUpdate }: ToolComponentProps) {
     }
   }, [speedMs, stopCycle, onResultUpdate, colors]);
 
+  // Keep the displayed color in sync with the cycle index without cascading setState-in-effect.
   useEffect(() => {
-    if (isRunning) {
-      startCycle();
-    }
+    setCurrentColor(colors[cycleIndex] ?? '#FF0000');
+  }, [cycleIndex, colors]);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [speedMs, isRunning, startCycle]);
+  }, []);
 
   return (
     <div className="space-y-6">

@@ -27,11 +27,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
   });
 
-  // Dedicated test deep links for all 38 tools
+  // Dedicated per-tool pages for all 38 tools (canonical deep links)
   TOOLS_REGISTRY.forEach((tool) => {
     locales.forEach((lang) => {
       sitemapEntries.push({
-        url: `${baseUrl}/?test=${tool.slug}&lang=${lang}`,
+        url: `${baseUrl}/test/${tool.slug}?lang=${lang}`,
         lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.8,
