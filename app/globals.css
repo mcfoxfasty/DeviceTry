@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --bg-app: #F6F7F9;
+  --surface-app: #FFFFFF;
+  --surface-subtle: #F1F4F7;
+  --text-main: #142033;
+  --text-muted: #5F6B7A;
+  --text-subtle: #8996A6;
+  --accent-primary: #0F766E;
+  --accent-primary-hover: #0D665F;
+  --accent-primary-light: #E6F4F2;
+  --border-color: #DFE5EB;
+  --border-hover: #CBD5E1;
+  --status-success: #16A34A;
+  --status-success-bg: #DCFCE7;
+  --status-warning: #D97706;
+  --status-warning-bg: #FEF3C7;
+  --status-danger: #DC2626;
+  --status-danger-bg: #FEE2E2;
+  --status-info: #0284C7;
+  --status-info-bg: #E0F2FE;
+}
+
+.dark {
+  --bg-app: #0B111B;
+  --surface-app: #131B27;
+  --surface-subtle: #192332;
+  --text-main: #E9EEF4;
+  --text-muted: #9AA6B8;
+  --text-subtle: #677589;
+  --accent-primary: #14B8A6;
+  --accent-primary-hover: #2DD4BF;
+  --accent-primary-light: #132E2E;
+  --border-color: #223043;
+  --border-hover: #31435D;
+  --status-success: #22C55E;
+  --status-success-bg: #052E16;
+  --status-warning: #F59E0B;
+  --status-warning-bg: #451A03;
+  --status-danger: #EF4444;
+  --status-danger-bg: #450A0A;
+  --status-info: #38BDF8;
+  --status-info-bg: #082F49;
+}
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Arabic Typography & RTL support */
+[dir="rtl"] {
+  font-family: system-ui, -apple-system, "Segoe UI", "Cairo", "Noto Sans Arabic", Tahoma, sans-serif;
+  text-align: right;
+}
+
+/* Print Styles for professional reports */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .report-page {
+    box-shadow: none !important;
+    border: 1px solid #cccccc !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* Monospace measurements */
+.font-mono-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+}

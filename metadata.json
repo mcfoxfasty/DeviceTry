@@ -1,0 +1,6 @@
+{
+  "name": "DeviceTry",
+  "description": "Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad in English, French, and Arabic.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
