@@ -59,13 +59,26 @@ const FEATURES: FeatureEntry[] = [
   { name: 'WebTransport', category: 'Network', check: () => 'WebTransport' in window },
 ];
 
+/**
+ * SSR-safe feature probe: never runs browser-only checks during server
+ * rendering (window/document/navigator do not exist on the server).
+ */
+function checkSafe(check: () => boolean): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return check();
+  } catch {
+    return false;
+  }
+}
+
 const CATEGORIES = ['All', 'Media', 'Audio', 'Graphics', 'Runtime', 'Input', 'Sensors', 'Storage', 'System', 'Network'];
 
 export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
   const [filter, setFilter] = useState<string>('All');
   const [query, setQuery] = useState<string>('');
 
-  const results = FEATURES.map((f) => ({ ...f, supported: f.check() }));
+  const results = FEATURES.map((f) => ({ ...f, supported: checkSafe(f.check) }));
   const visible = results.filter(
     (r) => (filter === 'All' || r.category === filter) && r.name.toLowerCase().includes(query.toLowerCase())
   );

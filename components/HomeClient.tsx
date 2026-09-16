@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Mic,
   ClipboardCheck,
@@ -10,6 +11,7 @@ import {
   Trash2,
   Printer,
   Search,
+  ExternalLink,
 } from 'lucide-react';
 import { Translations, Locale } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
@@ -248,30 +250,42 @@ export function HomeClient({
               {filteredTools.map((tool) => {
                 const isSelected = currentTool.id === tool.id;
                 return (
-                  <button
+                  <div
                     key={tool.id}
-                    id={`select-tool-${tool.slug}`}
-                    onClick={() => setActiveToolSlug(tool.slug)}
-                    className={`p-3 rounded-xl border text-left rtl:text-right transition-all cursor-pointer flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border text-left rtl:text-right transition-all flex flex-col justify-between ${
                       isSelected
                         ? 'bg-[#0F766E] text-white border-[#0D665F] shadow-sm'
                         : 'bg-white dark:bg-[#131B27] text-[#142033] dark:text-[#E9EEF4] border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]'
                     }`}
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-emerald-100' : 'text-[#0F766E] dark:text-[#14B8A6]'}`}>
-                        {tool.category.replace('-', ' ')}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <p className="text-xs font-bold leading-snug line-clamp-1">
-                        {tool.title[locale] || tool.title.en}
-                      </p>
-                      <p className={`text-[10px] mt-0.5 line-clamp-1 ${isSelected ? 'text-emerald-100' : 'text-[#5F6B7A] dark:text-[#9AA6B8]'}`}>
-                        {tool.supportHint[locale] || tool.supportHint.en}
-                      </p>
-                    </div>
-                  </button>
+                    <button
+                      id={`select-tool-${tool.slug}`}
+                      onClick={() => setActiveToolSlug(tool.slug)}
+                      aria-pressed={isSelected}
+                      className="text-left rtl:text-right cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-emerald-100' : 'text-[#0F766E] dark:text-[#14B8A6]'}`}>
+                          {tool.category.replace('-', ' ')}
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <p className="text-xs font-bold leading-snug line-clamp-1">
+                          {tool.title[locale] || tool.title.en}
+                        </p>
+                        <p className={`text-[10px] mt-0.5 line-clamp-1 ${isSelected ? 'text-emerald-100' : 'text-[#5F6B7A] dark:text-[#9AA6B8]'}`}>
+                          {tool.supportHint[locale] || tool.supportHint.en}
+                        </p>
+                      </div>
+                    </button>
+                    <Link
+                      href={`/test/${tool.slug}?lang=${locale}`}
+                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#0F766E] dark:text-[#14B8A6] hover:underline"
+                    >
+                      Open Page
+                      <ExternalLink className="w-3 h-3 rtl:-scale-x-100" aria-hidden="true" />
+                    </Link>
+                  </div>
                 );
               })}
             </div>
