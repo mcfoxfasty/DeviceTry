@@ -278,13 +278,19 @@ export function HomeClient({
                         </p>
                       </div>
                     </button>
-                    <Link
-                      href={`/test/${tool.slug}?lang=${locale}`}
-                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#0F766E] dark:text-[#14B8A6] hover:underline"
-                    >
-                      Open Page
-                      <ExternalLink className="w-3 h-3 rtl:-scale-x-100" aria-hidden="true" />
-                    </Link>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <Link
+                        href={`/test/${tool.slug}?lang=${locale}`}
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                          isSelected
+                            ? 'bg-white/15 text-white hover:bg-white/25'
+                            : 'bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] hover:bg-[#D5EDE9] dark:hover:bg-[#1A4A45]'
+                        }`}
+                      >
+                        Open Page
+                        <ExternalLink className="w-3 h-3 rtl:-scale-x-100" aria-hidden="true" />
+                      </Link>
+                    </div>
                   </div>
                 );
               })}
