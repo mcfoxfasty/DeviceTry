@@ -2,27 +2,27 @@
 
 import React from 'react';
 import { Info, AlertTriangle, HelpCircle } from 'lucide-react';
-import { Translations, Locale } from '@/lib/i18n/types';
-import { ToolDefinition } from '@/lib/tools/registry';
+import { Translations } from '@/lib/i18n/types';
+import { ToolDefinition } from '@/lib/tools/types';
 import { DeviceIllustration } from '@/components/ui/DeviceIllustration';
 import { ToolRenderer } from '@/components/ToolRenderer';
+import { PermissionPromptCard } from '@/components/PermissionPromptCard';
 
 interface ToolDetailViewProps {
   tool: ToolDefinition;
   t: Translations;
-  locale: Locale;
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
-  /** Compact chrome for embedding (used by per-tester pages) */
+  /** Compact chrome for embedding (used by home page in the past) */
   compact?: boolean;
-  /** Heading level for the tool title (h1 on dedicated pages, h2 on home) */
+  /** Heading level for the tool title (h1 on dedicated pages, h2 elsewhere) */
   titleHeading?: 'h1' | 'h2';
 }
 
 /**
- * Shared detail view for a registry tool: header card, live tester,
- * and the instructions / limitations / troubleshooting panels.
+ * Shared detail view for a registry tool: header card, permission prompt,
+ * live tester, and the instructions / limitations / troubleshooting panels.
  */
-export function ToolDetailView({ tool, t, locale, onResultUpdate, compact = false, titleHeading: TitleTag = 'h2' }: ToolDetailViewProps) {
+export function ToolDetailView({ tool, t, onResultUpdate, compact = false, titleHeading: TitleTag = 'h2' }: ToolDetailViewProps) {
   return (
     <div className="space-y-6">
       {/* Header card */}
@@ -34,25 +34,28 @@ export function ToolDetailView({ tool, t, locale, onResultUpdate, compact = fals
           <div>
             <div className="flex items-center gap-2">
               <TitleTag className="text-lg font-bold text-[#172033] dark:text-[#E9EEF4]">
-                {tool.title[locale] || tool.title.en}
+                {tool.title}
               </TitleTag>
               <span className="px-2 py-0.5 rounded-full bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] text-[10px] font-bold uppercase">
-                {tool.category}
+                {tool.categoryLabel}
               </span>
             </div>
             <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] mt-0.5">
-              {tool.shortDesc[locale] || tool.shortDesc.en}
+              {tool.shortDesc}
             </p>
           </div>
         </div>
 
         <div className="text-xs font-medium text-[#59677D] dark:text-[#9AA6B8] bg-[#F6F8FB] dark:bg-[#192332] px-3 py-1.5 rounded-lg border border-[#DFE5EB] dark:border-[#223043]">
-          {tool.supportHint[locale] || tool.supportHint.en}
+          {tool.supportHint}
         </div>
       </div>
 
+      {/* Permission encouragement card */}
+      <PermissionPromptCard t={t} />
+
       {/* Live tester */}
-      <ToolRenderer tool={tool} t={t} locale={locale} />
+      <ToolRenderer tool={tool} t={t} />
 
       {/* Instructions & troubleshooting */}
       <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${compact ? '' : 'pt-2'}`}>
@@ -62,7 +65,7 @@ export function ToolDetailView({ tool, t, locale, onResultUpdate, compact = fals
             How to Test
           </h2>
           <ul className="space-y-1.5 text-xs text-[#59677D] dark:text-[#9AA6B8]">
-            {(tool.instructions[locale] || tool.instructions.en).map((inst, i) => (
+            {tool.instructions.map((inst, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="font-bold text-[#0F766E] dark:text-[#14B8A6]">•</span>
                 <span>{inst}</span>
@@ -77,7 +80,7 @@ export function ToolDetailView({ tool, t, locale, onResultUpdate, compact = fals
             Browser Limitations
           </h2>
           <ul className="space-y-1.5 text-xs text-[#59677D] dark:text-[#9AA6B8]">
-            {(tool.limitations[locale] || tool.limitations.en).map((lim, i) => (
+            {tool.limitations.map((lim, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="font-bold text-amber-500">•</span>
                 <span>{lim}</span>
@@ -92,7 +95,7 @@ export function ToolDetailView({ tool, t, locale, onResultUpdate, compact = fals
             Troubleshooting Tips
           </h2>
           <ul className="space-y-1.5 text-xs text-[#59677D] dark:text-[#9AA6B8]">
-            {(tool.troubleshooting[locale] || tool.troubleshooting.en).map((tb, i) => (
+            {tool.troubleshooting.map((tb, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="font-bold text-blue-500">•</span>
                 <span>{tb}</span>

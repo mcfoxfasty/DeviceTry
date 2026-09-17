@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Layers, RotateCcw, Smartphone, CheckCircle } from 'lucide-react';
-import { ToolComponentProps } from '@/lib/tools/registry';
+import { ToolComponentProps } from '@/lib/tools/types';
 
 interface TouchPoint {
   id: number;

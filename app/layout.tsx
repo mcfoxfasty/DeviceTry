@@ -2,17 +2,17 @@ import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 
 export const metadata: Metadata = {
-  title: 'DeviceTry - Hardware & Peripheral Diagnostic Suite',
-  description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad in English, French, and Arabic.',
+  title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
+  description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
   openGraph: {
-    title: 'DeviceTry - Hardware & Peripheral Diagnostic Suite',
-    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad in English, French, and Arabic.',
+    title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
+    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'DeviceTry - Hardware & Peripheral Diagnostic Suite',
-    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad in English, French, and Arabic.',
+    title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
+    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
   },
 };
 

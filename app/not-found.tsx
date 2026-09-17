@@ -24,7 +24,7 @@ export default function NotFound() {
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-sm font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Return to Device Tests
+            Return to Home
           </Link>
         </div>
       </div>

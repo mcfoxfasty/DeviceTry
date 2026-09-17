@@ -1,1288 +1,1033 @@
-export type ToolCategory =
-  | 'audio-camera'
-  | 'keyboard-mouse'
-  | 'screen'
-  | 'mobile-controllers'
-  | 'music'
-  | 'browser-performance';
+import { ToolDefinition, ToolCategory } from './types';
 
-export interface ToolComponentProps {
-  t?: import('@/lib/i18n/types').Translations;
-  locale?: string;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
-}
-
-export interface ToolDefinition {
-  id: string;
-  slug: string; // URL-friendly slug
-  category: ToolCategory;
-  categoryLabel: { en: string; fr: string; ar: string };
-  title: { en: string; fr: string; ar: string };
-  shortDesc: { en: string; fr: string; ar: string };
-  supportHint: { en: string; fr: string; ar: string };
-  keywords: string[];
-  iconType: string;
-  requiredApis: string[];
-  componentName: string;
-  relatedToolIds: string[];
-  instructions: { en: string[]; fr: string[]; ar: string[] };
-  limitations: { en: string[]; fr: string[]; ar: string[] };
-  troubleshooting: { en: string[]; fr: string[]; ar: string[] };
-}
+export type { ToolDefinition, ToolCategory } from './types';
 
 export const TOOLS_REGISTRY: ToolDefinition[] = [
   {
-    id: 'microphone-test',
-    slug: 'microphone-test',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Microphone Test', fr: 'Test du Microphone', ar: 'فحص الميكروفون' },
-    shortDesc: {
-      en: 'Real-time volume meter, audio waveform and recording playback test.',
-      fr: 'Indicateur de volume en direct, forme d’onde audio et lecture d’enregistrement.',
-      ar: 'مقياس مستوى الصوت الحي، ورسم الموجة الصوتية، وتجربة التسجيل والاستماع.',
-    },
-    supportHint: { en: 'Requires getUserMedia & Web Audio', fr: 'Requiert getUserMedia & Web Audio', ar: 'يتطلب getUserMedia وWeb Audio' },
-    keywords: ['mic test', 'microphone test', 'audio input', 'test mic online', 'tester micro', 'فحص المايك'],
-    iconType: 'microphone',
-    requiredApis: ['navigator.mediaDevices.getUserMedia', 'AudioContext'],
-    componentName: 'MicrophoneTester',
-    relatedToolIds: ['voice-recorder', 'speakers-test', 'pitch-detector', 'online-mirror'],
-    instructions: {
-      en: ['Click Start Test to grant microphone permission.', 'Speak into your microphone and observe the live decibel level and waveform.', 'Optionally record a 5-second sample to verify clarity and background noise.'],
-      fr: ['Cliquez sur Démarrer le test pour autoriser le microphone.', 'Parlez dans votre micro et observez le niveau et la forme d’onde.', 'Enregistrez un extrait de 5 secondes pour tester la clarté.'],
-      ar: ['انقر على بدء الفحص لمنح إذن الميكروفون.', 'تحدث في الميكروفون ولاحظ مستوى الصوت وشكل الموجة الحية.', 'يمكنك تسجيل مقطع قصير لمدة 5 ثوانٍ للتحقق من وضوح الصوت.'],
-    },
-    limitations: {
-      en: ['Digital meter readings reflect browser input gain, not calibrated acoustic sound pressure (SPL).', 'Noise suppression applied by your operating system or browser may alter waveforms.'],
-      fr: ['Les niveaux numériques reflètent le gain d’entrée, pas une pression acoustique étalonnée (SPL).', 'La réduction de bruit du système peut modifier la forme d’onde.'],
-      ar: ['قراءات المقياس الرقمية تعكس كسب الإدخال في المتصفح وليست مقياس ضغط صوتي معاير.', 'تقنيات كتم الضوضاء في النظام قد تغير مظهر الموجات.'],
-    },
-    troubleshooting: {
-      en: ['If permission is blocked, click the lock icon in your browser address bar and allow microphone access.', 'Check that your headset or external mic is selected in the device dropdown.'],
-      fr: ['Si l’autorisation est bloquée, cliquez sur le cadenas dans la barre d’adresse et autorisez le micro.', 'Vérifiez la sélection du bon périphérique dans la liste.'],
-      ar: ['إذا تم حظر الإذن، انقر فوق أيقونة القفل في شريط العنوان واسمح بالوصول.', 'تأكد من اختيار جهاز الإدخال الصحيح من القائمة المنسدلة.'],
-    },
+    id: "microphone-test",
+    slug: "microphone-test",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Microphone Test",
+    shortDesc: "Real-time volume meter, audio waveform and recording playback test.",
+    supportHint: "Requires getUserMedia & Web Audio",
+    keywords: ["mic test","microphone test","audio input","test mic online"],
+    iconType: "microphone",
+    requiredApis: ["navigator.mediaDevices.getUserMedia","AudioContext"],
+    componentName: "MicrophoneTester",
+    relatedToolIds: ["voice-recorder","speakers-test","pitch-detector","online-mirror"],
+    instructions: [
+      "Click Start Test to grant microphone permission.",
+      "Speak into your microphone and observe the live decibel level and waveform.",
+      "Optionally record a 5-second sample to verify clarity and background noise."
+    ],
+    limitations: [
+      "Digital meter readings reflect browser input gain, not calibrated acoustic sound pressure (SPL).",
+      "Noise suppression applied by your operating system or browser may alter waveforms."
+    ],
+    troubleshooting: [
+      "If permission is blocked, click the lock icon in your browser address bar and allow microphone access.",
+      "Check that your headset or external mic is selected in the device dropdown."
+    ],
   },
   {
-    id: 'webcam-test',
-    slug: 'webcam-test',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Webcam Test', fr: 'Test de Caméra', ar: 'فحص كاميرا الويب' },
-    shortDesc: {
-      en: 'Inspect live camera stream, actual video dimensions, frame rate and snapshot.',
-      fr: 'Vérifiez le flux vidéo, la résolution réelle, le débit d’images et capturez une photo.',
-      ar: 'معاينة بث الكاميرا المباشر، والأبعاد الفعلية، ومعدل الإطارات والتقاط الصور.',
-    },
-    supportHint: { en: 'Requires getUserMedia & requestVideoFrameCallback', fr: 'Requiert getUserMedia & flux vidéo', ar: 'يتطلب getUserMedia وبث الفيديو' },
-    keywords: ['webcam test', 'camera test', 'test camera online', 'tester webcam', 'فحص الكاميرا'],
-    iconType: 'webcam',
-    requiredApis: ['navigator.mediaDevices.getUserMedia'],
-    componentName: 'WebcamTester',
-    relatedToolIds: ['online-mirror', 'microphone-test', 'display-test'],
-    instructions: {
-      en: ['Click Start Test to request camera access.', 'View the stream properties, delivered resolution, and observed frame cadence.', 'Use the Take Snapshot button to download a local JPG photo.'],
-      fr: ['Cliquez sur Démarrer pour autoriser la caméra.', 'Consultez les détails du flux, la résolution et le débit d’images.', 'Prenez une photo locale avec le bouton Capture.'],
-      ar: ['انقر على بدء الفحص لطلب إذن الكاميرا.', 'شاهد خصائص البث ودقة الفيديو ومعدل الإطارات الفعلي.', 'استخدم زر التقاط صورة لتنزيل صورة محلية.'],
-    },
-    limitations: {
-      en: ['Delivered resolution depends on browser WebRTC constraints and hardware driver limits.', 'Observed FPS measures video frame delivery rate, not display refresh rate.'],
-      fr: ['La résolution dépend des contraintes du pilote et du navigateur.', 'Le FPS mesuré correspond à la livraison des trames vidéo.'],
-      ar: ['تعتمد دقة الفيديو على قيود المتصفح وبرامج تشغيل الجهاز.', 'معدل الإطارات يقيس سرعة استلام إطارات الفيديو الفعلية.'],
-    },
-    troubleshooting: {
-      en: ['Ensure no other application (Zoom, Teams, OBS) is exclusively holding the camera lock.', 'Unplug and reconnect external USB webcams if no stream appears.'],
-      fr: ['Assurez-vous qu’aucune autre application n’utilise la caméra en exclusivité.', 'Débranchez et rebranchez la webcam USB si nécessaire.'],
-      ar: ['تأكد من عدم وجود تطبيق آخر يحتكر استخدام الكاميرا في نفس الوقت.', 'أعد توصيل كاميرا الـ USB الخارجية في حال عدم ظهور البث.'],
-    },
+    id: "webcam-test",
+    slug: "webcam-test",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Webcam Test",
+    shortDesc: "Inspect live camera stream, actual video dimensions, frame rate and snapshot.",
+    supportHint: "Requires getUserMedia & requestVideoFrameCallback",
+    keywords: ["webcam test","camera test","test camera online"],
+    iconType: "webcam",
+    requiredApis: ["navigator.mediaDevices.getUserMedia"],
+    componentName: "WebcamTester",
+    relatedToolIds: ["online-mirror","microphone-test","display-test"],
+    instructions: [
+      "Click Start Test to request camera access.",
+      "View the stream properties, delivered resolution, and observed frame cadence.",
+      "Use the Take Snapshot button to download a local JPG photo."
+    ],
+    limitations: [
+      "Delivered resolution depends on browser WebRTC constraints and hardware driver limits.",
+      "Observed FPS measures video frame delivery rate, not display refresh rate."
+    ],
+    troubleshooting: [
+      "Ensure no other application (Zoom, Teams, OBS) is exclusively holding the camera lock.",
+      "Unplug and reconnect external USB webcams if no stream appears."
+    ],
   },
   {
-    id: 'speakers-test',
-    slug: 'speakers-test',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Speaker & Headphone Test', fr: 'Test Haut-parleurs et Casque', ar: 'فحص مكبرات الصوت والسماعات' },
-    shortDesc: {
-      en: 'Verify stereo separation with independent Left, Right, and Center audio tones.',
-      fr: 'Vérifiez la séparation stéréo avec des tonalités Gauche, Droite et Centrale.',
-      ar: 'تحقق من قنوات الصوت الستيريو باختبارات مستقلة للقناة اليسرى واليمنى والوسط.',
-    },
-    supportHint: { en: 'Requires Web Audio API StereoPannerNode', fr: 'Requiert Web Audio StereoPannerNode', ar: 'يتطلب Web Audio StereoPannerNode' },
-    keywords: ['speaker test', 'sound test', 'audio test', 'left right audio test', 'stereo test', 'فحص الصوت'],
-    iconType: 'headphones',
-    requiredApis: ['AudioContext'],
-    componentName: 'SpeakersTester',
-    relatedToolIds: ['tone-generator', 'metronome', 'microphone-test'],
-    instructions: {
-      en: ['Set your system volume to a moderate level.', 'Click Play Left to verify the left audio channel, then Play Right for the right channel.', 'Confirm whether you hear the tone clearly in the designated ear/speaker.'],
-      fr: ['Réglez le volume à un niveau modéré.', 'Cliquez sur Canal Gauche puis Canal Droit pour tester la stéréo.', 'Confirmez si vous entendez le son distinctement.'],
-      ar: ['اضبط مستوى صوت جهازك على درجة معتدلة.', 'انقر على تشغيل اليسار ثم تشغيل اليمين للتحقق من قنوات الستيريو.', 'أكد ما إذا كنت تسمع الصوت بوضوح في السماعة المحددة.'],
-    },
-    limitations: {
-      en: ['Audible output verification relies on human listening confirmation.', 'Bluetooth headphones with mono hands-free profiles may mix both channels together.'],
-      fr: ['La confirmation de l’audition dépend de l’utilisateur.', 'Les casques Bluetooth en mode mains-libres peuvent fusionner les canaux.'],
-      ar: ['التحقق من سماع الصوت يعتمد على تأكيد المستخدم.', 'سماعات البلوتوث بوضع الاتصال الأحادي قد تدمج القناتين معاً.'],
-    },
-    troubleshooting: {
-      en: ['Make sure your physical mute switch or volume knob is not turned down.', 'Check your operating system sound output device.'],
-      fr: ['Vérifiez que le bouton muet physique n’est pas activé.', 'Vérifiez la sortie audio sélectionnée dans votre système.'],
-      ar: ['تأكد من عدم تفعيل زر كتم الصوت الفعلي بجهازك.', 'تحقق من اختيار مخرج الصوت الصحيح في إعدادات النظام.'],
-    },
+    id: "speakers-test",
+    slug: "speakers-test",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Speaker & Headphone Test",
+    shortDesc: "Verify stereo separation with independent Left, Right, and Center audio tones.",
+    supportHint: "Requires Web Audio API StereoPannerNode",
+    keywords: ["speaker test","sound test","audio test","left right audio test","stereo test"],
+    iconType: "headphones",
+    requiredApis: ["AudioContext"],
+    componentName: "SpeakersTester",
+    relatedToolIds: ["tone-generator","metronome","microphone-test"],
+    instructions: [
+      "Set your system volume to a moderate level.",
+      "Click Play Left to verify the left audio channel, then Play Right for the right channel.",
+      "Confirm whether you hear the tone clearly in the designated ear/speaker."
+    ],
+    limitations: [
+      "Audible output verification relies on human listening confirmation.",
+      "Bluetooth headphones with mono hands-free profiles may mix both channels together."
+    ],
+    troubleshooting: [
+      "Make sure your physical mute switch or volume knob is not turned down.",
+      "Check your operating system sound output device."
+    ],
   },
   {
-    id: 'voice-recorder',
-    slug: 'voice-recorder',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Online Voice Recorder', fr: 'Enregistreur Vocal en Ligne', ar: 'مسجل الصوت في المتصفح' },
-    shortDesc: {
-      en: 'Record audio locally, pause/resume, playback waveform and download audio files.',
-      fr: 'Enregistrez votre voix localement, mettez en pause, écoutez et téléchargez le fichier.',
-      ar: 'سجل الصوت محلياً مع إمكانية الإيقاف المؤقت والمعاينة وتنزيل الملف الصوتي.',
-    },
-    supportHint: { en: 'Requires MediaRecorder API', fr: 'Requiert l’API MediaRecorder', ar: 'يتطلب MediaRecorder API' },
-    keywords: ['voice recorder', 'audio recorder', 'record mic online', 'enregistreur vocal', 'مسجل صوت'],
-    iconType: 'microphone',
-    requiredApis: ['navigator.mediaDevices.getUserMedia', 'MediaRecorder'],
-    componentName: 'VoiceRecorderTester',
-    relatedToolIds: ['microphone-test', 'tone-generator', 'pitch-detector'],
-    instructions: {
-      en: ['Click Start Recording to begin capturing audio.', 'Use Pause/Resume as needed, then click Stop when finished.', 'Play back your recording and click Download to save the file locally.'],
-      fr: ['Cliquez sur Démarrer l’enregistrement pour commencer.', 'Utilisez Pause/Reprendre, puis cliquez sur Arrêter.', 'Écoutez l’extrait et téléchargez le fichier.'],
-      ar: ['انقر على بدء التسجيل لبدء التقاط الصوت.', 'استخدم الإيقاف المؤقت أو الاستئناف ثم انقر إنهاء عند الاكتمال.', 'استمع للتسجيل وانقر تنزيل لحفظ الملف محلياً.'],
-    },
-    limitations: {
-      en: ['Recordings are stored purely in browser memory and capped at 5 minutes.', 'Format options depend on your browser supported codecs (WebM or WAV).'],
-      fr: ['Les enregistrements sont en mémoire tampon locale (max 5 minutes).', 'Le format dépend des codecs supportés par le navigateur (WebM/WAV).'],
-      ar: ['تُحفظ التسجيلات في ذاكرة المتصفح فقط ومحددة بـ 5 دقائق.', 'صيغة الملف تعتمد على دعم المتصفح للترميز الصوتي (WebM أو WAV).'],
-    },
-    troubleshooting: {
-      en: ['If the audio is silent, verify the correct microphone is selected.', 'Check that microphone permissions are allowed in the browser.'],
-      fr: ['Si le son est inaudible, vérifiez le micro sélectionné.', 'Vérifiez les autorisations dans votre navigateur.'],
-      ar: ['إذا كان التسجيل صامتاً، تأكد من اختيار الميكروفون الصحيح.', 'تأكد من منح إذن الميكروفون في المتصفح.'],
-    },
+    id: "voice-recorder",
+    slug: "voice-recorder",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Online Voice Recorder",
+    shortDesc: "Record audio locally, pause/resume, playback waveform and download audio files.",
+    supportHint: "Requires MediaRecorder API",
+    keywords: ["voice recorder","audio recorder","record mic online"],
+    iconType: "microphone",
+    requiredApis: ["navigator.mediaDevices.getUserMedia","MediaRecorder"],
+    componentName: "VoiceRecorderTester",
+    relatedToolIds: ["microphone-test","tone-generator","pitch-detector"],
+    instructions: [
+      "Click Start Recording to begin capturing audio.",
+      "Use Pause/Resume as needed, then click Stop when finished.",
+      "Play back your recording and click Download to save the file locally."
+    ],
+    limitations: [
+      "Recordings are stored purely in browser memory and capped at 5 minutes.",
+      "Format options depend on your browser supported codecs (WebM or WAV)."
+    ],
+    troubleshooting: [
+      "If the audio is silent, verify the correct microphone is selected.",
+      "Check that microphone permissions are allowed in the browser."
+    ],
   },
   {
-    id: 'online-mirror',
-    slug: 'online-mirror',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Online Mirror', fr: 'Miroir en Ligne', ar: 'مرآة الكاميرا أونلاين' },
-    shortDesc: {
-      en: 'Quick, high-resolution full-screen webcam mirror with flip and zoom controls.',
-      fr: 'Miroir webcam plein écran rapide et haute résolution avec zoom et inversion.',
-      ar: 'مرآة سريعة بكامل الشاشة لكاميرا الويب مع خيارات التكبير وعكس الصورة.',
-    },
-    supportHint: { en: 'Requires camera video stream', fr: 'Requiert le flux vidéo caméra', ar: 'يتطلب بث كاميرا الفيديو' },
-    keywords: ['online mirror', 'webcam mirror', 'camera mirror', 'miroir en ligne', 'مرآة الكاميرا'],
-    iconType: 'webcam',
-    requiredApis: ['navigator.mediaDevices.getUserMedia'],
-    componentName: 'OnlineMirrorTester',
-    relatedToolIds: ['webcam-test', 'display-test'],
-    instructions: {
-      en: ['Click Enable Mirror to turn on the camera preview.', 'Toggle the Horizontal Flip button to switch between natural and mirrored views.', 'Adjust zoom or go fullscreen for grooming or quick checks.'],
-      fr: ['Activez le miroir pour lancer la prévisualisation.', 'Inversez l’image horizontalement si souhaité.', 'Ajustez le zoom ou passez en plein écran.'],
-      ar: ['انقر على تشغيل المرآة لبدء عرض الكاميرا.', 'استخدم زر عكس الصورة للتبديل بين العرض الطبيعي والمرآة.', 'اضبط التكبير أو وضع ملء الشاشة للمعاينة السريعة.'],
-    },
-    limitations: {
-      en: ['No video frames or images are transmitted or saved without an explicit snapshot download.', 'Digital zoom is rendered via CSS transforms.'],
-      fr: ['Aucune image n’est stockée ou transmise sans téléchargement explicite.', 'Le zoom numérique utilise les transformations CSS.'],
-      ar: ['لا يتم إرسال أو حفظ أي صور دون تنزيل لقطة صريحة.', 'التكبير الرقمي يعتمد على تحويلات CSS.'],
-    },
-    troubleshooting: {
-      en: ['Allow camera permission when prompted by the browser.', 'Ensure adequate ambient lighting for clear video quality.'],
-      fr: ['Autorisez l’accès à la caméra lorsque demandé.', 'Assurez-vous d’un bon éclairage ambiant.'],
-      ar: ['اسمح بالوصول إلى الكاميرا عند طلب المتصفح.', 'تأكد من توفر إضاءة مناسبة لجودة صورة واضحة.'],
-    },
+    id: "online-mirror",
+    slug: "online-mirror",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Online Mirror",
+    shortDesc: "Quick, high-resolution full-screen webcam mirror with flip and zoom controls.",
+    supportHint: "Requires camera video stream",
+    keywords: ["online mirror","webcam mirror","camera mirror"],
+    iconType: "webcam",
+    requiredApis: ["navigator.mediaDevices.getUserMedia"],
+    componentName: "OnlineMirrorTester",
+    relatedToolIds: ["webcam-test","display-test"],
+    instructions: [
+      "Click Enable Mirror to turn on the camera preview.",
+      "Toggle the Horizontal Flip button to switch between natural and mirrored views.",
+      "Adjust zoom or go fullscreen for grooming or quick checks."
+    ],
+    limitations: [
+      "No video frames or images are transmitted or saved without an explicit snapshot download.",
+      "Digital zoom is rendered via CSS transforms."
+    ],
+    troubleshooting: [
+      "Allow camera permission when prompted by the browser.",
+      "Ensure adequate ambient lighting for clear video quality."
+    ],
   },
   {
-    id: 'tone-generator',
-    slug: 'tone-generator',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Tone Generator', fr: 'Générateur de Tonalité', ar: 'مولد النغمات الصوتية' },
-    shortDesc: {
-      en: 'Generate clean sine, square, sawtooth and triangle audio frequencies.',
-      fr: 'Générez des fréquences sonores pures (sinus, carré, dent de scie, triangle).',
-      ar: 'توليد ترددات ونغمات صوتية نقية (جيبية، مربعة، سن المنشار، ومثلثية).',
-    },
-    supportHint: { en: 'Requires Web Audio OscillatorNode', fr: 'Requiert Web Audio OscillatorNode', ar: 'يتطلب Web Audio OscillatorNode' },
-    keywords: ['tone generator', 'frequency generator', 'audio sine wave', '440hz tone', 'مولد ترددات'],
-    iconType: 'headphones',
-    requiredApis: ['AudioContext'],
-    componentName: 'ToneGeneratorTester',
-    relatedToolIds: ['speakers-test', 'pitch-detector', 'metronome'],
-    instructions: {
-      en: ['Select frequency (Hz) using the slider, direct input or preset notes.', 'Choose your waveform: Sine (smooth), Square (rich), Sawtooth (bright), or Triangle.', 'Click Play Tone with volume at a comfortable level.'],
-      fr: ['Réglez la fréquence (Hz) avec le curseur ou les notes prédéfinies.', 'Choisissez la forme d’onde (Sinus, Carré, Dent de scie, Triangle).', 'Cliquez sur Jouer le son avec un volume modéré.'],
-      ar: ['اختر التردد بالهرتز باستخدام شريط التمرير أو النغمات الجاهزة.', 'حدد شكل الموجة: جيبية، مربعة، سن المنشار، أو مثلثية.', 'انقر على تشغيل النغمة مع ضبط مستوى صوت مريح.'],
-    },
-    limitations: {
-      en: ['Extreme low (<30Hz) and high (>15kHz) frequencies depend on hardware speaker transducer frequency response.', 'This is a technical audio tool, not a certified clinical hearing diagnostic.'],
-      fr: ['Les fréquences extrêmes dépendent de la réponse de vos enceintes.', 'Ceci est un outil technique, pas un audiogramme médical.'],
-      ar: ['الترددات المنخفضة جداً والعالية تعتمد على استجابة مكبرات الصوت لديك.', 'هذه أداة صوتية فنية وليست فحصاً طبياً للسمع.'],
-    },
-    troubleshooting: {
-      en: ['If no sound is heard, start with 440 Hz (standard concert pitch) at 20% gain.', 'Check that headphones or speakers are connected and not muted.'],
-      fr: ['Si aucun son n’est émis, commencez par 440 Hz à 20% de volume.', 'Vérifiez que vos écouteurs ne sont pas coupés.'],
-      ar: ['إذا لم تسمع صوتاً، ابدأ بتردد 440 هرتز وبمستوى 20%.', 'تأكد من توصيل السماعات وعدم كتم الصوت.'],
-    },
+    id: "tone-generator",
+    slug: "tone-generator",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Tone Generator",
+    shortDesc: "Generate clean sine, square, sawtooth and triangle audio frequencies.",
+    supportHint: "Requires Web Audio OscillatorNode",
+    keywords: ["tone generator","frequency generator","audio sine wave","440hz tone"],
+    iconType: "headphones",
+    requiredApis: ["AudioContext"],
+    componentName: "ToneGeneratorTester",
+    relatedToolIds: ["speakers-test","pitch-detector","metronome"],
+    instructions: [
+      "Select frequency (Hz) using the slider, direct input or preset notes.",
+      "Choose your waveform: Sine (smooth), Square (rich), Sawtooth (bright), or Triangle.",
+      "Click Play Tone with volume at a comfortable level."
+    ],
+    limitations: [
+      "Extreme low (<30Hz) and high (>15kHz) frequencies depend on hardware speaker transducer frequency response.",
+      "This is a technical audio tool, not a certified clinical hearing diagnostic."
+    ],
+    troubleshooting: [
+      "If no sound is heard, start with 440 Hz (standard concert pitch) at 20% gain.",
+      "Check that headphones or speakers are connected and not muted."
+    ],
   },
   {
-    id: 'keyboard-test',
-    slug: 'keyboard-test',
-    category: 'keyboard-mouse',
-    categoryLabel: { en: 'Keyboard & Mouse', fr: 'Clavier et Souris', ar: 'لوحة المفاتيح والفأرة' },
-    title: { en: 'Keyboard Tester', fr: 'Testeur de Clavier', ar: 'فحص لوحة المفاتيح' },
-    shortDesc: {
-      en: 'Interactive key matrix diagram showing real-time presses, codes and key ghosting.',
-      fr: 'Schéma interactif de matrice de touches affichant les codes et le ghosting.',
-      ar: 'مخطط تفاعلي لأزرار لوحة المفاتيح يعرض الضغطات المباشرة والأكواد وظاهرة التداخل.',
-    },
-    supportHint: { en: 'Requires KeyboardEvent API', fr: 'Requiert KeyboardEvent API', ar: 'يتطلب KeyboardEvent API' },
-    keywords: ['keyboard test', 'keyboard tester', 'key ghosting test', 'tester clavier', 'فحص الكيبورد'],
-    iconType: 'keyboard',
-    requiredApis: ['KeyboardEvent'],
-    componentName: 'KeyboardTester',
-    relatedToolIds: ['mouse-test', 'click-counter'],
-    instructions: {
-      en: ['Click inside the interactive keyboard area to focus the test.', 'Press every key on your physical keyboard to verify its switch registers.', 'Switch between QWERTY, AZERTY, and Arabic layout presets.'],
-      fr: ['Cliquez dans la zone de test pour activer la capture des touches.', 'Appuyez sur chaque touche pour vérifier son enregistrement.', 'Basculez entre les dispositions QWERTY, AZERTY et Arabe.'],
-      ar: ['انقر داخل مساحة الاختبار لتفعيل التقاط المفاتيح.', 'اضغط على كل مفتاح في لوحة المفاتيح الفعلية للتحقق من استجابته.', 'قم بالتبديل بين تخطيطات QWERTY و AZERTY والعربية.'],
-    },
-    limitations: {
-      en: ['Certain OS shortcuts (e.g. Win+L, Alt+F4, Ctrl+Alt+Del) are intercepted by the operating system before reaching the browser.', 'Tab and Esc navigation keys have special exit handlers for accessibility.'],
-      fr: ['Certains raccourcis système (Win+L, Alt+F4) sont capturés par l’OS.', 'Les touches Tab et Échap permettent de quitter pour l’accessibilité.'],
-      ar: ['بعض اختصارات النظام (مثل Win+L و Alt+F4) يلتقطها نظام التشغيل قبل المتصفح.', 'أزرار Tab و Esc لها معالجات خاصة لسهولة الوصول.'],
-    },
-    troubleshooting: {
-      en: ['If keys do not highlight, make sure the test canvas has active focus.', 'For mechanical keyboards with sticky switches, clean underneath keycaps with compressed air.'],
-      fr: ['Si les touches ne s’allument pas, cliquez à l’intérieur du cadre.', 'Nettoyez les touches encrassées à l’air comprimé.'],
-      ar: ['إذا لم تضيء المفاتيح، تأكد من النقر داخل إطار الفحص لتفعيله.', 'للوحات المفاتيح الميكانيكية، نظف المفاتيح العالقة برذاذ الهواء.'],
-    },
+    id: "keyboard-test",
+    slug: "keyboard-test",
+    category: "keyboard-mouse" as ToolCategory,
+    categoryLabel: "Keyboard & Mouse",
+    title: "Keyboard Tester",
+    shortDesc: "Interactive key matrix diagram showing real-time presses, codes and key ghosting.",
+    supportHint: "Requires KeyboardEvent API",
+    keywords: ["keyboard test","keyboard tester","key ghosting test"],
+    iconType: "keyboard",
+    requiredApis: ["KeyboardEvent"],
+    componentName: "KeyboardTester",
+    relatedToolIds: ["mouse-test","click-counter"],
+    instructions: [
+      "Click inside the interactive keyboard area to focus the test.",
+      "Press every key on your physical keyboard to verify its switch registers.",
+      "Switch between QWERTY, AZERTY, and Arabic layout presets."
+    ],
+    limitations: [
+      "Certain OS shortcuts (e.g. Win+L, Alt+F4, Ctrl+Alt+Del) are intercepted by the operating system before reaching the browser.",
+      "Tab and Esc navigation keys have special exit handlers for accessibility."
+    ],
+    troubleshooting: [
+      "If keys do not highlight, make sure the test canvas has active focus.",
+      "For mechanical keyboards with sticky switches, clean underneath keycaps with compressed air."
+    ],
   },
   {
-    id: 'mouse-test',
-    slug: 'mouse-test',
-    category: 'keyboard-mouse',
-    categoryLabel: { en: 'Keyboard & Mouse', fr: 'Clavier et Souris', ar: 'لوحة المفاتيح والفأرة' },
-    title: { en: 'Mouse & Click Tester', fr: 'Testeur de Souris', ar: 'فحص الفأرة والنقرات' },
-    shortDesc: {
-      en: 'Test left, right, middle clicks, scroll wheel delta, and double-click switch chatter.',
-      fr: 'Testez clics gauche, droit, molette, défilement et détection du double-clic parasite.',
-      ar: 'فحص النقر الأيسر والأيمن والأوسط، وعجلة التمرير، واكتشاف النقر المزدوج التلقائي.',
-    },
-    supportHint: { en: 'Requires PointerEvent & MouseEvent', fr: 'Requiert PointerEvent & MouseEvent', ar: 'يتطلب PointerEvent و MouseEvent' },
-    keywords: ['mouse test', 'mouse double click test', 'scroll wheel test', 'tester souris', 'فحص الماوس'],
-    iconType: 'mouse',
-    requiredApis: ['MouseEvent', 'WheelEvent'],
-    componentName: 'MouseTester',
-    relatedToolIds: ['click-counter', 'keyboard-test', 'touchscreen-test'],
-    instructions: {
-      en: ['Click inside the designated testing box with Left, Middle, and Right mouse buttons.', 'Scroll up and down to check wheel direction and delta.', 'Perform rapid single clicks to detect faulty micro-switch double-clicking.'],
-      fr: ['Cliquez dans la zone avec les boutons Gauche, Molette et Droit.', 'Faites défiler la molette vers le haut et le bas.', 'Cliquez rapidement pour tester le rebond parasite du micro-switch.'],
-      ar: ['انقر داخل المربع المخصص باستخدام الزر الأيسر والأوسط والأيمن.', 'قم بتدوير عجلة التمرير للأعلى والأسفل للتحقق من الاتجاه.', 'انقر نقرات سريعة لاكتشاف مشاكل النقر المزدوج غير المقصود.'],
-    },
-    limitations: {
-      en: ['Extra side buttons (Button 4 & 5) are supported where exposed by the browser PointerEvent standard.', 'Browser context menu is suppressed only within the test container.'],
-      fr: ['Les boutons latéraux (4 et 5) sont testés s’ils sont transmis par l’API.', 'Le menu contextuel n’est bloqué que dans la zone de test.'],
-      ar: ['الأزرار الجانبية الإضافية مدعومة في حدود ما يتيحه معيار PointerEvent في المتصفح.', 'يتم تعطيل قائمة الزر الأيمن داخل مساحة الاختبار فقط.'],
-    },
-    troubleshooting: {
-      en: ['If right click opens a context menu, ensure your cursor is inside the active testing pad.', 'Clean optical sensor underneath the mouse if cursor movement jitters.'],
-      fr: ['Si le clic droit ouvre le menu contextuel, cliquez bien dans la zone.', 'Nettoyez le capteur optique si le curseur saccade.'],
-      ar: ['إذا ظهرت القائمة عند النقر باليمين، تأكد من وجود المؤشر داخل لوحة الاختبار.', 'نظف الحساس الضوئي أسفل الفأرة إذا كانت حركة المؤشر متقطعة.'],
-    },
+    id: "mouse-test",
+    slug: "mouse-test",
+    category: "keyboard-mouse" as ToolCategory,
+    categoryLabel: "Keyboard & Mouse",
+    title: "Mouse & Click Tester",
+    shortDesc: "Test left, right, middle clicks, scroll wheel delta, and double-click switch chatter.",
+    supportHint: "Requires PointerEvent & MouseEvent",
+    keywords: ["mouse test","mouse double click test","scroll wheel test"],
+    iconType: "mouse",
+    requiredApis: ["MouseEvent","WheelEvent"],
+    componentName: "MouseTester",
+    relatedToolIds: ["click-counter","keyboard-test","touchscreen-test"],
+    instructions: [
+      "Click inside the designated testing box with Left, Middle, and Right mouse buttons.",
+      "Scroll up and down to check wheel direction and delta.",
+      "Perform rapid single clicks to detect faulty micro-switch double-clicking."
+    ],
+    limitations: [
+      "Extra side buttons (Button 4 & 5) are supported where exposed by the browser PointerEvent standard.",
+      "Browser context menu is suppressed only within the test container."
+    ],
+    troubleshooting: [
+      "If right click opens a context menu, ensure your cursor is inside the active testing pad.",
+      "Clean optical sensor underneath the mouse if cursor movement jitters."
+    ],
   },
   {
-    id: 'click-counter',
-    slug: 'click-counter',
-    category: 'keyboard-mouse',
-    categoryLabel: { en: 'Keyboard & Mouse', fr: 'Clavier et Souris', ar: 'لوحة المفاتيح والفأرة' },
-    title: { en: 'Click & Spacebar Speed Test', fr: 'Test de Vitesse de Clic (CPS)', ar: 'مقياس سرعة النقر ومفتاح المسافة' },
-    shortDesc: {
-      en: 'Measure your clicks per second (CPS) and spacebar tap speed with timed challenges.',
-      fr: 'Mesurez vos clics par seconde (CPS) et votre cadence sur la barre d’espace.',
-      ar: 'قس عدد النقرات في الثانية (CPS) وسرعة الضغط على مفتاح المسافة مع عداد زمني.',
-    },
-    supportHint: { en: 'Requires DOM performance timer', fr: 'Requiert timer DOM haute précision', ar: 'يتطلب مؤقت أداء DOM عالي الدقة' },
-    keywords: ['click speed test', 'cps test', 'spacebar counter', 'clicks per second', 'test cps', 'مقياس النقر'],
-    iconType: 'mouse',
-    requiredApis: ['performance.now'],
-    componentName: 'ClickCounterTester',
-    relatedToolIds: ['mouse-test', 'keyboard-test'],
-    instructions: {
-      en: ['Select duration (5s, 10s, 30s, or freeform).', 'Choose Mouse Click mode or Spacebar mode.', 'Start clicking as fast as possible to calculate your average CPS.'],
-      fr: ['Sélectionnez la durée (5s, 10s, 30s ou libre).', 'Choisissez le mode Clic Souris ou Barre d’Espace.', 'Cliquez aussi vite que possible pour mesurer votre CPS.'],
-      ar: ['حدد المدة (5 ثوانٍ، 10 ثوانٍ، 30 ثانية أو غير محدد).', 'اختر وضع نقر الفأرة أو وضع مفتاح المسافة.', 'ابدأ بالنقر بأسرع ما يمكن لحساب متوسط النقرات في الثانية.'],
-    },
-    limitations: {
-      en: ['Measured CPS is constrained by browser event loop timing and operating system polling rates.', 'Scores reflect input burst frequency and are not uploaded to any remote leaderboard.'],
-      fr: ['Le score dépend de la fréquence d’échantillonnage de l’OS.', 'Les scores sont purement locaux et non partagés.'],
-      ar: ['النتائج مقيدة بمعدل معالجة المتصفح واستجابة نظام التشغيل.', 'النتائج محلية تماماً ولا يتم رفعها إلى أي خادم خارجي.'],
-    },
-    troubleshooting: {
-      en: ['Use steady jitter-click or butterfly-click techniques for high CPS.', 'Ensure the testing area is clicked.'],
-      fr: ['Adoptez une prise stable pour un meilleur résultat.', 'Cliquez au centre de la cible.'],
-      ar: ['استخدم طريقة نقر مستقرة لتحقيق سرعة عالية.', 'تأكد من النقر داخل المربع المحدد.'],
-    },
+    id: "click-counter",
+    slug: "click-counter",
+    category: "keyboard-mouse" as ToolCategory,
+    categoryLabel: "Keyboard & Mouse",
+    title: "Click & Spacebar Speed Test",
+    shortDesc: "Measure your clicks per second (CPS) and spacebar tap speed with timed challenges.",
+    supportHint: "Requires DOM performance timer",
+    keywords: ["click speed test","cps test","spacebar counter","clicks per second","test cps"],
+    iconType: "mouse",
+    requiredApis: ["performance.now"],
+    componentName: "ClickCounterTester",
+    relatedToolIds: ["mouse-test","keyboard-test"],
+    instructions: [
+      "Select duration (5s, 10s, 30s, or freeform).",
+      "Choose Mouse Click mode or Spacebar mode.",
+      "Start clicking as fast as possible to calculate your average CPS."
+    ],
+    limitations: [
+      "Measured CPS is constrained by browser event loop timing and operating system polling rates.",
+      "Scores reflect input burst frequency and are not uploaded to any remote leaderboard."
+    ],
+    troubleshooting: [
+      "Use steady jitter-click or butterfly-click techniques for high CPS.",
+      "Ensure the testing area is clicked."
+    ],
   },
   {
-    id: 'touchscreen-test',
-    slug: 'touchscreen-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Touchscreen Coverage Test', fr: 'Test de Couverture Tactile', ar: 'فحص استجابة شاشة اللمس' },
-    shortDesc: {
-      en: 'Draw across grid tiles to inspect touch accuracy, dead zones and digitizer response.',
-      fr: 'Dessinez sur la grille pour vérifier la précision tactile et les zones mortes.',
-      ar: 'ارسم على شبكة الشاشة للتحقق من دقة اللمس والمناطق غير المستجيبة للشاشة.',
-    },
-    supportHint: { en: 'Requires Touch Events / Pointer Events', fr: 'Requiert les événements tactiles', ar: 'يتطلب أحداث اللمس Touch/Pointer' },
-    keywords: ['touchscreen test', 'touch screen test', 'screen digitizer test', 'test tactile', 'فحص شاشة اللمس'],
-    iconType: 'touch-phone',
-    requiredApis: ['PointerEvent', 'TouchEvent'],
-    componentName: 'TouchscreenTester',
-    relatedToolIds: ['multitouch-test', 'display-test'],
-    instructions: {
-      en: ['Touch and drag your finger across all grid cells on the screen.', 'Filled cells change color to indicate registered touch coordinates.', 'Click Clear or Reset Grid to start a new sweep.'],
-      fr: ['Glissez votre doigt sur toutes les cases de la grille.', 'Les cases remplies changent de couleur dès réception des coordonnées.', 'Cliquez sur Effacer pour recommencer.'],
-      ar: ['اسحب إصبعك على جميع مربعات الشبكة على الشاشة.', 'تتلون المربعات الملموسة لتأكيد استجابة إحداثيات اللمس.', 'انقر على مسح أو إعادة ضبط لبدء فحص جديد.'],
-    },
-    limitations: {
-      en: ['Drawing coverage serves as a visual inspection aid, not an automatic hardware digitizer health diagnosis.', 'Browser edge-swipe gestures may trigger system navigation.'],
-      fr: ['La couverture est une aide visuelle, pas un diagnostic matériel automatisé.', 'Les gestes système de bord d’écran peuvent interférer.'],
-      ar: ['تغطية الرسم هي وسيلة فحص بصرية وليست تشخيصاً تلقائياً للأعطال الداخلية.', 'إيماءات حواف الشاشة في الهاتف قد تشغل تنقلات النظام.'],
-    },
-    troubleshooting: {
-      en: ['If drawing stutters, clean screen surface of oil or moisture.', 'Remove thick screen protectors that may dampen capacitive touch sensitivity.'],
-      fr: ['Si le tracé saccade, nettoyez la vitre de l’écran.', 'Vérifiez si la protection d’écran ne réduit pas la sensibilité.'],
-      ar: ['إذا تقطع الرسم، نظف سطح الشاشة من الزيوت أو الرطوبة.', 'تأكد من أن واقي الشاشة لا يعيق حساسية اللمس السعوية.'],
-    },
+    id: "touchscreen-test",
+    slug: "touchscreen-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Touchscreen Coverage Test",
+    shortDesc: "Draw across grid tiles to inspect touch accuracy, dead zones and digitizer response.",
+    supportHint: "Requires Touch Events / Pointer Events",
+    keywords: ["touchscreen test","touch screen test","screen digitizer test"],
+    iconType: "touch-phone",
+    requiredApis: ["PointerEvent","TouchEvent"],
+    componentName: "TouchscreenTester",
+    relatedToolIds: ["multitouch-test","display-test"],
+    instructions: [
+      "Touch and drag your finger across all grid cells on the screen.",
+      "Filled cells change color to indicate registered touch coordinates.",
+      "Click Clear or Reset Grid to start a new sweep."
+    ],
+    limitations: [
+      "Drawing coverage serves as a visual inspection aid, not an automatic hardware digitizer health diagnosis.",
+      "Browser edge-swipe gestures may trigger system navigation."
+    ],
+    troubleshooting: [
+      "If drawing stutters, clean screen surface of oil or moisture.",
+      "Remove thick screen protectors that may dampen capacitive touch sensitivity."
+    ],
   },
   {
-    id: 'multitouch-test',
-    slug: 'multitouch-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Multi-Touch Test', fr: 'Test Multi-Touch', ar: 'فحص اللمس المتعدد' },
-    shortDesc: {
-      en: 'Track simultaneous touch points with distinct markers, radii and max observed fingers.',
-      fr: 'Suivez les points de contact simultanés avec repères colorés et nombre de doigts.',
-      ar: 'تتبع نقاط اللمس المتزامنة مع علامات ملونة وإحصاء أقصى عدد أصابع مستشعر.',
-    },
-    supportHint: { en: 'Requires TouchEvent API', fr: 'Requiert l’API TouchEvent', ar: 'يتطلب TouchEvent API' },
-    keywords: ['multitouch test', 'multi touch tester', '10 finger touch test', 'test multi-touch', 'اللمس المتعدد'],
-    iconType: 'touch-phone',
-    requiredApis: ['TouchEvent'],
-    componentName: 'MultitouchTester',
-    relatedToolIds: ['touchscreen-test', 'display-test'],
-    instructions: {
-      en: ['Place 2 or more fingers simultaneously on the interactive testing pad.', 'Observe live touch coordinates, touch radius (where supported), and active identifier tokens.', 'Check the Maximum Observed Simultaneous Touch count.'],
-      fr: ['Posez 2 doigts ou plus simultanément sur la zone de test.', 'Observez les coordonnées en direct, le rayon et les identifiants.', 'Consultez le nombre maximal de contacts détectés.'],
-      ar: ['ضع إصبعين أو أكثر في نفس الوقت على مساحة الاختبار.', 'شاهد إحداثيات اللمس المباشرة ونصف القطر ومعرفات النقاط.', 'تحقق من أقصى عدد نقاط لمس متزامنة تم تسجيلها.'],
-    },
-    limitations: {
-      en: ['Reported count represents the maximum observed touches received by the browser, not a guaranteed hardware ceiling.', 'Desktop browsers with mice report 0 or 1 simulated touch points.'],
-      fr: ['Le nombre affiché est le maximum observé par le navigateur.', 'Les navigateurs de bureau avec souris simulent au plus 1 point.'],
-      ar: ['العدد الظاهر يمثل أقصى عدد لمسات استقبلها المتصفح وليس الحد الأقصى للجهاز.', 'متصفحات الحواسيب التقليدية مع الفأرة تسجل نقطة واحدة كحد أقصى.'],
-    },
-    troubleshooting: {
-      en: ['Test on a mobile phone, tablet or touchscreen laptop for multi-finger detection.', 'Disable three-finger screenshot gestures in OS settings if they intercept touches.'],
-      fr: ['Testez sur smartphone, tablette ou PC tactile.', 'Désactivez les gestes système à 3 doigts si nécessaire.'],
-      ar: ['افتح الأداة على هاتف أو جهاز لوحي لتجربة اللمس المتعدد بالأصابع.', 'عطل إيماءات لقطة الشاشة بثلاثة أصابع إذا كانت تعترض الفحص.'],
-    },
+    id: "multitouch-test",
+    slug: "multitouch-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Multi-Touch Test",
+    shortDesc: "Track simultaneous touch points with distinct markers, radii and max observed fingers.",
+    supportHint: "Requires TouchEvent API",
+    keywords: ["multitouch test","multi touch tester","10 finger touch test","test multi-touch"],
+    iconType: "touch-phone",
+    requiredApis: ["TouchEvent"],
+    componentName: "MultitouchTester",
+    relatedToolIds: ["touchscreen-test","display-test"],
+    instructions: [
+      "Place 2 or more fingers simultaneously on the interactive testing pad.",
+      "Observe live touch coordinates, touch radius (where supported), and active identifier tokens.",
+      "Check the Maximum Observed Simultaneous Touch count."
+    ],
+    limitations: [
+      "Reported count represents the maximum observed touches received by the browser, not a guaranteed hardware ceiling.",
+      "Desktop browsers with mice report 0 or 1 simulated touch points."
+    ],
+    troubleshooting: [
+      "Test on a mobile phone, tablet or touchscreen laptop for multi-finger detection.",
+      "Disable three-finger screenshot gestures in OS settings if they intercept touches."
+    ],
   },
   {
-    id: 'gamepad-test',
-    slug: 'gamepad-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Gamepad & Controller Tester', fr: 'Testeur de Manette / Gamepad', ar: 'فحص يد التحكم والـ Gamepad' },
-    shortDesc: {
-      en: 'Inspect analog thumbsticks, stick drift dead zones, triggers, and button states.',
-      fr: 'Vérifiez les sticks analogiques, le drift, les gâchettes et boutons de manette.',
-      ar: 'فحص عصي التحكم الأنالوج، ومناطق انجراف العصا (Drift)، والمحفزات والأزرار.',
-    },
-    supportHint: { en: 'Requires Gamepad API', fr: 'Requiert l’API Gamepad', ar: 'يتطلب Gamepad API' },
-    keywords: ['gamepad tester', 'controller test', 'stick drift test', 'ps5 controller test', 'xbox controller test', 'فحص يد التحكم'],
-    iconType: 'gamepad',
-    requiredApis: ['navigator.getGamepads'],
-    componentName: 'GamepadTester',
-    relatedToolIds: ['keyboard-test', 'mouse-test'],
-    instructions: {
-      en: ['Connect your Xbox, PlayStation, Switch Pro, or generic USB/Bluetooth controller.', 'Press any button on the controller so the browser detects the device.', 'Move analog sticks to inspect center deadzone drift and trigger pressure levels.'],
-      fr: ['Branchez votre manette Xbox, PlayStation, Switch ou USB/Bluetooth.', 'Appuyez sur un bouton pour que le navigateur la détecte.', 'Bougez les sticks pour vérifier le centrage et la zone morte.'],
-      ar: ['قم بتوصيل يد التحكم (Xbox أو PlayStation أو Switch أو غيرها).', 'اضغط على أي زر في يد التحكم ليتعرف عليها المتصفح.', 'حرك عصي الأنالوج للتحقق من دقة نقطة الصفر وانجراف العصا.'],
-    },
-    limitations: {
-      en: ['Browsers require a physical button press before exposing gamepad telemetry for security.', 'Stick drift visualization highlights resting offset; it cannot physically repair worn potentiometer sensors.'],
-      fr: ['Une pression de bouton est requise par sécurité pour la détection.', 'La visualisation du drift ne répare pas l’usure mécanique.'],
-      ar: ['يتطلب المتصفح الضغط على زر أولاً لتفعيل قراءة بيانات يد التحكم.', 'المخطط يوضح مقدار الانحراف عن المركز ولا يصلح التلف الميكانيكي للمستشعر.'],
-    },
-    troubleshooting: {
-      en: ['If the gamepad is not detected, press the A/Cross button firmly.', 'Reconnect USB cable or re-pair Bluetooth if connection drops.'],
-      fr: ['Si la manette n’apparaît pas, appuyez fermement sur A ou Croix.', 'Rebranchez le câble USB ou réassociez le Bluetooth.'],
-      ar: ['إذا لم تظهر يد التحكم، اضغط على زر A أو X بقوة.', 'أعد توصيل كابل USB أو إعادة الاقتران عبر البلوتوث.'],
-    },
+    id: "gamepad-test",
+    slug: "gamepad-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Gamepad & Controller Tester",
+    shortDesc: "Inspect analog thumbsticks, stick drift dead zones, triggers, and button states.",
+    supportHint: "Requires Gamepad API",
+    keywords: ["gamepad tester","controller test","stick drift test","ps5 controller test","xbox controller test"],
+    iconType: "gamepad",
+    requiredApis: ["navigator.getGamepads"],
+    componentName: "GamepadTester",
+    relatedToolIds: ["keyboard-test","mouse-test"],
+    instructions: [
+      "Connect your Xbox, PlayStation, Switch Pro, or generic USB/Bluetooth controller.",
+      "Press any button on the controller so the browser detects the device.",
+      "Move analog sticks to inspect center deadzone drift and trigger pressure levels."
+    ],
+    limitations: [
+      "Browsers require a physical button press before exposing gamepad telemetry for security.",
+      "Stick drift visualization highlights resting offset; it cannot physically repair worn potentiometer sensors."
+    ],
+    troubleshooting: [
+      "If the gamepad is not detected, press the A/Cross button firmly.",
+      "Reconnect USB cable or re-pair Bluetooth if connection drops."
+    ],
   },
   {
-    id: 'dead-pixel-test',
-    slug: 'dead-pixel-test',
-    category: 'screen',
-    categoryLabel: { en: 'Screen & Display', fr: 'Écran et Affichage', ar: 'الشاشة والعرض' },
-    title: { en: 'Dead Pixel Screen Test', fr: 'Test de Pixels Morts', ar: 'فحص البيكسل الميت والعالق' },
-    shortDesc: {
-      en: 'Full-screen solid primary color cycles to visually spot stuck, dead or lit pixels.',
-      fr: 'Plein écran de couleurs primaires pour repérer les pixels morts ou bloqués.',
-      ar: 'شاشة كاملة بألوان أحادية أساسية للتحقق البصري من البيكسلات الميتة أو العالقة.',
-    },
-    supportHint: { en: 'Requires Fullscreen API', fr: 'Requiert l’API Plein Écran', ar: 'يتطلب Fullscreen API' },
-    keywords: ['dead pixel test', 'stuck pixel test', 'screen test', 'test pixel mort', 'فحص بكسل ميت'],
-    iconType: 'monitor',
-    requiredApis: ['document.documentElement.requestFullscreen'],
-    componentName: 'DeadPixelTester',
-    relatedToolIds: ['display-patterns', 'screen-info', 'display-fps'],
-    instructions: {
-      en: ['Click Launch Fullscreen to start the test.', 'Press Left/Right arrow keys or click the screen to cycle through Red, Green, Blue, White, and Black.', 'Inspect your panel closely for non-illuminating dots (dead) or incorrect colored dots (stuck).', 'Press Esc to exit fullscreen.'],
-      fr: ['Cliquez sur Plein écran pour démarrer.', 'Appuyez sur les flèches ou cliquez pour faire défiler Rouge, Vert, Bleu, Blanc, Noir.', 'Inspectez la dalle pour repérer les points noirs ou de mauvaise couleur.', 'Appuyez sur Échap pour quitter.'],
-      ar: ['انقر على تشغيل ملء الشاشة لبدء الاختبار.', 'استخدم أسهم اليمين/اليسار أو انقر للتبديل بين الأحمر والأخضر والأزرق والأبيض والأسود.', 'افحص شاشتك بدقة للبحث عن نقاط مظلمة أو نقاط عالقة بلون ثابت.', 'اضغط Esc للخروج من ملء الشاشة.'],
-    },
-    limitations: {
-      en: ['Pixel defects require human visual observation; web browsers cannot automatically scan panel subpixels.', 'Cleaning physical screen dust before testing prevents false positives.'],
-      fr: ['La détection nécessite une observation visuelle humaine.', 'Nettoyez la poussière de l’écran avant le test.'],
-      ar: ['اكتشاف عيوب البيكسل يتطلب المعاينة البصرية، ولا يمكن للمتصفح فحصها برمجياً.', 'يُفضل مسح الغبار عن الشاشة قبل البدء لتجنب الالتباس.'],
-    },
-    troubleshooting: {
-      en: ['Wipe screen gently with a microfiber cloth to distinguish surface debris from dead subpixels.', 'If Esc does not exit, tap top-right corner.'],
-      fr: ['Essuyez l’écran avec un chiffon microfibre.', 'Si Échap ne répond pas, touchez le coin supérieur droit.'],
-      ar: ['امسح الشاشة بقطعة قماش ناعمة لتمييز الغبار عن البيكسلات التالفة.', 'إذا لم يعمل زر Esc، انقر على الزاوية العلوية للخروج.'],
-    },
+    id: "dead-pixel-test",
+    slug: "dead-pixel-test",
+    category: "screen" as ToolCategory,
+    categoryLabel: "Screen & Display",
+    title: "Dead Pixel Screen Test",
+    shortDesc: "Full-screen solid primary color cycles to visually spot stuck, dead or lit pixels.",
+    supportHint: "Requires Fullscreen API",
+    keywords: ["dead pixel test","stuck pixel test","screen test","test pixel mort"],
+    iconType: "monitor",
+    requiredApis: ["document.documentElement.requestFullscreen"],
+    componentName: "DeadPixelTester",
+    relatedToolIds: ["display-patterns","screen-info","display-fps"],
+    instructions: [
+      "Click Launch Fullscreen to start the test.",
+      "Press Left/Right arrow keys or click the screen to cycle through Red, Green, Blue, White, and Black.",
+      "Inspect your panel closely for non-illuminating dots (dead) or incorrect colored dots (stuck).",
+      "Press Esc to exit fullscreen."
+    ],
+    limitations: [
+      "Pixel defects require human visual observation; web browsers cannot automatically scan panel subpixels.",
+      "Cleaning physical screen dust before testing prevents false positives."
+    ],
+    troubleshooting: [
+      "Wipe screen gently with a microfiber cloth to distinguish surface debris from dead subpixels.",
+      "If Esc does not exit, tap top-right corner."
+    ],
   },
   {
-    id: 'display-patterns',
-    slug: 'display-patterns',
-    category: 'screen',
-    categoryLabel: { en: 'Screen & Display', fr: 'Écran et Affichage', ar: 'الشاشة والعرض' },
-    title: { en: 'Display Calibration Patterns', fr: 'Mires d’Étalonnage d’Écran', ar: 'أنماط معايرة الشاشة والتباين' },
-    shortDesc: {
-      en: 'Grayscale ramps, contrast steps, color gradients, and pixel alignment grids.',
-      fr: 'Échelles de gris, mires de contraste, dégradés et grilles d’alignement.',
-      ar: 'تدرجات الرمادي، وخطوات التباين، والتدرجات اللونية، وشبكات محاذاة البيكسل.',
-    },
-    supportHint: { en: 'Requires Canvas 2D & Fullscreen', fr: 'Requiert Canvas 2D & Plein Écran', ar: 'يتطلب Canvas 2D وملء الشاشة' },
-    keywords: ['monitor calibration', 'contrast test', 'display test pattern', 'mire etalonnage', 'معايرة الشاشة'],
-    iconType: 'monitor',
-    requiredApis: ['HTMLCanvasElement'],
-    componentName: 'DisplayPatternsTester',
-    relatedToolIds: ['dead-pixel-test', 'screen-info', 'font-rendering'],
-    instructions: {
-      en: ['Select the pattern: Grayscale Steps, Gamma Gradient, Black Level, White Level, or Sharpness Grid.', 'Adjust monitor brightness/contrast until every shaded step is distinguishable.', 'View patterns in fullscreen in a dimly lit room for optimal assessment.'],
-      fr: ['Sélectionnez une mire : Nuances de gris, Dégradé Gamma, Niveaux de noir/blanc, Grille.', 'Ajustez contraste et luminosité pour distinguer chaque nuance.', 'Passez en plein écran dans une pièce sombre.'],
-      ar: ['اختر النمط: درجات الرمادي، تدرج غاما، مستويات السواد والبياض، أو شبكة الدقة.', 'اضبط سطوع وتباين الشاشة حتى تصبح جميع الدرجات المتجاورة واضحة.', 'اعرض الأنماط بملء الشاشة في غرفة معتدلة الإضاءة لأفضل تقييم.'],
-    },
-    limitations: {
-      en: ['This tool provides visual reference patterns for manual adjustment, not a hardware colorimeter profile (ICC).', 'Viewing angles on TN/VA panels will affect perceived gamma.'],
-      fr: ['Cet outil sert de repère visuel, pas de sonde colorimétrique matérielle.', 'L’angle de vision influence le rendu sur dalles TN/VA.'],
-      ar: ['توفر هذه الأداة أنماطاً مرجعية للمعايرة اليدوية وليست بديلاً عن جهاز قياس الألوان.', 'زوايا الرؤية في بعض أنواع الشاشات تؤثر على تدرج الألوان.'],
-    },
-    troubleshooting: {
-      en: ['Reset monitor hardware picture settings to default before fine-tuning contrast.', 'Disable dynamic contrast or ambient light sensors in your monitor OSD.'],
-      fr: ['Réinitialisez les réglages écran par défaut avant d’ajuster.', 'Désactivez le contraste dynamique dans le menu de votre écran.'],
-      ar: ['أعد ضبط إعدادات الشاشة إلى الوضع الافتراضي قبل تعديل التباين.', 'عطل خاصية التباين الديناميكي التلقائي في شاشتك.'],
-    },
+    id: "display-patterns",
+    slug: "display-patterns",
+    category: "screen" as ToolCategory,
+    categoryLabel: "Screen & Display",
+    title: "Display Calibration Patterns",
+    shortDesc: "Grayscale ramps, contrast steps, color gradients, and pixel alignment grids.",
+    supportHint: "Requires Canvas 2D & Fullscreen",
+    keywords: ["monitor calibration","contrast test","display test pattern"],
+    iconType: "monitor",
+    requiredApis: ["HTMLCanvasElement"],
+    componentName: "DisplayPatternsTester",
+    relatedToolIds: ["dead-pixel-test","screen-info","font-rendering"],
+    instructions: [
+      "Select the pattern: Grayscale Steps, Gamma Gradient, Black Level, White Level, or Sharpness Grid.",
+      "Adjust monitor brightness/contrast until every shaded step is distinguishable.",
+      "View patterns in fullscreen in a dimly lit room for optimal assessment."
+    ],
+    limitations: [
+      "This tool provides visual reference patterns for manual adjustment, not a hardware colorimeter profile (ICC).",
+      "Viewing angles on TN/VA panels will affect perceived gamma."
+    ],
+    troubleshooting: [
+      "Reset monitor hardware picture settings to default before fine-tuning contrast.",
+      "Disable dynamic contrast or ambient light sensors in your monitor OSD."
+    ],
   },
   {
-    id: 'screen-info',
-    slug: 'screen-info',
-    category: 'screen',
-    categoryLabel: { en: 'Screen & Display', fr: 'Écran et Affichage', ar: 'الشاشة والعرض' },
-    title: { en: 'Screen & Display Specs', fr: 'Informations Écran et Affichage', ar: 'معلومات الشاشة ودقة العرض' },
-    shortDesc: {
-      en: 'Inspect viewport size, logical resolution, physical device pixel ratio, and color depth.',
-      fr: 'Consultez la taille du viewport, résolution logique, ratio de pixels et profondeur de couleur.',
-      ar: 'فحص أبعاد مساحة الرؤية، الدقة المنطقية، ونسبة بيكسل الجهاز وعمق الألوان.',
-    },
-    supportHint: { en: 'Reads window.screen properties', fr: 'Lit les propriétés window.screen', ar: 'يقرأ خصائص window.screen' },
-    keywords: ['screen resolution test', 'device pixel ratio', 'viewport size', 'screen specs', 'دقة الشاشة'],
-    iconType: 'monitor',
-    requiredApis: ['window.screen', 'window.devicePixelRatio'],
-    componentName: 'ScreenInfoTester',
-    relatedToolIds: ['dead-pixel-test', 'display-fps', 'display-patterns'],
-    instructions: {
-      en: ['View your current window viewport width and height.', 'Examine your OS logical resolution versus calculated physical canvas resolution.', 'Check reported Color Depth and HDR color gamut support.'],
-      fr: ['Consultez la largeur et hauteur actuelles de la fenêtre.', 'Comparez la résolution logique et la résolution physique calculée.', 'Vérifiez la profondeur de couleur et le support HDR.'],
-      ar: ['اطلع على أبعاد نافذة المتصفح الحالية.', 'قارن بين الدقة المنطقية للنظام ودقة البيكسل الفيزيائية المحسوبة.', 'تحقق من عمق الألوان ودعم النطاق اللوني العريض HDR.'],
-    },
-    limitations: {
-      en: ['Physical resolution is computed from window.screen multiplied by devicePixelRatio; browser privacy zooming may adjust these figures.', 'Exact panel diagonal inches cannot be queried via web APIs.'],
-      fr: ['La résolution physique est déduite du ratio de pixels.', 'La diagonale en pouces n’est pas accessible via le web.'],
-      ar: ['تُحسب الدقة الفيزيائية من نسبة البيكسل، وقد يؤثر تكبير المتصفح على الأرقام.', 'لا يمكن للمتصفح معرفة قياس الشاشة بالبوصة برمجياً.'],
-    },
-    troubleshooting: {
-      en: ['If resolution appears smaller than expected, check OS display scaling (125%, 150%, 200%).', 'Disable browser page zoom (Ctrl+0 / Cmd+0) for 100% 1:1 scale.'],
-      fr: ['Si la résolution paraît basse, vérifiez la mise à l’échelle de l’OS (125%, 150%).', 'Réinitialisez le zoom du navigateur avec Ctrl+0 / Cmd+0.'],
-      ar: ['إذا بدت الدقة أقل من المتوقع، تحقق من نسبة التحجيم في النظام (125% أو 150%).', 'اضبط تكبير المتصفح على 100% بالضغط على Ctrl+0.'],
-    },
+    id: "screen-info",
+    slug: "screen-info",
+    category: "screen" as ToolCategory,
+    categoryLabel: "Screen & Display",
+    title: "Screen & Display Specs",
+    shortDesc: "Inspect viewport size, logical resolution, physical device pixel ratio, and color depth.",
+    supportHint: "Reads window.screen properties",
+    keywords: ["screen resolution test","device pixel ratio","viewport size","screen specs"],
+    iconType: "monitor",
+    requiredApis: ["window.screen","window.devicePixelRatio"],
+    componentName: "ScreenInfoTester",
+    relatedToolIds: ["dead-pixel-test","display-fps","display-patterns"],
+    instructions: [
+      "View your current window viewport width and height.",
+      "Examine your OS logical resolution versus calculated physical canvas resolution.",
+      "Check reported Color Depth and HDR color gamut support."
+    ],
+    limitations: [
+      "Physical resolution is computed from window.screen multiplied by devicePixelRatio; browser privacy zooming may adjust these figures.",
+      "Exact panel diagonal inches cannot be queried via web APIs."
+    ],
+    troubleshooting: [
+      "If resolution appears smaller than expected, check OS display scaling (125%, 150%, 200%).",
+      "Disable browser page zoom (Ctrl+0 / Cmd+0) for 100% 1:1 scale."
+    ],
   },
   {
-    id: 'display-fps',
-    slug: 'display-fps',
-    category: 'screen',
-    categoryLabel: { en: 'Screen & Display', fr: 'Écran et Affichage', ar: 'الشاشة والعرض' },
-    title: { en: 'Display Refresh Rate / FPS Test', fr: 'Test de Taux de Rafraîchissement (Hz)', ar: 'مقياس معدل تحديث الشاشة (Hz / FPS)' },
-    shortDesc: {
-      en: 'Sample browser animation frame timestamps to estimate screen refresh cadence (60, 120, 144Hz).',
-      fr: 'Échantillonnez les trames pour estimer la fréquence de rafraîchissement de l’écran.',
-      ar: 'قياس الفواصل الزمنية لإطارات الرسوم لتقدير معدل تحديث الشاشة بالهرتز (60، 120، 144).',
-    },
-    supportHint: { en: 'Requires requestAnimationFrame & high-res timer', fr: 'Requiert requestAnimationFrame', ar: 'يتطلب requestAnimationFrame ومؤقت دقيق' },
-    keywords: ['monitor hz test', 'refresh rate test', 'screen fps test', '144hz test', 'taux rafraichissement', 'معدل التحديث'],
-    iconType: 'monitor',
-    requiredApis: ['requestAnimationFrame', 'performance.now'],
-    componentName: 'DisplayFpsTester',
-    relatedToolIds: ['screen-info', 'dead-pixel-test', 'canvas-benchmark'],
-    instructions: {
-      en: ['Click Start Benchmark to sample high-resolution animation frames.', 'Keep this tab in foreground and refrain from heavy scrolling or window resizing.', 'View estimated refresh rate (Hz), frame time consistency and dropped frame variance.'],
-      fr: ['Cliquez sur Démarrer pour mesurer la fréquence d’affichage.', 'Gardez l’onglet au premier plan sans le redimensionner.', 'Consultez la fréquence estimée en Hz et la stabilité.'],
-      ar: ['انقر على بدء الفحص لأخذ عينات من إطارات الرسوم المتحركة بدقة.', 'اترك النافذة في الواجهة وتجنب التمرير العنيف أثناء الاختبار.', 'شاهد التردد المقدر بالهرتز واستقرار زمن الإطارات.'],
-    },
-    limitations: {
-      en: ['Result reflects the browser compositing frame cadence, which caps at monitor VSync frequency.', 'Power-saving modes or background throttling can cause lower observed FPS.'],
-      fr: ['Le résultat indique la cadence du navigateur (limitée par VSync).', 'Les modes d’économie d’énergie peuvent brider le taux.'],
-      ar: ['النتيجة تعكس سرعة عرض المتصفح المحددة بمزامنة الشاشة VSync.', 'أوضاع توفير الطاقة قد تخفض معدل الإطارات مؤقتاً.'],
-    },
-    troubleshooting: {
-      en: ['Connect laptops to AC power to prevent battery refresh rate throttling to 60Hz.', 'Verify high-refresh display settings in your OS display control panel.'],
-      fr: ['Branchez votre PC sur secteur pour éviter le bridage à 60Hz.', 'Activez le mode 120Hz/144Hz dans les paramètres de votre écran.'],
-      ar: ['صل الكمبيوتر المحمول بالشاحن لمنع خفض التردد تلقائياً لتوفير الطاقة.', 'تأكد من تفعيل التردد العالي (120Hz أو 144Hz) في إعدادات الشاشة بالنظام.'],
-    },
+    id: "display-fps",
+    slug: "display-fps",
+    category: "screen" as ToolCategory,
+    categoryLabel: "Screen & Display",
+    title: "Display Refresh Rate / FPS Test",
+    shortDesc: "Sample browser animation frame timestamps to estimate screen refresh cadence (60, 120, 144Hz).",
+    supportHint: "Requires requestAnimationFrame & high-res timer",
+    keywords: ["monitor hz test","refresh rate test","screen fps test","144hz test"],
+    iconType: "monitor",
+    requiredApis: ["requestAnimationFrame","performance.now"],
+    componentName: "DisplayFpsTester",
+    relatedToolIds: ["screen-info","dead-pixel-test","canvas-benchmark"],
+    instructions: [
+      "Click Start Benchmark to sample high-resolution animation frames.",
+      "Keep this tab in foreground and refrain from heavy scrolling or window resizing.",
+      "View estimated refresh rate (Hz), frame time consistency and dropped frame variance."
+    ],
+    limitations: [
+      "Result reflects the browser compositing frame cadence, which caps at monitor VSync frequency.",
+      "Power-saving modes or background throttling can cause lower observed FPS."
+    ],
+    troubleshooting: [
+      "Connect laptops to AC power to prevent battery refresh rate throttling to 60Hz.",
+      "Verify high-refresh display settings in your OS display control panel."
+    ],
   },
   {
-    id: 'battery-monitor',
-    slug: 'battery-monitor',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Battery Status Monitor', fr: 'Moniteur d’État de Batterie', ar: 'مراقب حالة البطارية والشحن' },
-    shortDesc: {
-      en: 'Inspect live percentage, charging status and estimated charging/discharging time.',
-      fr: 'Consultez le pourcentage en direct, l’état de charge et les durées estimées.',
-      ar: 'فحص نسبة شحن البطارية الحية، وحالة التوصيل بالكهرباء، والوقت التقديري للشحن والتفريغ.',
-    },
-    supportHint: { en: 'Requires Battery Status API (Chromium / Android)', fr: 'Requiert l’API Battery Status (Chromium)', ar: 'يتطلب Battery Status API (متصفحات كروميوم)' },
-    keywords: ['battery test', 'battery health monitor', 'laptop battery test', 'test batterie', 'فحص البطارية'],
-    iconType: 'battery',
-    requiredApis: ['navigator.getBattery'],
-    componentName: 'BatteryTester',
-    relatedToolIds: ['screen-info', 'system-info'],
-    instructions: {
-      en: ['Observe your live battery percentage gauge.', 'Plug in or unplug your charger to observe immediate charging event status updates.', 'Review estimated minutes to full charge or discharge when calculated by the OS.'],
-      fr: ['Observez la jauge de pourcentage de batterie en temps réel.', 'Branchez ou débranchez le chargeur pour tester l’état.', 'Consultez les temps estimés calculés par votre système.'],
-      ar: ['شاهد مؤشر نسبة شحن البطارية الحي.', 'قم بتوصيل أو فصل الشاحن لمراقبة تحديثات حالة الشحن الفورية.', 'اطلع على الدقائق التقديرية المتبقية للشحن أو التفريغ.'],
-    },
-    limitations: {
-      en: ['Firefox and Safari removed Battery API access for privacy protection.', 'The API reports current charge level; it cannot measure physical battery wear or original milliamp-hour capacity.'],
-      fr: ['Safari et Firefox ont désactivé cette API par souci de confidentialité.', 'L’API indique le niveau actuel, pas l’usure physique en mAh.'],
-      ar: ['متصفحا سفاري وفايرفوكس أوقفا دعم هذه الواجهة لحماية الخصوصية.', 'توفر الواجهة نسبة الشحن الحالية ولا تقيس السعة الأصلية بالميلي أمبير.'],
-    },
-    troubleshooting: {
-      en: ['Use Chrome, Edge, or Opera on Windows, Android, or ChromeOS for Battery API access.', 'Allow a few minutes after plugging in for the OS to calculate charging time.'],
-      fr: ['Utilisez Chrome ou Edge sur Windows/Android pour ce test.', 'Patientez quelques minutes après branchement pour l’estimation.'],
-      ar: ['استخدم متصفح كروم أو إيدج على ويندوز أو أندرويد لتشغيل الفحص.', 'انتظر بضع دقائق بعد توصيل الشاحن ليحسب النظام الوقت المتبقي بدقة.'],
-    },
+    id: "battery-monitor",
+    slug: "battery-monitor",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Battery Status Monitor",
+    shortDesc: "Inspect live percentage, charging status and estimated charging/discharging time.",
+    supportHint: "Requires Battery Status API (Chromium / Android)",
+    keywords: ["battery test","battery health monitor","laptop battery test"],
+    iconType: "battery",
+    requiredApis: ["navigator.getBattery"],
+    componentName: "BatteryTester",
+    relatedToolIds: ["screen-info","system-info"],
+    instructions: [
+      "Observe your live battery percentage gauge.",
+      "Plug in or unplug your charger to observe immediate charging event status updates.",
+      "Review estimated minutes to full charge or discharge when calculated by the OS."
+    ],
+    limitations: [
+      "Firefox and Safari removed Battery API access for privacy protection.",
+      "The API reports current charge level; it cannot measure physical battery wear or original milliamp-hour capacity."
+    ],
+    troubleshooting: [
+      "Use Chrome, Edge, or Opera on Windows, Android, or ChromeOS for Battery API access.",
+      "Allow a few minutes after plugging in for the OS to calculate charging time."
+    ],
   },
   {
-    id: 'accelerometer-test',
-    slug: 'accelerometer-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Accelerometer & Motion Test', fr: 'Test d’Accéléromètre et Mouvement', ar: 'فحص مستشعر التسارع والحركة' },
-    shortDesc: {
-      en: 'Inspect live 3-axis acceleration (X, Y, Z) including gravity vectors on mobile devices.',
-      fr: 'Consultez l’accélération sur 3 axes (X, Y, Z) et la gravité sur mobile.',
-      ar: 'فحص التسارع الحي على المحاور الثلاثة (X, Y, Z) بما في ذلك متجه الجاذبية على الهواتف.',
-    },
-    supportHint: { en: 'Requires DeviceMotionEvent', fr: 'Requiert DeviceMotionEvent', ar: 'يتطلب DeviceMotionEvent' },
-    keywords: ['accelerometer test', 'device motion test', 'phone sensor test', 'test accelerometre', 'فحص التسارع'],
-    iconType: 'sensor-phone',
-    requiredApis: ['DeviceMotionEvent'],
-    componentName: 'AccelerometerTester',
-    relatedToolIds: ['gyroscope-test', 'vibration-test'],
-    instructions: {
-      en: ['Click Start Motion Test (iOS will prompt for explicit motion permission).', 'Tilt, shake, or move your mobile phone in 3D space.', 'Observe live numerical acceleration readings (m/s²) and dynamic axis displacement visualizers.'],
-      fr: ['Cliquez sur Démarrer le test (iOS demandera une autorisation).', 'Inclinez et bougez votre smartphone dans l’espace.', 'Observez les valeurs d’accélération (m/s²) sur les 3 axes.'],
-      ar: ['انقر على بدء فحص الحركة (سيطلب نظام iOS إذناً صريحاً).', 'قم بإمالة أو تحريك هاتفك في الاتجاهات المختلفة.', 'لاحظ قراءات التسارع المباشرة (م/ث²) والمخطط التفاعلي للمحاور.'],
-    },
-    limitations: {
-      en: ['Desktop computers without built-in IMU sensor hardware will report unavailable sensors.', 'Apple iOS requires an explicit user gesture to trigger PermissionState.request().'],
-      fr: ['Les PC sans capteur physique n’émettent aucun signal.', 'iOS exige une action utilisateur pour autoriser le capteur.'],
-      ar: ['أجهزة الحواسيب التي تفتقر لحساسات الحركة ستظهر حالة غير متوفر.', 'نظام iOS يتطلب نقرة صريحة من المستخدم للموافقة على إذن الحساسات.'],
-    },
-    troubleshooting: {
-      en: ['Open this page on a smartphone over HTTPS to access motion sensors.', 'Grant motion & orientation permission when prompted by iOS Safari.'],
-      fr: ['Ouvrez cette page sur smartphone en HTTPS.', 'Autorisez les capteurs de mouvement dans Safari iOS.'],
-      ar: ['افتح الصفحة على هاتفك المحمول عبر اتصال آمن HTTPS.', 'اسمح بإذن الحركة والتوجيه عند طلبه في متصفح سفاري.'],
-    },
+    id: "accelerometer-test",
+    slug: "accelerometer-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Accelerometer & Motion Test",
+    shortDesc: "Inspect live 3-axis acceleration (X, Y, Z) including gravity vectors on mobile devices.",
+    supportHint: "Requires DeviceMotionEvent",
+    keywords: ["accelerometer test","device motion test","phone sensor test"],
+    iconType: "sensor-phone",
+    requiredApis: ["DeviceMotionEvent"],
+    componentName: "AccelerometerTester",
+    relatedToolIds: ["gyroscope-test","vibration-test"],
+    instructions: [
+      "Click Start Motion Test (iOS will prompt for explicit motion permission).",
+      "Tilt, shake, or move your mobile phone in 3D space.",
+      "Observe live numerical acceleration readings (m/s²) and dynamic axis displacement visualizers."
+    ],
+    limitations: [
+      "Desktop computers without built-in IMU sensor hardware will report unavailable sensors.",
+      "Apple iOS requires an explicit user gesture to trigger PermissionState.request()."
+    ],
+    troubleshooting: [
+      "Open this page on a smartphone over HTTPS to access motion sensors.",
+      "Grant motion & orientation permission when prompted by iOS Safari."
+    ],
   },
   {
-    id: 'gyroscope-test',
-    slug: 'gyroscope-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Gyroscope & Orientation Test', fr: 'Test de Gyroscope et Orientation', ar: 'فحص الجيروسكوب وتوجيه الجهاز' },
-    shortDesc: {
-      en: 'Inspect real-time Alpha, Beta, Gamma rotation angles and 3D device tilt preview.',
-      fr: 'Consultez les angles de rotation Alpha, Bêta, Gamma et la vue 3D.',
-      ar: 'فحص زوايا الدوران الحية ألفا وبيتا وغاما مع معاينة ثلاثية الأبعاد لميلان الجهاز.',
-    },
-    supportHint: { en: 'Requires DeviceOrientationEvent', fr: 'Requiert DeviceOrientationEvent', ar: 'يتطلب DeviceOrientationEvent' },
-    keywords: ['gyroscope test', 'orientation test', 'phone gyro test', 'test gyroscope', 'فحص الجيروسكوب'],
-    iconType: 'sensor-phone',
-    requiredApis: ['DeviceOrientationEvent'],
-    componentName: 'GyroscopeTester',
-    relatedToolIds: ['accelerometer-test', 'vibration-test'],
-    instructions: {
-      en: ['Click Enable Orientation Sensors.', 'Rotate your device around its axes: Alpha (compass heading), Beta (front/back pitch), and Gamma (left/right roll).', 'Watch the interactive 3D phone model tilt in sync with your real device.'],
-      fr: ['Activez les capteurs d’orientation.', 'Faites pivoter votre téléphone : Alpha (lacet), Bêta (tangage), Gamma (roulis).', 'Regardez le modèle 3D réagir en temps réel.'],
-      ar: ['انقر على تفعيل حساسات التوجيه.', 'قم بتدوير هاتفك حول محاوره: ألفا (الاتجاه)، بيتا (الميل للأمام/الخلف)، وغاما (الميل لليمين/اليسار).', 'شاهد مجسم الهاتف ثلاثي الأبعاد يتحرك بالتزامن مع حركة جهازك.'],
-    },
-    limitations: {
-      en: ['Absolute compass orientation requires an internal magnetometer which may experience magnetic interference indoors.', 'Laptops report orientation only if fitted with hinge sensors.'],
-      fr: ['La boussole absolue nécessite un magnétomètre sensible aux interférences.', 'Les PC portables ne répondent que s’ils ont un capteur.'],
-      ar: ['تحديد الاتجاه الدقيق يتطلب مستشعر مغناطيسي قد يتأثر بالمجالات المغناطيسية الداخلية.', 'الحواسيب المحمولة لا تستجيب إلا إذا كانت مزودة بحساسات ميلان.'],
-    },
-    troubleshooting: {
-      en: ['Calibrate phone compass by moving device in a figure-8 motion if angles drift.', 'Ensure screen auto-rotate lock does not block orientation events.'],
-      fr: ['Calibrez la boussole en effectuant un mouvement en 8.', 'Vérifiez que le verrouillage d’orientation n’interfère pas.'],
-      ar: ['قم بمعايرة بوصلة الهاتف بتحريكه بحركة تشبه الرقم 8 في حال عدم دقة الزوايا.', 'تأكد من عدم تفعيل قفل تدوير الشاشة في هاتفك.'],
-    },
+    id: "gyroscope-test",
+    slug: "gyroscope-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Gyroscope & Orientation Test",
+    shortDesc: "Inspect real-time Alpha, Beta, Gamma rotation angles and 3D device tilt preview.",
+    supportHint: "Requires DeviceOrientationEvent",
+    keywords: ["gyroscope test","orientation test","phone gyro test","test gyroscope"],
+    iconType: "sensor-phone",
+    requiredApis: ["DeviceOrientationEvent"],
+    componentName: "GyroscopeTester",
+    relatedToolIds: ["accelerometer-test","vibration-test"],
+    instructions: [
+      "Click Enable Orientation Sensors.",
+      "Rotate your device around its axes: Alpha (compass heading), Beta (front/back pitch), and Gamma (left/right roll).",
+      "Watch the interactive 3D phone model tilt in sync with your real device."
+    ],
+    limitations: [
+      "Absolute compass orientation requires an internal magnetometer which may experience magnetic interference indoors.",
+      "Laptops report orientation only if fitted with hinge sensors."
+    ],
+    troubleshooting: [
+      "Calibrate phone compass by moving device in a figure-8 motion if angles drift.",
+      "Ensure screen auto-rotate lock does not block orientation events."
+    ],
   },
   {
-    id: 'vibration-test',
-    slug: 'vibration-test',
-    category: 'mobile-controllers',
-    categoryLabel: { en: 'Mobile & Controllers', fr: 'Mobile et Manettes', ar: 'الهواتف ووحدات التحكم' },
-    title: { en: 'Vibration Motor Test', fr: 'Test du Vibreur', ar: 'فحص محرك الاهتزاز' },
-    shortDesc: {
-      en: 'Trigger haptic pulses, pulse sequences and custom vibration patterns on supported devices.',
-      fr: 'Déclenchez des impulsions haptiques et vibrations sur les appareils compatibles.',
-      ar: 'تشغيل نبضات واهتزازات لمسية وأنماط مخصصة على الأجهزة المتوافقة.',
-    },
-    supportHint: { en: 'Requires navigator.vibrate (Android / Mobile Chrome)', fr: 'Requiert navigator.vibrate (Android)', ar: 'يتطلب navigator.vibrate (أجهزة أندرويد)' },
-    keywords: ['vibration test', 'haptic test', 'phone vibration tester', 'test vibreur', 'فحص الاهتزاز'],
-    iconType: 'sensor-phone',
-    requiredApis: ['navigator.vibrate'],
-    componentName: 'VibrationTester',
-    relatedToolIds: ['accelerometer-test', 'gamepad-test'],
-    instructions: {
-      en: ['Select a test pattern: Single Pulse (200ms), Double Pulse, SOS Morse Code, or Heartbeat.', 'Tap Test Vibration to trigger the phone motor.', 'Click Stop Vibration at any time to halt active patterns.'],
-      fr: ['Sélectionnez un motif : Simple impulsion, Double pulsation, SOS Morse, ou Battement.', 'Appuyez sur Tester la vibration.', 'Cliquez sur Arrêter pour couper immédiatement.'],
-      ar: ['اختر نمط الاهتزاز: نبضة واحدة، نبضة مزدوجة، رمز SOS، أو نبضات القلب.', 'اضغط على تشغيل الاهتزاز لتفعيل محرك الهاتف.', 'انقر على إيقاف الاهتزاز في أي وقت لإيقاف النمط فوراً.'],
-    },
-    limitations: {
-      en: ['Apple iOS Safari does not support the Web Vibration API for security/policy reasons.', 'Browser vibration calls do not guarantee the user physically perceived the motor.'],
-      fr: ['iOS Safari ne prend pas en charge l’API Vibration.', 'L’exécution de la commande ne garantit pas la perception physique.'],
-      ar: ['متصفح سفاري على هواتف آيفون لا يدعم Web Vibration API لأسباب أمنية.', 'قبول المتصفح لأمر الاهتزاز لا يؤكد تلقائياً إحساس المستخدم به فيزيائياً.'],
-    },
-    troubleshooting: {
-      en: ['Open this page on an Android phone using Google Chrome or Firefox.', 'Ensure your device is not set to Do Not Disturb or Silent mode without vibration enabled.'],
-      fr: ['Testez sur un smartphone Android avec Chrome ou Firefox.', 'Vérifiez que le mode Ne pas déranger n’est pas activé.'],
-      ar: ['افتح الأداة على هاتف أندرويد باستخدام متصفح كروم أو فايرفوكس.', 'تأكد من عدم تفعيل وضع عدم الإزعاج أو الوضع الصامت بدون اهتزاز.'],
-    },
+    id: "vibration-test",
+    slug: "vibration-test",
+    category: "mobile-controllers" as ToolCategory,
+    categoryLabel: "Mobile & Controllers",
+    title: "Vibration Motor Test",
+    shortDesc: "Trigger haptic pulses, pulse sequences and custom vibration patterns on supported devices.",
+    supportHint: "Requires navigator.vibrate (Android / Mobile Chrome)",
+    keywords: ["vibration test","haptic test","phone vibration tester"],
+    iconType: "sensor-phone",
+    requiredApis: ["navigator.vibrate"],
+    componentName: "VibrationTester",
+    relatedToolIds: ["accelerometer-test","gamepad-test"],
+    instructions: [
+      "Select a test pattern: Single Pulse (200ms), Double Pulse, SOS Morse Code, or Heartbeat.",
+      "Tap Test Vibration to trigger the phone motor.",
+      "Click Stop Vibration at any time to halt active patterns."
+    ],
+    limitations: [
+      "Apple iOS Safari does not support the Web Vibration API for security/policy reasons.",
+      "Browser vibration calls do not guarantee the user physically perceived the motor."
+    ],
+    troubleshooting: [
+      "Open this page on an Android phone using Google Chrome or Firefox.",
+      "Ensure your device is not set to Do Not Disturb or Silent mode without vibration enabled."
+    ],
   },
   {
-    id: 'pitch-detector',
-    slug: 'pitch-detector',
-    category: 'music',
-    categoryLabel: { en: 'Music Tools', fr: 'Outils Musique', ar: 'أدوات الموسيقى' },
-    title: { en: 'Pitch Detector', fr: 'Détecteur de Hauteur / Pitch', ar: 'كاشف نبرة الصوت والتردد' },
-    shortDesc: {
-      en: 'Autocorrelation audio algorithm estimating live pitch frequency and nearest musical note.',
-      fr: 'Algorithme d’autocorrélation estimant la fréquence et la note musicale la plus proche.',
-      ar: 'خوارزمية ترابط تلقائي صوتية لحساب التردد وتقدير أقرب نغمة موسيقية مباشرة.',
-    },
-    supportHint: { en: 'Requires Web Audio & microphone', fr: 'Requiert Web Audio & microphone', ar: 'يتطلب Web Audio والميكروفون' },
-    keywords: ['pitch detector', 'note detector', 'audio pitch test', 'detecteur de note', 'كاشف النغمة'],
-    iconType: 'microphone',
-    requiredApis: ['AudioContext', 'navigator.mediaDevices.getUserMedia'],
-    componentName: 'PitchDetectorTester',
-    relatedToolIds: ['instrument-tuner', 'tone-generator', 'metronome'],
-    instructions: {
-      en: ['Click Start Listening to grant microphone access.', 'Sing, hum, or play an acoustic note into your microphone.', 'Observe the detected fundamental frequency (Hz), nearest musical note (A4, C3), and cents offset.'],
-      fr: ['Cliquez sur Écouter pour activer le micro.', 'Chantez ou jouez une note acoustique.', 'Observez la fréquence fondamentale (Hz) et la note détectée.'],
-      ar: ['انقر على بدء الاستماع لمنح إذن الميكروفون.', 'قم بالغناء أو عزف نغمة واضحة باتجاه الميكروفون.', 'شاهد التردد الأساسي المكتشف بالهرتز وأقرب نغمة موسيقية ومقدار الانحراف.'],
-    },
-    limitations: {
-      en: ['Detects monophonic pitches (single voice or single instrument note); polyphonic chords will report the dominant fundamental.', 'Background ambient noise may reduce pitch detection confidence.'],
-      fr: ['Conçu pour les sons monophoniques (une seule note à la fois).', 'Le bruit ambiant peut perturber l’algorithme.'],
-      ar: ['مخصص للنغمات الأحادية (صوت واحد أو وتر واحد)، النغمات المركبة تظهر التردد السائد.', 'الضوضاء المحيطة قد تقلل من دقة استنتاج النغمة.'],
-    },
-    troubleshooting: {
-      en: ['Get closer to the microphone for stronger signal-to-noise ratio.', 'Hold notes steadily for at least 0.5 seconds.'],
-      fr: ['Rapprochez-vous du micro pour un signal plus clair.', 'Tenez la note de manière stable.'],
-      ar: ['اقترب من الميكروفون لزيادة وضوح الإشارة الصوتية.', 'حافظ على ثبات النغمة لمدة نصف ثانية على الأقل.'],
-    },
+    id: "pitch-detector",
+    slug: "pitch-detector",
+    category: "music" as ToolCategory,
+    categoryLabel: "Music Tools",
+    title: "Pitch Detector",
+    shortDesc: "Autocorrelation audio algorithm estimating live pitch frequency and nearest musical note.",
+    supportHint: "Requires Web Audio & microphone",
+    keywords: ["pitch detector","note detector","audio pitch test","detecteur de note"],
+    iconType: "microphone",
+    requiredApis: ["AudioContext","navigator.mediaDevices.getUserMedia"],
+    componentName: "PitchDetectorTester",
+    relatedToolIds: ["instrument-tuner","tone-generator","metronome"],
+    instructions: [
+      "Click Start Listening to grant microphone access.",
+      "Sing, hum, or play an acoustic note into your microphone.",
+      "Observe the detected fundamental frequency (Hz), nearest musical note (A4, C3), and cents offset."
+    ],
+    limitations: [
+      "Detects monophonic pitches (single voice or single instrument note); polyphonic chords will report the dominant fundamental.",
+      "Background ambient noise may reduce pitch detection confidence."
+    ],
+    troubleshooting: [
+      "Get closer to the microphone for stronger signal-to-noise ratio.",
+      "Hold notes steadily for at least 0.5 seconds."
+    ],
   },
   {
-    id: 'instrument-tuner',
-    slug: 'instrument-tuner',
-    category: 'music',
-    categoryLabel: { en: 'Music Tools', fr: 'Outils Musique', ar: 'أدوات الموسيقى' },
-    title: { en: 'Chromatic Instrument Tuner', fr: 'Accordeur d’Instruments Chromatique', ar: 'دوزان الآلات الموسيقية' },
-    shortDesc: {
-      en: 'Real-time chromatic needle tuner with presets for Guitar, Bass, Ukulele and Violin.',
-      fr: 'Accordeur chromatique à aiguille avec préréglages Guitare, Basse, Ukulélé et Violon.',
-      ar: 'موالف نغمات لوني بإبرة رقمية مع أوضاع جاهزة للجيتار، الباس، اليوكوليلي والكمان.',
-    },
-    supportHint: { en: 'Requires Web Audio & microphone', fr: 'Requiert Web Audio & microphone', ar: 'يتطلب Web Audio والميكروفون' },
-    keywords: ['guitar tuner', 'chromatic tuner', 'online tuner', 'accordeur guitare', 'دوزان الجيتار'],
-    iconType: 'microphone',
-    requiredApis: ['AudioContext', 'navigator.mediaDevices.getUserMedia'],
-    componentName: 'InstrumentTunerTester',
-    relatedToolIds: ['pitch-detector', 'tone-generator', 'metronome'],
-    instructions: {
-      en: ['Select your instrument tuning (Standard Guitar EADGBE, Bass, Ukulele, Violin, or Chromatic).', 'Pluck a string near your microphone.', 'Tune your peg until the needle reaches the center (0 cents) and the green In Tune indicator lights up.'],
-      fr: ['Sélectionnez l’instrument (Guitare EADGBE, Basse, Ukulélé, Violon ou Chromatique).', 'Pincez une corde près du micro.', 'Ajustez la mécanique jusqu’à ce que l’aiguille soit au centre.'],
-      ar: ['اختر الآلة (جيتار قياسي، باس، يوكوليلي، كمان أو لوني عام).', 'اعزف على الوتر بالقرب من الميكروفون.', 'اضبط مفتاح الوتر حتى تستقر الإبرة في المنتصف تماماً وتضيء شارة التناغم الخضراء.'],
-    },
-    limitations: {
-      en: ['Acoustic harmonic overtones on unmuted strings may briefly register as higher octaves.', 'Configurable standard reference pitch is A4 = 440 Hz.'],
-      fr: ['Les harmoniques peuvent parfois être détectées à l’octave.', 'Le diapason de référence est réglable (défaut A4 = 440 Hz).'],
-      ar: ['الرنين التوافقي للأوتار الأخرى قد يلتقط مؤقتاً كأوكتاف أعلى.', 'التردد المرجعي الافتراضي هو A4 = 440 هرتز.'],
-    },
-    troubleshooting: {
-      en: ['Mute adjacent vibrating strings with your palm while tuning a single string.', 'Pluck with moderate force near the 12th fret for clear fundamental tone.'],
-      fr: ['Étouffez les cordes adjacentes pendant l’accordage.', 'Pincez la corde avec une force modérée.'],
-      ar: ['اكتم الأوتار المجاورة براحة يدك أثناء ضبط الوتر المطلوب.', 'اعزف بقوة معتدلة للحصول على نغمة أساسية نقية.'],
-    },
+    id: "instrument-tuner",
+    slug: "instrument-tuner",
+    category: "music" as ToolCategory,
+    categoryLabel: "Music Tools",
+    title: "Chromatic Instrument Tuner",
+    shortDesc: "Real-time chromatic needle tuner with presets for Guitar, Bass, Ukulele and Violin.",
+    supportHint: "Requires Web Audio & microphone",
+    keywords: ["guitar tuner","chromatic tuner","online tuner","accordeur guitare"],
+    iconType: "microphone",
+    requiredApis: ["AudioContext","navigator.mediaDevices.getUserMedia"],
+    componentName: "InstrumentTunerTester",
+    relatedToolIds: ["pitch-detector","tone-generator","metronome"],
+    instructions: [
+      "Select your instrument tuning (Standard Guitar EADGBE, Bass, Ukulele, Violin, or Chromatic).",
+      "Pluck a string near your microphone.",
+      "Tune your peg until the needle reaches the center (0 cents) and the green In Tune indicator lights up."
+    ],
+    limitations: [
+      "Acoustic harmonic overtones on unmuted strings may briefly register as higher octaves.",
+      "Configurable standard reference pitch is A4 = 440 Hz."
+    ],
+    troubleshooting: [
+      "Mute adjacent vibrating strings with your palm while tuning a single string.",
+      "Pluck with moderate force near the 12th fret for clear fundamental tone."
+    ],
   },
   {
-    id: 'metronome',
-    slug: 'metronome',
-    category: 'music',
-    categoryLabel: { en: 'Music Tools', fr: 'Outils Musique', ar: 'أدوات الموسيقى' },
-    title: { en: 'Precision Audio Metronome', fr: 'Métronome Audio de Précision', ar: 'المترونوم الصوتي الدقيق' },
-    shortDesc: {
-      en: 'Sample-accurate audio scheduling with customizable BPM, time signatures and downbeat accents.',
-      fr: 'Métronome précis à l’échantillon avec BPM réglable, mesures et accents.',
-      ar: 'مترونوم صوتي عالي الدقة مع ضبط الإيقاع (BPM) والموازين الموسيقية وتمييز النبضة الأولى.',
-    },
-    supportHint: { en: 'Requires Web Audio lookahead scheduler', fr: 'Requiert Web Audio scheduler', ar: 'يتطلب جدول زمني Web Audio' },
-    keywords: ['online metronome', 'metronome bpm', 'tempo test', 'metronome en ligne', 'مترونوم'],
-    iconType: 'headphones',
-    requiredApis: ['AudioContext'],
-    componentName: 'MetronomeTester',
-    relatedToolIds: ['tone-generator', 'pitch-detector'],
-    instructions: {
-      en: ['Set your desired tempo using the BPM slider, +/- buttons, or Tap Tempo button.', 'Choose beats per measure (2/4, 3/4, 4/4, 6/8).', 'Click Start Metronome to hear the precision synthesized woodblock ticks.'],
-      fr: ['Réglez le tempo en BPM avec le curseur ou le Tap Tempo.', 'Choisissez la métrique (2/4, 3/4, 4/4, 6/8).', 'Cliquez sur Démarrer pour lancer les pulsations sonores.'],
-      ar: ['اضبط السرعة المطلوبة بالـ BPM باستخدام شريط التمرير أو زر Tap Tempo.', 'حدد الميزان الإيقاعي (2/4، 3/4، 4/4، 6/8).', 'انقر على بدء المترونوم لسماع النبضات الإيقاعية الدقيقة.'],
-    },
-    limitations: {
-      en: ['Uses Web Audio AudioContext high-precision hardware clocks rather than imprecise JavaScript setInterval timers.', 'Audio output volume follows browser master volume.'],
-      fr: ['Utilise l’horloge matérielle Web Audio pour une précision sans dérive.', 'Le volume dépend du réglage général.'],
-      ar: ['يعتمد على ساعة عتاد Web Audio فائقة الدقة لمنع أي تأخير في التوقيت.', 'مستوى الصوت يتبع إعدادات الصوت العامة للمتصفح.'],
-    },
-    troubleshooting: {
-      en: ['Use Tap Tempo button 4 times to naturally detect your desired song speed.', 'Connect headphones for silent practice.'],
-      fr: ['Tapez 4 fois sur Tap Tempo pour trouver la cadence d’un morceau.', 'Utilisez un casque pour répéter sans bruit.'],
-      ar: ['انقر على زر Tap Tempo 4 مرات متتالية لاكتشاف سرعة الأغنية المطلوبة.', 'استخدم سماعات الأذن للتمرين الهادئ.'],
-    },
+    id: "metronome",
+    slug: "metronome",
+    category: "music" as ToolCategory,
+    categoryLabel: "Music Tools",
+    title: "Precision Audio Metronome",
+    shortDesc: "Sample-accurate audio scheduling with customizable BPM, time signatures and downbeat accents.",
+    supportHint: "Requires Web Audio lookahead scheduler",
+    keywords: ["online metronome","metronome bpm","tempo test","metronome en ligne"],
+    iconType: "headphones",
+    requiredApis: ["AudioContext"],
+    componentName: "MetronomeTester",
+    relatedToolIds: ["tone-generator","pitch-detector"],
+    instructions: [
+      "Set your desired tempo using the BPM slider, +/- buttons, or Tap Tempo button.",
+      "Choose beats per measure (2/4, 3/4, 4/4, 6/8).",
+      "Click Start Metronome to hear the precision synthesized woodblock ticks."
+    ],
+    limitations: [
+      "Uses Web Audio AudioContext high-precision hardware clocks rather than imprecise JavaScript setInterval timers.",
+      "Audio output volume follows browser master volume."
+    ],
+    troubleshooting: [
+      "Use Tap Tempo button 4 times to naturally detect your desired song speed.",
+      "Connect headphones for silent practice."
+    ],
   },
   {
-    id: 'browser-system-info',
-    slug: 'browser-system-info',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Browser & System Information', fr: 'Informations Navigateur et Système', ar: 'معلومات المتصفح والنظام' },
-    shortDesc: {
-      en: 'Inspect legitimate browser-exposed parameters, hardware concurrency, platform and user agent.',
-      fr: 'Consultez les informations exposées par le navigateur, CPU logiques et plateforme.',
-      ar: 'فحص معلومات المتصفح المعلنة رسمياً، وعدد خيوط المعالج، والمنصة ووكيل المستخدم.',
-    },
-    supportHint: { en: 'Queries standard navigator object', fr: 'Interroge l’objet navigator', ar: 'يستعلم من كائن navigator القياسي' },
-    keywords: ['browser info', 'user agent test', 'hardware concurrency', 'system specs test', 'معلومات المتصفح'],
-    iconType: 'monitor',
-    requiredApis: ['navigator.userAgent'],
-    componentName: 'BrowserSystemInfoTester',
-    relatedToolIds: ['browser-compatibility', 'permission-diagnostics', 'browser-storage-test'],
-    instructions: {
-      en: ['Review your detected Browser Engine, Operating System, and Architecture.', 'Check reported Logical CPU Core concurrency and Device Memory (where supported).', 'Inspect network connection type and cookies enabled state.'],
-      fr: ['Consultez le moteur du navigateur, l’OS et l’architecture.', 'Vérifiez les cœurs CPU logiques et la mémoire estimée.', 'Vérifiez l’état de connexion et le support des cookies.'],
-      ar: ['اطلع على محرك المتصفح ونظام التشغيل والمعمارية المكتشفة.', 'تحقق من عدد أنوية المعالج المنطقية وحجم الذاكرة المقدر.', 'شاهد نوع الاتصال وحالة دعم ملفات تعريف الارتباط (الكوكيز).'],
-    },
-    limitations: {
-      en: ['Displays only legitimately exposed browser properties; does not extract confidential serial numbers or unshared hardware specs.', 'Device memory reports approximate RAM (e.g. 8GB max in Chrome) to prevent fingerprinting.'],
-      fr: ['Affiche uniquement les données autorisées par le navigateur.', 'La mémoire RAM est arrondie par sécurité anti-fingerprinting.'],
-      ar: ['يعرض فقط الخصائص المصرح بها من المتصفح دون كشف أرقام تسلسلية خاصة.', 'حجم الرام يظهر كقيمة تقريبية لحماية الخصوصية ومنع التتبع.'],
-    },
-    troubleshooting: {
-      en: ['If user agent appears generic, your browser may be using privacy anti-tracking protections.', 'Check hardware concurrency matches your physical CPU thread count.'],
-      fr: ['Si l’User Agent paraît générique, des protections de confidentialité sont actives.', 'Vérifiez la concordance avec vos cœurs CPU.'],
-      ar: ['إذا بدا وكيل المستخدم عاماً، فقد تكون ميزات حماية الخصوصية مفعلة في المتصفح.', 'تأكد من مطابقة عدد الأنوية لخيوط معالجك الفيزيائي.'],
-    },
+    id: "browser-system-info",
+    slug: "browser-system-info",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Browser & System Information",
+    shortDesc: "Inspect legitimate browser-exposed parameters, hardware concurrency, platform and user agent.",
+    supportHint: "Queries standard navigator object",
+    keywords: ["browser info","user agent test","hardware concurrency","system specs test"],
+    iconType: "monitor",
+    requiredApis: ["navigator.userAgent"],
+    componentName: "BrowserSystemInfoTester",
+    relatedToolIds: ["browser-compatibility","permission-diagnostics","browser-storage-test"],
+    instructions: [
+      "Review your detected Browser Engine, Operating System, and Architecture.",
+      "Check reported Logical CPU Core concurrency and Device Memory (where supported).",
+      "Inspect network connection type and cookies enabled state."
+    ],
+    limitations: [
+      "Displays only legitimately exposed browser properties; does not extract confidential serial numbers or unshared hardware specs.",
+      "Device memory reports approximate RAM (e.g. 8GB max in Chrome) to prevent fingerprinting."
+    ],
+    troubleshooting: [
+      "If user agent appears generic, your browser may be using privacy anti-tracking protections.",
+      "Check hardware concurrency matches your physical CPU thread count."
+    ],
   },
   {
-    id: 'browser-compatibility',
-    slug: 'browser-compatibility',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Browser Feature Compatibility Matrix', fr: 'Matrice de Compatibilité des APIs Web', ar: 'مصفوفة توافق ميزات المتصفح' },
-    shortDesc: {
-      en: 'Read-only capability matrix verifying support for 25+ modern Web APIs without prompting permissions.',
-      fr: 'Matrice en lecture seule testant le support de plus de 25 APIs Web modernes sans invite.',
-      ar: 'مصفوفة قراءة للتحقق من دعم أكثر من 25 واجهة برمجية ويب حديثة دون طلب أذونات.',
-    },
-    supportHint: { en: 'Passive feature detection', fr: 'Détection passive sans invite', ar: 'كشف سلبي بدون طلب إذن' },
-    keywords: ['html5 compatibility', 'web api support', 'browser feature test', 'compatibilite navigateur', 'توافق المتصفح'],
-    iconType: 'monitor',
-    requiredApis: ['window'],
-    componentName: 'BrowserCompatibilityTester',
-    relatedToolIds: ['browser-system-info', 'permission-diagnostics', 'webrtc-test'],
-    instructions: {
-      en: ['Inspect the support status for MediaDevices, Web Audio, WebGL, WebAssembly, Gamepad, ServiceWorker, and more.', 'Use the category filters to focus on Audio, Video, Sensors, or Graphics APIs.', 'Identify which hardware APIs are supported by your current browser.'],
-      fr: ['Consultez le statut pour MediaDevices, Web Audio, WebGL, Wasm, Gamepad, etc.', 'Filtrez par catégorie (Audio, Vidéo, Capteurs, Graphismes).', 'Identifiez les fonctionnalités supportées par votre navigateur.'],
-      ar: ['اطلع على حالة دعم ميزات MediaDevices، Web Audio، WebGL، WebAssembly وغيرها.', 'استخدم تصنيفات الفلترة للتركيز على واجهات الصوت أو الفيديو أو الرسوم.', 'تعرف على الواجهات المدعومة في متصفحك الحالي.'],
-    },
-    limitations: {
-      en: ['Distinguishes whether an API interface exists in the window object; does not execute intrusive hardware actions.', 'Disabled browser flags or policies may prevent runtime API usage.'],
-      fr: ['Vérifie l’existence de l’interface dans l’objet window sans action intrusive.', 'Des règles d’entreprise peuvent restreindre l’usage réel.'],
-      ar: ['يتحقق من وجود الواجهة البرمجية في المتصفح دون تنفيذ إجراءات عتادية مزعجة.', 'سياسات الأمان أو التفضيلات قد تعطل استخدام الميزة عملياً.'],
-    },
-    troubleshooting: {
-      en: ['Update to the latest browser version to gain support for modern APIs.', 'Switch from in-app web views (e.g. social media browsers) to full Safari or Chrome.'],
-      fr: ['Mettez à jour votre navigateur pour profiter des dernières APIs.', 'Ouvrez la page dans Chrome ou Safari plutôt qu’une vue intégrée.'],
-      ar: ['قم بتحديث متصفحك إلى أحدث إصدار للحصول على دعم كامل للواجهات الحديثة.', 'افتح الرابط في متصفح خارجي بدلاً من متصفحات تطبيقات التواصل المدمجة.'],
-    },
+    id: "browser-compatibility",
+    slug: "browser-compatibility",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Browser Feature Compatibility Matrix",
+    shortDesc: "Read-only capability matrix verifying support for 25+ modern Web APIs without prompting permissions.",
+    supportHint: "Passive feature detection",
+    keywords: ["html5 compatibility","web api support","browser feature test","compatibilite navigateur"],
+    iconType: "monitor",
+    requiredApis: ["window"],
+    componentName: "BrowserCompatibilityTester",
+    relatedToolIds: ["browser-system-info","permission-diagnostics","webrtc-test"],
+    instructions: [
+      "Inspect the support status for MediaDevices, Web Audio, WebGL, WebAssembly, Gamepad, ServiceWorker, and more.",
+      "Use the category filters to focus on Audio, Video, Sensors, or Graphics APIs.",
+      "Identify which hardware APIs are supported by your current browser."
+    ],
+    limitations: [
+      "Distinguishes whether an API interface exists in the window object; does not execute intrusive hardware actions.",
+      "Disabled browser flags or policies may prevent runtime API usage."
+    ],
+    troubleshooting: [
+      "Update to the latest browser version to gain support for modern APIs.",
+      "Switch from in-app web views (e.g. social media browsers) to full Safari or Chrome."
+    ],
   },
   {
-    id: 'permission-diagnostics',
-    slug: 'permission-diagnostics',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Permission Status Diagnostics', fr: 'Diagnostic des Permissions Navigateur', ar: 'تشخيص أذونات وصلاحيات المتصفح' },
-    shortDesc: {
-      en: 'Inspect granted, denied and prompt states for Camera, Mic, Clipboard and Notifications.',
-      fr: 'Consultez l’état (accordé, refusé, à demander) pour Caméra, Micro, Presse-papier, etc.',
-      ar: 'فحص حالة الأذونات (ممنوح، محظور، أو بانتظار الطلب) للكاميرا والميكروفون والحافظة.',
-    },
-    supportHint: { en: 'Requires Permissions API query', fr: 'Requiert l’API Permissions query', ar: 'يتطلب Permissions API query' },
-    keywords: ['permissions test', 'camera permission check', 'mic permission test', 'permissions navigateur', 'أذونات المتصفح'],
-    iconType: 'monitor',
-    requiredApis: ['navigator.permissions'],
-    componentName: 'PermissionDiagnosticsTester',
-    relatedToolIds: ['microphone-test', 'webcam-test', 'browser-system-info'],
-    instructions: {
-      en: ['View current state (Granted, Denied, or Prompt) for microphone, camera, clipboard, notifications and geolocation.', 'Learn how to reset blocked permissions in Chrome, Firefox, Safari, and Edge.', 'Click Refresh Status after adjusting browser settings.'],
-      fr: ['Consultez l’état (Accordé, Bloqué, Demander) de chaque permission.', 'Découvrez comment réinitialiser les accès bloqués.', 'Cliquez sur Actualiser après modification de vos réglages.'],
-      ar: ['اطلع على الحالة الحالية (ممنوح، محظور، أو طلب) للميكروفون والكاميرا والحافظة والموقع.', 'تعرف على خطوات إعادة ضبط الأذونات في كروم وفايرفوكس وسفاري وإيدج.', 'انقر على تحديث الحالة بعد تعديل إعدادات المتصفح.'],
-    },
-    limitations: {
-      en: ['Queries supported permission descriptors without popping up authorization dialogs.', 'Browsers that do not support navigator.permissions.query() will report query unavailable.'],
-      fr: ['Interroge les permissions supportées sans afficher d’invite intrusive.', 'Les navigateurs sans support query() indiquent non disponible.'],
-      ar: ['يستعلم عن حالة الأذونات دون إظهار نوافذ منبثقة مزعجة للمستخدم.', 'المتصفحات التي لا تدعم الاستعلام البرمجي ستظهر حالة غير متوفر.'],
-    },
-    troubleshooting: {
-      en: ['To unblock a permission, click the site settings icon on the left of your URL bar and change Block to Allow.', 'Reload the tab after changing permissions.'],
-      fr: ['Pour débloquer, cliquez sur le cadenas à gauche de l’URL et autorisez l’accès.', 'Rechargez l’onglet après modification.'],
-      ar: ['لإلغاء حظر أي إذن، انقر على أيقونة القفل أو الإعدادات يسار شريط العنوان وغيّر الحظر إلى سماح.', 'أعد تحميل الصفحة بعد تعديل الأذونات.'],
-    },
+    id: "permission-diagnostics",
+    slug: "permission-diagnostics",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Permission Status Diagnostics",
+    shortDesc: "Inspect granted, denied and prompt states for Camera, Mic, Clipboard and Notifications.",
+    supportHint: "Requires Permissions API query",
+    keywords: ["permissions test","camera permission check","mic permission test","permissions navigateur"],
+    iconType: "monitor",
+    requiredApis: ["navigator.permissions"],
+    componentName: "PermissionDiagnosticsTester",
+    relatedToolIds: ["microphone-test","webcam-test","browser-system-info"],
+    instructions: [
+      "View current state (Granted, Denied, or Prompt) for microphone, camera, clipboard, notifications and geolocation.",
+      "Learn how to reset blocked permissions in Chrome, Firefox, Safari, and Edge.",
+      "Click Refresh Status after adjusting browser settings."
+    ],
+    limitations: [
+      "Queries supported permission descriptors without popping up authorization dialogs.",
+      "Browsers that do not support navigator.permissions.query() will report query unavailable."
+    ],
+    troubleshooting: [
+      "To unblock a permission, click the site settings icon on the left of your URL bar and change Block to Allow.",
+      "Reload the tab after changing permissions."
+    ],
   },
   {
-    id: 'clipboard-test',
-    slug: 'clipboard-test',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Clipboard Copy & Paste Tester', fr: 'Testeur de Presse-papier', ar: 'فحص الحافظة والنسخ واللصق' },
-    shortDesc: {
-      en: 'Verify asynchronous clipboard writeText and readText with fallback support.',
-      fr: 'Vérifiez la copie et le collage asynchrone avec solutions de secours.',
-      ar: 'فحص وظائف النسخ واللصق غير المتزامنة (writeText و readText) مع دعم البدائل.',
-    },
-    supportHint: { en: 'Requires Async Clipboard API', fr: 'Requiert Async Clipboard API', ar: 'يتطلب Async Clipboard API' },
-    keywords: ['clipboard test', 'copy paste test', 'test presse papier', 'فحص النسخ واللصق'],
-    iconType: 'keyboard',
-    requiredApis: ['navigator.clipboard'],
-    componentName: 'ClipboardTester',
-    relatedToolIds: ['keyboard-test', 'browser-storage-test'],
-    instructions: {
-      en: ['Click Copy Sample Text to test writing formatted text to your system clipboard.', 'Click Paste from Clipboard to verify read capabilities (requires user interaction).', 'Observe the test confirmation logs.'],
-      fr: ['Cliquez sur Copier le texte exemple pour tester l’écriture.', 'Cliquez sur Coller pour tester la lecture (nécessite une action utilisateur).', 'Consultez les journaux de confirmation.'],
-      ar: ['انقر على نسخ النص التجريبي لاختبار الكتابة في حافظة النظام.', 'انقر على لصق من الحافظة للتحقق من إمكانية القراءة (يتطلب موافقة المستخدم).', 'شاهد سجلات تأكيد الفحص.'],
-    },
-    limitations: {
-      en: ['Clipboard read is strictly bound to explicit user gestures and requires focused browser documents for privacy.', 'Never stores or uploads pasted content.'],
-      fr: ['La lecture du presse-papier exige un clic explicite pour la sécurité.', 'Aucun contenu collé n’est stocké ou transmis.'],
-      ar: ['قراءة الحافظة مشروطة بنقرة صريحة من المستخدم لحماية الخصوصية.', 'لا يتم حفظ أو إرسال أي نص يتم لصقه إلى أي خادم.'],
-    },
-    troubleshooting: {
-      en: ['Allow clipboard permission when prompted by the browser on paste.', 'If copy fails, use Ctrl+C / Cmd+C manual keyboard shortcut.'],
-      fr: ['Autorisez l’accès au presse-papier si le navigateur le demande.', 'En cas d’échec, utilisez Ctrl+C / Cmd+C.'],
-      ar: ['اسمح بالوصول إلى الحافظة إذا ظهرت رسالة تأكيد في المتصفح.', 'إذا فشل النسخ التلقائي، استخدم الاختصار Ctrl+C أو Cmd+C.'],
-    },
+    id: "clipboard-test",
+    slug: "clipboard-test",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Clipboard Copy & Paste Tester",
+    shortDesc: "Verify asynchronous clipboard writeText and readText with fallback support.",
+    supportHint: "Requires Async Clipboard API",
+    keywords: ["clipboard test","copy paste test","test presse papier"],
+    iconType: "keyboard",
+    requiredApis: ["navigator.clipboard"],
+    componentName: "ClipboardTester",
+    relatedToolIds: ["keyboard-test","browser-storage-test"],
+    instructions: [
+      "Click Copy Sample Text to test writing formatted text to your system clipboard.",
+      "Click Paste from Clipboard to verify read capabilities (requires user interaction).",
+      "Observe the test confirmation logs."
+    ],
+    limitations: [
+      "Clipboard read is strictly bound to explicit user gestures and requires focused browser documents for privacy.",
+      "Never stores or uploads pasted content."
+    ],
+    troubleshooting: [
+      "Allow clipboard permission when prompted by the browser on paste.",
+      "If copy fails, use Ctrl+C / Cmd+C manual keyboard shortcut."
+    ],
   },
   {
-    id: 'browser-storage-test',
-    slug: 'browser-storage-test',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Browser Storage & Quota Test', fr: 'Test de Stockage Local et Quota', ar: 'فحص التخزين المحلي والمساحة' },
-    shortDesc: {
-      en: 'Inspect origin storage quota, test IndexedDB read/write/delete and check localStorage.',
-      fr: 'Consultez le quota de stockage, testez IndexedDB en lecture/écriture et localStorage.',
-      ar: 'فحص مساحة التخزين المتاحة، واختبار القراءة والكتابة والحذف في IndexedDB و localStorage.',
-    },
-    supportHint: { en: 'Requires StorageManager & IndexedDB', fr: 'Requiert StorageManager & IndexedDB', ar: 'يتطلب StorageManager و IndexedDB' },
-    keywords: ['storage quota test', 'indexeddb test', 'localstorage test', 'test stockage navigateur', 'فحص سعة التخزين'],
-    iconType: 'monitor',
-    requiredApis: ['navigator.storage', 'indexedDB', 'localStorage'],
-    componentName: 'BrowserStorageTester',
-    relatedToolIds: ['devicetry-storage-inspector', 'browser-system-info'],
-    instructions: {
-      en: ['Click Run Storage Diagnostics to query estimated quota and usage.', 'Perform a non-destructive temporary IndexedDB read/write/delete cycle.', 'Verify persistent storage support and localStorage availability.'],
-      fr: ['Cliquez sur Lancer le diagnostic pour mesurer quota et espace utilisé.', 'Effectuez un test temporaire non destructif sur IndexedDB.', 'Vérifiez la disponibilité de localStorage et du stockage persistant.'],
-      ar: ['انقر على بدء فحص التخزين للاستعلام عن السعة المتاحة والمستخدمة.', 'تنفيذ اختبار قراءة وكتابة وحذف مؤقت وغير ضار في IndexedDB.', 'التحقق من توفر التخزين الدائم والتخزين المحلي localStorage.'],
-    },
-    limitations: {
-      en: ['Storage quota reflects the browser allotted partition for this origin, not total free hard drive capacity.', 'Private browsing modes assign temporary restricted storage quotas.'],
-      fr: ['Le quota affiché est la part allouée au site par le navigateur, pas l’espace disque total.', 'Le mode navigation privée réduit les quotas.'],
-      ar: ['المساحة المعلنة تمثل حصة الموقع المخصصة من المتصفح وليست سعة القرص الصلب بالكامل.', 'وضع التصفح الخاص يخصص سعة تخزينية مؤقتة ومحدودة.'],
-    },
-    troubleshooting: {
-      en: ['If storage test fails, check that cookies and site data are not disabled in privacy settings.', 'Exit Incognito/Private mode if persistent storage is required.'],
-      fr: ['Si le test échoue, vérifiez que les données de site sont autorisées.', 'Désactivez le mode privé si vous souhaitez un stockage permanent.'],
-      ar: ['إذا فشل الفحص، تأكد من عدم تعطيل ملفات الموقع وبيانات التخزين في المتصفح.', 'اخرج من وضع التصفح المتخفي إذا كنت بحاجة لتخزين دائم.'],
-    },
+    id: "browser-storage-test",
+    slug: "browser-storage-test",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Browser Storage & Quota Test",
+    shortDesc: "Inspect origin storage quota, test IndexedDB read/write/delete and check localStorage.",
+    supportHint: "Requires StorageManager & IndexedDB",
+    keywords: ["storage quota test","indexeddb test","localstorage test","test stockage navigateur"],
+    iconType: "monitor",
+    requiredApis: ["navigator.storage","indexedDB","localStorage"],
+    componentName: "BrowserStorageTester",
+    relatedToolIds: ["devicetry-storage-inspector","browser-system-info"],
+    instructions: [
+      "Click Run Storage Diagnostics to query estimated quota and usage.",
+      "Perform a non-destructive temporary IndexedDB read/write/delete cycle.",
+      "Verify persistent storage support and localStorage availability."
+    ],
+    limitations: [
+      "Storage quota reflects the browser allotted partition for this origin, not total free hard drive capacity.",
+      "Private browsing modes assign temporary restricted storage quotas."
+    ],
+    troubleshooting: [
+      "If storage test fails, check that cookies and site data are not disabled in privacy settings.",
+      "Exit Incognito/Private mode if persistent storage is required."
+    ],
   },
   {
-    id: 'devicetry-storage-inspector',
-    slug: 'devicetry-storage-inspector',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'DeviceTry Privacy & Data Inspector', fr: 'Inspecteur de Données et Confidentialité', ar: 'مفتش بيانات وخصوصية DeviceTry' },
-    shortDesc: {
-      en: 'Inspect and clear all local inspection records, theme settings, and origin storage items.',
-      fr: 'Consultez et supprimez tous vos rapports locaux, préférences et données du site.',
-      ar: 'معاينة ومسح جميع سجلات الفحص المحلية، وتفضيلات المظهر، وبيانات الموقع المخزنة.',
-    },
-    supportHint: { en: '100% Client-Side origin management', fr: 'Gestion locale 100% client', ar: 'إدارة محلية 100% في المتصفح' },
-    keywords: ['privacy inspector', 'clear history', 'local data inspector', 'supprimer historique', 'مسح البيانات المحلية'],
-    iconType: 'monitor',
-    requiredApis: ['localStorage'],
-    componentName: 'PrivacyStorageInspectorTester',
-    relatedToolIds: ['browser-storage-test', 'browser-system-info'],
-    instructions: {
-      en: ['View every key and record currently stored by DeviceTry in your browser.', 'Inspect your saved inspection histories, language preference, and theme settings.', 'Click Clear All DeviceTry Data to instantly reset your browser state.'],
-      fr: ['Consultez chaque clé et enregistrement stocké par DeviceTry.', 'Vérifiez vos historiques, langue et thème.', 'Cliquez sur Tout effacer pour réinitialiser complètement.'],
-      ar: ['اطلع على كل مفتاح وسجل مخزن بواسطة DeviceTry في متصفحك.', 'عاين سجلات الفحص المحفوظة، وتفضيلات اللغة والمظهر.', 'انقر على مسح جميع بيانات DeviceTry لإعادة ضبط المتصفح فوراً.'],
-    },
-    limitations: {
-      en: ['Inspects and manages exclusively records belonging to this DeviceTry origin; cannot access data from third-party websites.', 'HTTP-only server cookies are not used.'],
-      fr: ['Gère exclusivement les données du site DeviceTry ; aucun accès aux données tierces.', 'Aucun cookie serveur HTTP-only n’est utilisé.'],
-      ar: ['يفحص ويدير بيانات موقع DeviceTry هذا فقط، ولا يمكنه الوصول لبيانات أي مواقع أخرى.', 'لا يتم استخدام أي ملفات كوكيز خادم HTTP-only.'],
-    },
-    troubleshooting: {
-      en: ['Use the Export Backup button before clearing if you wish to retain your past inspection reports.', 'Clearing data will reset theme and language preferences to default.'],
-      fr: ['Exportez une sauvegarde avant d’effacer si vous souhaitez garder vos rapports.', 'La suppression réinitialise la langue et le thème.'],
-      ar: ['استخدم زر تصدير نسخة احتياطية قبل المسح إذا كنت ترغب بالاحتفاظ بسجلاتك.', 'مسح البيانات سيعيد تفضيلات اللغة والمظهر للوضع الافتراضي.'],
-    },
+    id: "devicetry-storage-inspector",
+    slug: "devicetry-storage-inspector",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "DeviceTry Privacy & Data Inspector",
+    shortDesc: "Inspect and clear all local inspection records, theme settings, and origin storage items.",
+    supportHint: "100% Client-Side origin management",
+    keywords: ["privacy inspector","clear history","local data inspector","supprimer historique"],
+    iconType: "monitor",
+    requiredApis: ["localStorage"],
+    componentName: "PrivacyStorageInspectorTester",
+    relatedToolIds: ["browser-storage-test","browser-system-info"],
+    instructions: [
+      "View every key and record currently stored by DeviceTry in your browser.",
+      "Inspect your saved inspection histories, language preference, and theme settings.",
+      "Click Clear All DeviceTry Data to instantly reset your browser state."
+    ],
+    limitations: [
+      "Inspects and manages exclusively records belonging to this DeviceTry origin; cannot access data from third-party websites.",
+      "HTTP-only server cookies are not used."
+    ],
+    troubleshooting: [
+      "Use the Export Backup button before clearing if you wish to retain your past inspection reports.",
+      "Clearing data will reset theme and language preferences to default."
+    ],
   },
   {
-    id: 'font-rendering',
-    slug: 'font-rendering',
-    category: 'screen',
-    categoryLabel: { en: 'Screen & Display', fr: 'Écran et Affichage', ar: 'الشاشة والعرض' },
-    title: { en: 'Font & Text Rendering Test', fr: 'Test de Rendu des Polices et Texte', ar: 'فحص وضوح ونقاء النصوص والخطوط' },
-    shortDesc: {
-      en: 'Inspect typography subpixel antialiasing, kerning, Arabic ligatures and font sizes.',
-      fr: 'Vérifiez le lissage sous-pixel des polices, crénage, ligatures arabes et tailles.',
-      ar: 'فحص نقاء الخطوط والتنعيم الفرعي للبيكسل، وتباعد الحروف، وتشكيل الخط العربي بمقاسات مختلفة.',
-    },
-    supportHint: { en: 'Multilingual typography test', fr: 'Test typographique multilingue', ar: 'فحص طباعة متعدد اللغات' },
-    keywords: ['font rendering test', 'subpixel antialiasing', 'text clarity test', 'test police ecriture', 'وضوح الخطوط'],
-    iconType: 'monitor',
-    requiredApis: ['document.fonts'],
-    componentName: 'FontRenderingTester',
-    relatedToolIds: ['display-patterns', 'screen-info'],
-    instructions: {
-      en: ['Inspect English, French, and Arabic typography samples at varying point sizes (9px to 36px).', 'Toggle between Light and Dark backgrounds to evaluate subpixel text contrast.', 'Verify proper Arabic letter cursive connection and ligature shaping.'],
-      fr: ['Examinez des textes en anglais, français et arabe de 9px à 36px.', 'Basculez entre fond clair et sombre pour évaluer le contraste.', 'Vérifiez les ligatures et l’attachement des lettres arabes.'],
-      ar: ['عاين عينات نصوص بالإنجليزية والفرنسية والعربية بمقاسات خط متعددة (من 9px حتى 36px).', 'بدل بين الخلفية الفاتحة والداكنة لتقييم تباين ونقاء الحروف.', 'تحقق من اتصال وتشكيل الحروف والخطوط العربية بشكل صحيح.'],
-    },
-    limitations: {
-      en: ['Font antialiasing (ClearType or FreeType) is controlled by your operating system display settings.', 'Text rendering depends on hardware screen subpixel layout (RGB vs BGR).'],
-      fr: ['Le lissage (ClearType/FreeType) dépend des réglages de votre système d’exploitation.', 'Le rendu dépend de la disposition des sous-pixels (RGB/BGR).'],
-      ar: ['تنعيم الخطوط (ClearType أو FreeType) يخضع لإعدادات نظام التشغيل.', 'نقاء الخطوط يعتمد على ترتيب البيكسلات الفرعية في شاشتك (RGB أو BGR).'],
-    },
-    troubleshooting: {
-      en: ['Run the Windows ClearType Text Tuner if text edges appear blurry or colored.', 'Enable high DPI display scaling if available on your monitor.'],
-      fr: ['Lancez l’outil ClearType de Windows si les contours de texte semblent flous.', 'Activez la mise à l’échelle haute résolution.'],
-      ar: ['شغل أداة ضبط ClearType في ويندوز إذا بدت حواف الحروف مشوشة أو ملونة.', 'فعل تحجيم الدقة العالية High DPI في شاشتك.'],
-    },
+    id: "font-rendering",
+    slug: "font-rendering",
+    category: "screen" as ToolCategory,
+    categoryLabel: "Screen & Display",
+    title: "Font & Text Rendering Test",
+    shortDesc: "Inspect typography subpixel antialiasing, kerning, international ligatures and font sizes.",
+    supportHint: "Multilingual typography test",
+    keywords: ["font rendering test","subpixel antialiasing","text clarity test","test police ecriture"],
+    iconType: "monitor",
+    requiredApis: ["document.fonts"],
+    componentName: "FontRenderingTester",
+    relatedToolIds: ["display-patterns","screen-info"],
+    instructions: [
+      "Inspect international typography samples at varying point sizes (9px to 36px).",
+      "Toggle between Light and Dark backgrounds to evaluate subpixel text contrast.",
+      "Verify proper cursive letter connection and ligature shaping in international fonts."
+    ],
+    limitations: [
+      "Font antialiasing (ClearType or FreeType) is controlled by your operating system display settings.",
+      "Text rendering depends on hardware screen subpixel layout (RGB vs BGR)."
+    ],
+    troubleshooting: [
+      "Run the Windows ClearType Text Tuner if text edges appear blurry or colored.",
+      "Enable high DPI display scaling if available on your monitor."
+    ],
   },
   {
-    id: 'codec-support',
-    slug: 'codec-support',
-    category: 'audio-camera',
-    categoryLabel: { en: 'Audio & Camera', fr: 'Audio et Caméra', ar: 'الصوت والكاميرا' },
-    title: { en: 'Audio & Video Codec Support', fr: 'Support des Codecs Audio et Vidéo', ar: 'دعم ترميزات الصوت والفيديو (Codecs)' },
-    shortDesc: {
-      en: 'Inspect browser decoding and recording support for MP4, H.264, VP9, AV1, AAC, Opus, FLAC.',
-      fr: 'Consultez la compatibilité lecture et enregistrement pour MP4, H.264, VP9, AV1, AAC, Opus.',
-      ar: 'فحص دعم المتصفح لتشغيل وتسجيل صيغ MP4، H.264، VP9، AV1، AAC، Opus، و FLAC.',
-    },
-    supportHint: { en: 'Requires HTMLMediaElement.canPlayType & MediaRecorder.isTypeSupported', fr: 'Requiert canPlayType & isTypeSupported', ar: 'يتطلب canPlayType و isTypeSupported' },
-    keywords: ['codec test', 'av1 support test', 'h264 test', 'media codec check', 'support codecs', 'دعم الكودك'],
-    iconType: 'headphones',
-    requiredApis: ['HTMLMediaElement.prototype.canPlayType', 'MediaRecorder.isTypeSupported'],
-    componentName: 'CodecSupportTester',
-    relatedToolIds: ['microphone-test', 'webcam-test', 'voice-recorder'],
-    instructions: {
-      en: ['Review playback support (Probably, Maybe, No) across major video and audio containers.', 'Check MediaRecorder capture format support for local video and voice recording.', 'Filter by Audio Codecs, Video Codecs, or Recording Codecs.'],
-      fr: ['Consultez la compatibilité en lecture pour chaque conteneur audio/vidéo.', 'Vérifiez les formats supportés pour l’enregistrement avec MediaRecorder.', 'Filtrez par type (Audio, Vidéo, Enregistrement).'],
-      ar: ['اطلع على حالة دعم التشغيل لمختلف حاويات الفيديو والصوت.', 'تحقق من صيغ التسجيل المدعومة في MediaRecorder للالتقاط المحلي.', 'قم بالتصفية حسب ترميزات الصوت أو الفيديو أو التسجيل.'],
-    },
-    limitations: {
-      en: ['canPlayType responses represent browser codec decoder indications, not guarantee that corrupted files will play.', 'Hardware accelerated decoding depends on installed GPU drivers.'],
-      fr: ['Les réponses canPlayType indiquent le support théorique du décodeur.', 'L’accélération matérielle dépend de votre carte graphique.'],
-      ar: ['استجابات canPlayType تعكس توفر مفككات الترميز ولا تضمن تشغيل الملفات التالفة.', 'فك التشفير المعتمد على العتاد يتطلب دعم كارت الشاشة.'],
-    },
-    troubleshooting: {
-      en: ['For AV1 hardware acceleration, install official AV1 Video Extensions from your OS app store.', 'Use standard MP4/H.264 or WebM/VP9 for maximum cross-browser compatibility.'],
-      fr: ['Installez les extensions vidéo officielles de votre OS si nécessaire.', 'Préférez MP4/H.264 ou WebM/VP9 pour une compatibilité universelle.'],
-      ar: ['لتسريع ترميز AV1 بالعتاد، ثبت حزمة ملحقات الفيديو الرسمية من متجر نظامك.', 'استخدم صيغ MP4/H.264 أو WebM/VP9 لضمان أقصى توافق.'],
-    },
+    id: "codec-support",
+    slug: "codec-support",
+    category: "audio-camera" as ToolCategory,
+    categoryLabel: "Audio & Camera",
+    title: "Audio & Video Codec Support",
+    shortDesc: "Inspect browser decoding and recording support for MP4, H.264, VP9, AV1, AAC, Opus, FLAC.",
+    supportHint: "Requires HTMLMediaElement.canPlayType & MediaRecorder.isTypeSupported",
+    keywords: ["codec test","av1 support test","h264 test","media codec check","support codecs"],
+    iconType: "headphones",
+    requiredApis: ["HTMLMediaElement.prototype.canPlayType","MediaRecorder.isTypeSupported"],
+    componentName: "CodecSupportTester",
+    relatedToolIds: ["microphone-test","webcam-test","voice-recorder"],
+    instructions: [
+      "Review playback support (Probably, Maybe, No) across major video and audio containers.",
+      "Check MediaRecorder capture format support for local video and voice recording.",
+      "Filter by Audio Codecs, Video Codecs, or Recording Codecs."
+    ],
+    limitations: [
+      "canPlayType responses represent browser codec decoder indications, not guarantee that corrupted files will play.",
+      "Hardware accelerated decoding depends on installed GPU drivers."
+    ],
+    troubleshooting: [
+      "For AV1 hardware acceleration, install official AV1 Video Extensions from your OS app store.",
+      "Use standard MP4/H.264 or WebM/VP9 for maximum cross-browser compatibility."
+    ],
   },
   {
-    id: 'canvas-benchmark',
-    slug: 'canvas-benchmark',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Canvas 2D Rendering Benchmark', fr: 'Benchmark de Rendu Canvas 2D', ar: 'مقياس أداء معالجة رسوم Canvas 2D' },
-    shortDesc: {
-      en: 'Measure 2D graphics performance: shapes, particle physics, text rendering and composite operations.',
-      fr: 'Mesurez les performances graphiques 2D : formes, particules, texte et composition.',
-      ar: 'قياس أداء الرسوم ثنائية الأبعاد: الأشكال، فيزياء الجسيمات، رسم النصوص والعمليات التركيبية.',
-    },
-    supportHint: { en: 'Runs a bounded local 2D stress test', fr: 'Test de stress 2D local et borné', ar: 'اختبار ضغط رسومي 2D محلي ومحدد' },
-    keywords: ['canvas benchmark', '2d graphics test', 'browser benchmark', 'test canvas 2d', 'مقياس الرسوم 2d'],
-    iconType: 'monitor',
-    requiredApis: ['HTMLCanvasElement', 'CanvasRenderingContext2D'],
-    componentName: 'CanvasBenchmarkTester',
-    relatedToolIds: ['webgl-test', 'javascript-benchmark', 'display-fps'],
-    instructions: {
-      en: ['Click Start Benchmark to launch the 5-second standardized 2D rendering workload.', 'Watch live particle physics and geometry fill operations.', 'Review your rendered frame count, average FPS, and 2D rendering score.'],
-      fr: ['Cliquez sur Démarrer pour lancer le test standardisé de 5 secondes.', 'Observez le rendu de particules et formes géométriques.', 'Consultez le nombre de trames, le FPS moyen et le score 2D.'],
-      ar: ['انقر على بدء الاختبار لتشغيل عبء رسومي قياسي لمدة 5 ثوانٍ.', 'شاهد حركة الجسيمات وعمليات ملء الأشكال الهندسية المباشرة.', 'اطلع على عدد الإطارات المنجزة ومتوسط الـ FPS ونقاط الأداء.'],
-    },
-    limitations: {
-      en: ['Results reflect local CPU/GPU browser 2D acceleration and current tab priority.', 'Benchmark runs locally and does not upload scores to any external leaderboard.'],
-      fr: ['Le score dépend de l’accélération matérielle et de la charge machine.', 'Le test est 100% local, aucun score n’est envoyé en ligne.'],
-      ar: ['النتائج تعكس تسريع المتصفح للرسوم وحالة معالجك أثناء الاختبار.', 'الاختبار محلي تماماً ولا يرفع أي بيانات لأي خادم خارجي.'],
-    },
-    troubleshooting: {
-      en: ['Enable Hardware Acceleration in browser settings if scores are unusually low.', 'Close background tabs playing heavy video streams for reliable results.'],
-      fr: ['Activez l’accélération matérielle dans votre navigateur si le score est bas.', 'Fermez les onglets d’arrière-plan gourmands.'],
-      ar: ['فعل خاصية التسريع بالعتاد Hardware Acceleration في المتصفح إذا كانت النتيجة منخفضة.', 'أغلق نوافذ الخلفية التي تشغل فيديوهات للحصول على قياس دقيق.'],
-    },
+    id: "canvas-benchmark",
+    slug: "canvas-benchmark",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Canvas 2D Rendering Benchmark",
+    shortDesc: "Measure 2D graphics performance: shapes, particle physics, text rendering and composite operations.",
+    supportHint: "Runs a bounded local 2D stress test",
+    keywords: ["canvas benchmark","2d graphics test","browser benchmark","test canvas 2d"],
+    iconType: "monitor",
+    requiredApis: ["HTMLCanvasElement","CanvasRenderingContext2D"],
+    componentName: "CanvasBenchmarkTester",
+    relatedToolIds: ["webgl-test","javascript-benchmark","display-fps"],
+    instructions: [
+      "Click Start Benchmark to launch the 5-second standardized 2D rendering workload.",
+      "Watch live particle physics and geometry fill operations.",
+      "Review your rendered frame count, average FPS, and 2D rendering score."
+    ],
+    limitations: [
+      "Results reflect local CPU/GPU browser 2D acceleration and current tab priority.",
+      "Benchmark runs locally and does not upload scores to any external leaderboard."
+    ],
+    troubleshooting: [
+      "Enable Hardware Acceleration in browser settings if scores are unusually low.",
+      "Close background tabs playing heavy video streams for reliable results."
+    ],
   },
   {
-    id: 'webgl-test',
-    slug: 'webgl-test',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'WebGL & GPU Browser Test', fr: 'Test WebGL et Carte Graphique', ar: 'فحص WebGL ومعالج الرسوميات GPU' },
-    shortDesc: {
-      en: 'Inspect WebGL 1 & 2 contexts, GPU unmasked renderer details, texture limits and 3D cube mesh.',
-      fr: 'Consultez les contextes WebGL 1 & 2, carte graphique détectée et limites de texture.',
-      ar: 'فحص سياقات WebGL 1 و 2، وبيانات كارت الشاشة GPU المعلنة، وحدود القوام ومجسم ثلاثي الأبعاد.',
-    },
-    supportHint: { en: 'Requires WebGL / WebGL2 context', fr: 'Requiert le contexte WebGL/WebGL2', ar: 'يتطلب سياق WebGL أو WebGL2' },
-    keywords: ['webgl test', 'gpu test', 'graphics card test', 'webgl2 support', 'test webgl', 'فحص كارت الشاشة'],
-    iconType: 'monitor',
-    requiredApis: ['WebGLRenderingContext', 'WebGL2RenderingContext'],
-    componentName: 'WebGLTester',
-    relatedToolIds: ['canvas-benchmark', 'javascript-benchmark', 'display-fps'],
-    instructions: {
-      en: ['Inspect detected WebGL 1.0 and WebGL 2.0 support status.', 'Review unmasked GPU vendor, renderer model, maximum texture dimensions, and supported extensions.', 'Interact with the live rendered spinning 3D geometric mesh.'],
-      fr: ['Consultez la compatibilité WebGL 1.0 et 2.0.', 'Vérifiez la carte graphique détectée, taille max de texture et extensions.', 'Interagissez avec le cube 3D interactif animé en temps réel.'],
-      ar: ['اطلع على حالة دعم WebGL 1.0 و WebGL 2.0 في متصفحك.', 'شاهد طراز كارت الشاشة والشركة المصنعة وأقصى حجم للقوام والملحقات.', 'تفاعل مع المجسم ثلاثي الأبعاد المتحرك في الوقت الفعلي.'],
-    },
-    limitations: {
-      en: ['GPU renderer name is read via WEBGL_debug_renderer_info (may be masked in privacy browsers).', 'Does not report physical GPU temperature or total VRAM capacity.'],
-      fr: ['Le nom du GPU peut être masqué par les protections de vie privée.', 'La température et la VRAM totale ne sont pas accessibles.'],
-      ar: ['اسم كارت الشاشة يُقرأ عبر إضافة التصحيح (قد يحجب في المتصفحات التي تشدد الخصوصية).', 'لا يمكن للمتصفح قراءة حرارة الكارت أو حجم الذاكرة الكلي VRAM.'],
-    },
-    troubleshooting: {
-      en: ['Update your graphics card drivers if WebGL contexts fail to initialize.', 'Check that webgl.disabled is set to false in browser advanced settings.'],
-      fr: ['Mettez à jour vos pilotes graphiques si WebGL ne démarre pas.', 'Vérifiez que WebGL n’est pas désactivé dans vos options avancées.'],
-      ar: ['قم بتحديث برامج تشغيل كارت الشاشة إذا فشل تهيئة سياق WebGL.', 'تأكد من عدم تعطيل ميزة WebGL في إعدادات المتصفح المتقدمة.'],
-    },
+    id: "webgl-test",
+    slug: "webgl-test",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "WebGL & GPU Browser Test",
+    shortDesc: "Inspect WebGL 1 & 2 contexts, GPU unmasked renderer details, texture limits and 3D cube mesh.",
+    supportHint: "Requires WebGL / WebGL2 context",
+    keywords: ["webgl test","gpu test","graphics card test","webgl2 support","test webgl"],
+    iconType: "monitor",
+    requiredApis: ["WebGLRenderingContext","WebGL2RenderingContext"],
+    componentName: "WebGLTester",
+    relatedToolIds: ["canvas-benchmark","javascript-benchmark","display-fps"],
+    instructions: [
+      "Inspect detected WebGL 1.0 and WebGL 2.0 support status.",
+      "Review unmasked GPU vendor, renderer model, maximum texture dimensions, and supported extensions.",
+      "Interact with the live rendered spinning 3D geometric mesh."
+    ],
+    limitations: [
+      "GPU renderer name is read via WEBGL_debug_renderer_info (may be masked in privacy browsers).",
+      "Does not report physical GPU temperature or total VRAM capacity."
+    ],
+    troubleshooting: [
+      "Update your graphics card drivers if WebGL contexts fail to initialize.",
+      "Check that webgl.disabled is set to false in browser advanced settings."
+    ],
   },
   {
-    id: 'javascript-benchmark',
-    slug: 'javascript-benchmark',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'JavaScript Engine CPU Benchmark', fr: 'Benchmark CPU Moteur JavaScript', ar: 'مقياس أداء محرك الجافاسكريبت والمعالج' },
-    shortDesc: {
-      en: 'Run repeatable local mathematical, array manipulation, and cryptographic hashing workloads.',
-      fr: 'Exécutez des tests de calcul mathématique, manipulation de tableaux et hachage.',
-      ar: 'تشغيل اختبارات حسابية وتشفيرية ومعالجة مصفوفات معيارية لقياس سرعة المعالج.',
-    },
-    supportHint: { en: 'Runs bounded client-side computations', fr: 'Exécute des calculs locaux bornés', ar: 'ينفذ عمليات حسابية محلية ومحددة' },
-    keywords: ['javascript benchmark', 'browser cpu test', 'speedometer alternative', 'benchmark javascript', 'مقياس أداء الجافاسكريبت'],
-    iconType: 'monitor',
-    requiredApis: ['performance.now', 'crypto.subtle'],
-    componentName: 'JavascriptBenchmarkTester',
-    relatedToolIds: ['webassembly-benchmark', 'canvas-benchmark'],
-    instructions: {
-      en: ['Click Run Benchmark to initiate the standardized computational suite.', 'Executes Prime Sieve calculation, Matrix Multiplication, String Processing, and SHA-256 Hashing.', 'Compare your operations-per-second and execution elapsed time.'],
-      fr: ['Cliquez sur Lancer le test pour exécuter la suite de calcul standard.', 'Teste le crible de nombres premiers, calcul matriciel et hachage SHA-256.', 'Consultez le temps d’exécution et les opérations par seconde.'],
-      ar: ['انقر على بدء الاختبار لتشغيل حزمة الحسابات المعيارية.', 'ينفذ حساب الأعداد الأولية، ضرب المصفوفات، معالجة النصوص، وتشفير SHA-256.', 'قارن زمن التنفيذ وعدد العمليات المنجزة في الثانية.'],
-    },
-    limitations: {
-      en: ['Workload runs within the browser JavaScript JIT compiler sandbox and reflects single-thread engine efficiency.', 'Background tasks and battery throttling affect completion times.'],
-      fr: ['Le test mesure la performance du compilateur JIT dans le bac à sable du navigateur.', 'Les tâches en arrière-plan peuvent ralentir le résultat.'],
-      ar: ['يقيس الاختبار كفاءة مترجم الجافاسكريبت JIT في المسار الواحد داخل المتصفح.', 'المهام التي تعمل في الخلفية قد تؤثر على سرعة الإنهاء.'],
-    },
-    troubleshooting: {
-      en: ['Plug in laptop power adapter for maximum CPU clock boost.', 'Close heavy background applications for consistent benchmark scores.'],
-      fr: ['Branchez votre ordinateur portable sur secteur pour un boost maximal.', 'Fermez les applications lourdes en arrière-plan.'],
-      ar: ['صل الكمبيوتر المحمول بالشاحن للوصول إلى أقصى تردد للمعالج.', 'أغلق البرامج الثقيلة في الخلفية للحصول على قياسات دقيقة.'],
-    },
+    id: "javascript-benchmark",
+    slug: "javascript-benchmark",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "JavaScript Engine CPU Benchmark",
+    shortDesc: "Run repeatable local mathematical, array manipulation, and cryptographic hashing workloads.",
+    supportHint: "Runs bounded client-side computations",
+    keywords: ["javascript benchmark","browser cpu test","speedometer alternative","benchmark javascript"],
+    iconType: "monitor",
+    requiredApis: ["performance.now","crypto.subtle"],
+    componentName: "JavascriptBenchmarkTester",
+    relatedToolIds: ["webassembly-benchmark","canvas-benchmark"],
+    instructions: [
+      "Click Run Benchmark to initiate the standardized computational suite.",
+      "Executes Prime Sieve calculation, Matrix Multiplication, String Processing, and SHA-256 Hashing.",
+      "Compare your operations-per-second and execution elapsed time."
+    ],
+    limitations: [
+      "Workload runs within the browser JavaScript JIT compiler sandbox and reflects single-thread engine efficiency.",
+      "Background tasks and battery throttling affect completion times."
+    ],
+    troubleshooting: [
+      "Plug in laptop power adapter for maximum CPU clock boost.",
+      "Close heavy background applications for consistent benchmark scores."
+    ],
   },
   {
-    id: 'webassembly-benchmark',
-    slug: 'webassembly-benchmark',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'WebAssembly (Wasm) Support & Speed Test', fr: 'Test de Support et Vitesse WebAssembly', ar: 'فحص دعم وسرعة WebAssembly (Wasm)' },
-    shortDesc: {
-      en: 'Validate WebAssembly binary compilation, instantiate a local module and compute Fibonacci speed.',
-      fr: 'Validez la compilation binaire Wasm, instanciez un module et testez la vitesse.',
-      ar: 'التحقق من دعم تجميع WebAssembly الثنائي، وتشغيل وحدة محلية وحساب متتالية فيبوناتشي.',
-    },
-    supportHint: { en: 'Requires WebAssembly API', fr: 'Requiert l’API WebAssembly', ar: 'يتطلب WebAssembly API' },
-    keywords: ['webassembly test', 'wasm benchmark', 'wasm support test', 'test webassembly', 'فحص webassembly'],
-    iconType: 'monitor',
-    requiredApis: ['WebAssembly.instantiate'],
-    componentName: 'WebAssemblyTester',
-    relatedToolIds: ['javascript-benchmark', 'canvas-benchmark'],
-    instructions: {
-      en: ['Check WebAssembly feature flags (MVP, SIMD, Threads, BigInt).', 'Click Run Wasm Benchmark to compile and execute an in-memory binary module.', 'Observe native bytecode execution time and compare against interpreted execution.'],
-      fr: ['Vérifiez le support Wasm (MVP, SIMD, Threads).', 'Cliquez sur Lancer le test pour compiler et exécuter le module binaire en mémoire.', 'Consultez le temps d’exécution du bytecode.'],
-      ar: ['تحقق من دعم ميزات WebAssembly (مثل MVP و SIMD و Threads).', 'انقر على بدء فحص Wasm لتجميع وتشغيل وحدة ثنائية في الذاكرة.', 'شاهد سرعة تنفيذ الكود الثنائي وقارنها بالتنفيذ التقليدي.'],
-    },
-    limitations: {
-      en: ['Module is instantiated dynamically from a bundled byte array in browser memory.', 'Advanced Wasm SIMD instructions depend on underlying CPU vector extensions.'],
-      fr: ['Le module est instancié depuis un tableau d’octets local.', 'Les instructions SIMD dépendent du support vectoriel du processeur.'],
-      ar: ['يتم تشغيل الوحدة البرمجية مباشرة من مصفوفة بايت محلية في الذاكرة.', 'ميزات SIMD المتقدمة تعتمد على دعم معالجك لتعليمات الفكتور.'],
-    },
-    troubleshooting: {
-      en: ['Ensure WebAssembly is not disabled in browser enterprise flags.', 'Update your browser if WebAssembly 2.0 features fail to compile.'],
-      fr: ['Vérifiez que WebAssembly n’est pas désactivé dans vos options.', 'Mettez à jour le navigateur si la compilation échoue.'],
-      ar: ['تأكد من عدم حظر WebAssembly في سياسات أو إعدادات المتصفح.', 'حدث متصفحك إذا تعذر تجميع الميزات الحديثة.'],
-    },
+    id: "webassembly-benchmark",
+    slug: "webassembly-benchmark",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "WebAssembly (Wasm) Support & Speed Test",
+    shortDesc: "Validate WebAssembly binary compilation, instantiate a local module and compute Fibonacci speed.",
+    supportHint: "Requires WebAssembly API",
+    keywords: ["webassembly test","wasm benchmark","wasm support test","test webassembly"],
+    iconType: "monitor",
+    requiredApis: ["WebAssembly.instantiate"],
+    componentName: "WebAssemblyTester",
+    relatedToolIds: ["javascript-benchmark","canvas-benchmark"],
+    instructions: [
+      "Check WebAssembly feature flags (MVP, SIMD, Threads, BigInt).",
+      "Click Run Wasm Benchmark to compile and execute an in-memory binary module.",
+      "Observe native bytecode execution time and compare against interpreted execution."
+    ],
+    limitations: [
+      "Module is instantiated dynamically from a bundled byte array in browser memory.",
+      "Advanced Wasm SIMD instructions depend on underlying CPU vector extensions."
+    ],
+    troubleshooting: [
+      "Ensure WebAssembly is not disabled in browser enterprise flags.",
+      "Update your browser if WebAssembly 2.0 features fail to compile."
+    ],
   },
   {
-    id: 'webrtc-test',
-    slug: 'webrtc-test',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Local WebRTC Capability Test', fr: 'Test de Capacité WebRTC Local', ar: 'فحص اتصال WebRTC المحلي' },
-    shortDesc: {
-      en: 'Establish a local loopback peer connection, test RTCDataChannel and candidate gathering without external servers.',
-      fr: 'Établissez une connexion poste-à-poste locale en boucle, testez le canal de données sans serveur.',
-      ar: 'إنشاء اتصال ند لند محلي، واختبار قنوات البيانات RTCDataChannel وتجميع المرشحين بدون خوادم خارجية.',
-    },
-    supportHint: { en: 'Requires RTCPeerConnection (Zero STUN/TURN)', fr: 'Requiert RTCPeerConnection (Sans STUN/TURN)', ar: 'يتطلب RTCPeerConnection (بدون خوادم خارجية)' },
-    keywords: ['webrtc test', 'datachannel test', 'peerconnection test', 'test webrtc', 'فحص webrtc'],
-    iconType: 'monitor',
-    requiredApis: ['RTCPeerConnection'],
-    componentName: 'WebRTCTester',
-    relatedToolIds: ['browser-compatibility', 'offline-check'],
-    instructions: {
-      en: ['Click Test Local WebRTC Loopback.', 'Initializes two RTCPeerConnection instances within the same tab using empty iceServers: [].', 'Sends roundtrip ping messages across an in-memory RTCDataChannel and records connection handshake time.'],
-      fr: ['Cliquez sur Tester la boucle locale WebRTC.', 'Initialise 2 connexions RTCPeerConnection dans l’onglet sans serveur externe.', 'Envoie des messages ping aller-retour sur RTCDataChannel.'],
-      ar: ['انقر على اختبار حلقة WebRTC المحلية.', 'ينشئ اتصالين ند لند داخل نفس الصفحة باستخدام مصفوفة خوادم فارغة iceServers: [].', 'يرسل رسائل فحص ذهاباً وإياباً عبر قناة البيانات RTCDataChannel ويقيس زمن الاتصال.'],
-    },
-    limitations: {
-      en: ['Tests browser internal WebRTC engine and data channel stack; does not test external internet firewall or remote packet loss.', 'Cleanly closes all connections on test completion.'],
-      fr: ['Teste le moteur WebRTC local du navigateur, pas votre pare-feu internet.', 'Ferme proprement les connexions à la fin du test.'],
-      ar: ['يفحص كفاءة محرك WebRTC وقناة البيانات بالمتصفح، ولا يفحص جدران الحماية للإنترنت الخارجي.', 'يتم إغلاق جميع قنوات الاتصال بالكامل فور انتهاء الفحص.'],
-    },
-    troubleshooting: {
-      en: ['If WebRTC fails, check if privacy extensions (e.g. WebRTC blockers) are active.', 'Verify that RTCPeerConnection is enabled in your browser.'],
-      fr: ['Si le test échoue, vérifiez si une extension de blocage WebRTC est active.', 'Vérifiez que RTCPeerConnection est autorisé.'],
-      ar: ['إذا فشل الاتصال، تأكد من عدم وجود إضافات تمنع WebRTC لحماية الخصوصية.', 'تأكد من تفعيل خاصية RTCPeerConnection في المتصفح.'],
-    },
+    id: "webrtc-test",
+    slug: "webrtc-test",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Local WebRTC Capability Test",
+    shortDesc: "Establish a local loopback peer connection, test RTCDataChannel and candidate gathering without external servers.",
+    supportHint: "Requires RTCPeerConnection (Zero STUN/TURN)",
+    keywords: ["webrtc test","datachannel test","peerconnection test","test webrtc"],
+    iconType: "monitor",
+    requiredApis: ["RTCPeerConnection"],
+    componentName: "WebRTCTester",
+    relatedToolIds: ["browser-compatibility","offline-check"],
+    instructions: [
+      "Click Test Local WebRTC Loopback.",
+      "Initializes two RTCPeerConnection instances within the same tab using empty iceServers: [].",
+      "Sends roundtrip ping messages across an in-memory RTCDataChannel and records connection handshake time."
+    ],
+    limitations: [
+      "Tests browser internal WebRTC engine and data channel stack; does not test external internet firewall or remote packet loss.",
+      "Cleanly closes all connections on test completion."
+    ],
+    troubleshooting: [
+      "If WebRTC fails, check if privacy extensions (e.g. WebRTC blockers) are active.",
+      "Verify that RTCPeerConnection is enabled in your browser."
+    ],
   },
   {
-    id: 'offline-check',
-    slug: 'offline-check',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Offline & Service Worker Status', fr: 'Statut Hors-Ligne et Service Worker', ar: 'فحص العمل بدون إنترنت والـ Service Worker' },
-    shortDesc: {
-      en: 'Inspect navigator.onLine state, network type, CacheStorage availability and offline readiness.',
-      fr: 'Consultez l’état de connexion en ligne/hors-ligne, CacheStorage et disponibilité.',
-      ar: 'فحص حالة الاتصال بالإنترنت، ونوع الشبكة، وتوفر سعة CacheStorage للعمل بدون شبكة.',
-    },
-    supportHint: { en: 'Inspects navigator.onLine & Cache API', fr: 'Lit navigator.onLine & Cache API', ar: 'يقرأ navigator.onLine و Cache API' },
-    keywords: ['offline test', 'service worker test', 'pwa cache check', 'test hors ligne', 'فحص العمل بدون انترنت'],
-    iconType: 'monitor',
-    requiredApis: ['navigator.onLine', 'caches'],
-    componentName: 'OfflineCheckTester',
-    relatedToolIds: ['browser-storage-test', 'devicetry-storage-inspector'],
-    instructions: {
-      en: ['Inspect live connection indicator (Online / Offline).', 'Check CacheStorage API availability and inspect cached asset partitions.', 'Toggle your Wi-Fi or Airplane mode to observe immediate online/offline event handlers.'],
-      fr: ['Consultez l’indicateur de connexion (En ligne / Hors ligne).', 'Vérifiez la présence de l’API CacheStorage.', 'Activez le mode avion pour tester la détection en direct.'],
-      ar: ['شاهد مؤشر حالة الاتصال الحي (متصل / غير متصل).', 'تحقق من توفر واجهة CacheStorage وتخزين الملفات المؤقتة.', 'جرب تشغيل وضع الطيران لملاحظة استجابة المتصفح الفورية لتغير الشبكة.'],
-    },
-    limitations: {
-      en: ['navigator.onLine indicates LAN/Wi-Fi link state; it does not guarantee actual internet transit routing.', 'Static assets must be visited at least once online to populate local cache.'],
-      fr: ['navigator.onLine indique l’état de la liaison réseau locale.', 'Les pages doivent être visitées une fois pour être mises en cache.'],
-      ar: ['خاصية navigator.onLine تؤكد الاتصال بالشبكة المحلية/الواي فاي ولا تضمن وصول البيانات لخادم بعيد.', 'يجب زيارة الأدوات مرة واحدة على الأقل أثناء الاتصال ليتم حفظها في الذاكرة المؤقتة.'],
-    },
-    troubleshooting: {
-      en: ['If offline mode fails to load pages, clear outdated browser cache and refresh.', 'Ensure cookies/site data are allowed.'],
-      fr: ['Si le mode hors-ligne ne répond pas, videz le cache et réactualisez.', 'Vérifiez que les données de site sont autorisées.'],
-      ar: ['إذا لم تفتح الأدوات بدون اتصال، افرغ الذاكرة المؤقتة القديمة وأعد تحميل الموقع.', 'تأكد من السماح بتخزين بيانات الموقع.'],
-    },
+    id: "offline-check",
+    slug: "offline-check",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Offline & Service Worker Status",
+    shortDesc: "Inspect navigator.onLine state, network type, CacheStorage availability and offline readiness.",
+    supportHint: "Inspects navigator.onLine & Cache API",
+    keywords: ["offline test","service worker test","pwa cache check","test hors ligne"],
+    iconType: "monitor",
+    requiredApis: ["navigator.onLine","caches"],
+    componentName: "OfflineCheckTester",
+    relatedToolIds: ["browser-storage-test","devicetry-storage-inspector"],
+    instructions: [
+      "Inspect live connection indicator (Online / Offline).",
+      "Check CacheStorage API availability and inspect cached asset partitions.",
+      "Toggle your Wi-Fi or Airplane mode to observe immediate online/offline event handlers."
+    ],
+    limitations: [
+      "navigator.onLine indicates LAN/Wi-Fi link state; it does not guarantee actual internet transit routing.",
+      "Static assets must be visited at least once online to populate local cache."
+    ],
+    troubleshooting: [
+      "If offline mode fails to load pages, clear outdated browser cache and refresh.",
+      "Ensure cookies/site data are allowed."
+    ],
   },
   {
-    id: 'clock-timezone',
-    slug: 'clock-timezone',
-    category: 'browser-performance',
-    categoryLabel: { en: 'Browser & Performance', fr: 'Navigateur et Performance', ar: 'المتصفح والأداء' },
-    title: { en: 'Clock & Timezone Information', fr: 'Informations Horloge et Fuseau Horaire', ar: 'معلومات الساعة والمنطقة الزمنية' },
-    shortDesc: {
-      en: 'Inspect device local time, UTC offset, IANA timezone string, daylight saving and localized formats.',
-      fr: 'Consultez l’heure locale, décalage UTC, fuseau IANA, heure d’été et formats locaux.',
-      ar: 'فحص توقيت الجهاز المحلي، وفارق توقيت UTC، والمنطقة الزمنية IANA، والتوقيت الصيفي والتنسيقات المحلية.',
-    },
-    supportHint: { en: 'Reads Intl & Date API', fr: 'Lit Intl & l’API Date', ar: 'يقرأ Intl وواجهة Date' },
-    keywords: ['timezone test', 'clock test', 'utc offset check', 'test fuseau horaire', 'المنطقة الزمنية'],
-    iconType: 'monitor',
-    requiredApis: ['Intl.DateTimeFormat'],
-    componentName: 'ClockTimezoneTester',
-    relatedToolIds: ['browser-system-info'],
-    instructions: {
-      en: ['View live ticking local system clock and UTC timestamp.', 'Review detected IANA Time Zone (e.g. Europe/Paris, America/New_York).', 'Check active UTC offset minutes, Daylight Saving Time (DST) status, and Intl locale date strings.'],
-      fr: ['Consultez l’heure locale et le temps universel UTC.', 'Vérifiez le fuseau horaire IANA détecté (ex: Europe/Paris).', 'Consultez le décalage UTC et l’heure d’été.'],
-      ar: ['شاهد ساعة النظام المحلية المباشرة والتوقيت العالمي UTC.', 'اطلع على المنطقة الزمنية المكتشفة IANA (مثل Asia/Riyadh أو Europe/Paris).', 'تحقق من فارق توقيت UTC بالدقائق وحالة التوقيت الصيفي والتنسيق المحلي.'],
-    },
-    limitations: {
-      en: ['Reports system-configured clock time and timezone; does not connect to remote NTP time servers.', 'If your computer clock is manually set incorrectly, this tool shows the exact erroneous local clock.'],
-      fr: ['Affiche l’heure configurée dans votre système sans serveur NTP distant.', 'Si l’horloge du PC est fausse, l’outil affichera cette heure erronée.'],
-      ar: ['يعرض الوقت والمنطقة الزمنية المضبوطين في جهازك ولا يتصل بخوادم توقيت NTP خارجية.', 'إذا كانت ساعة جهازك مضبوطة بشكل غير صحيح يدوياً، فستظهر القراءة غير الصحيحة كما هي.'],
-    },
-    troubleshooting: {
-      en: ['Enable Set time automatically in your operating system settings if the clock drifts.', 'Verify your system timezone matches your geographical location.'],
-      fr: ['Activez le réglage automatique de l’heure dans votre système.', 'Vérifiez la concordance de votre fuseau horaire.'],
-      ar: ['فعل خيار ضبط الوقت تلقائياً في إعدادات النظام إذا لاحظت فارقاً في التوقيت.', 'تأكد من اختيار المنطقة الزمنية المطابقة لموقعك الجغرافي.'],
-    },
+    id: "clock-timezone",
+    slug: "clock-timezone",
+    category: "browser-performance" as ToolCategory,
+    categoryLabel: "Browser & Performance",
+    title: "Clock & Timezone Information",
+    shortDesc: "Inspect device local time, UTC offset, IANA timezone string, daylight saving and localized formats.",
+    supportHint: "Reads Intl & Date API",
+    keywords: ["timezone test","clock test","utc offset check","test fuseau horaire"],
+    iconType: "monitor",
+    requiredApis: ["Intl.DateTimeFormat"],
+    componentName: "ClockTimezoneTester",
+    relatedToolIds: ["browser-system-info"],
+    instructions: [
+      "View live ticking local system clock and UTC timestamp.",
+      "Review detected IANA Time Zone (e.g. Europe/Paris, America/New_York).",
+      "Check active UTC offset minutes, Daylight Saving Time (DST) status, and Intl locale date strings."
+    ],
+    limitations: [
+      "Reports system-configured clock time and timezone; does not connect to remote NTP time servers.",
+      "If your computer clock is manually set incorrectly, this tool shows the exact erroneous local clock."
+    ],
+    troubleshooting: [
+      "Enable Set time automatically in your operating system settings if the clock drifts.",
+      "Verify your system timezone matches your geographical location."
+    ],
   },
 ];

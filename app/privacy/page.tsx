@@ -1,14 +1,9 @@
 import React from 'react';
 import { Metadata } from 'next';
-import { getDictionary, isValidLocale } from '@/lib/i18n';
-import { Locale, DEFAULT_LOCALE } from '@/lib/i18n/types';
+import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
-
-interface PageProps {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -17,15 +12,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function PrivacyPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const langParam = typeof params.lang === 'string' ? params.lang : DEFAULT_LOCALE;
-  const locale: Locale = isValidLocale(langParam) ? langParam : DEFAULT_LOCALE;
-  const t = getDictionary(locale);
+export default function PrivacyPage() {
+  const t = getDictionary();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
-      <Navbar t={t} currentLocale={locale} />
+      <Navbar t={t} />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="bg-white dark:bg-[#131B27] rounded-2xl border border-[#DFE5EB] dark:border-[#223043] p-8 sm:p-10 shadow-sm space-y-8 text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -38,7 +30,7 @@ export default async function PrivacyPage({ searchParams }: PageProps) {
               DeviceTry Privacy Policy
             </h1>
             <p className="mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
-              Effective Date: {new Date().toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })}
+              Effective Date: {new Date().toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
 
@@ -84,7 +76,7 @@ export default async function PrivacyPage({ searchParams }: PageProps) {
         </div>
       </main>
 
-      <Footer t={t} currentLocale={locale} />
+      <Footer t={t} />
     </div>
   );
 }

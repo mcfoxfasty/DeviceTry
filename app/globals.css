@@ -54,6 +54,51 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== Landing page motion & effects ===== */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+.animate-float {
+  animation: floatY 6s ease-in-out infinite;
+}
+.animate-float-slow {
+  animation: floatY 9s ease-in-out infinite;
+}
+.fade-up {
+  animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-pulse-dot {
+  animation: pulseDot 2.2s ease-in-out infinite;
+}
+
+/* Subtle engineering dot-grid used behind the hero */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(15, 118, 110, 0.14) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+.dark .dot-grid {
+  background-image: radial-gradient(circle, rgba(20, 184, 166, 0.16) 1px, transparent 1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-slow,
+  .fade-up,
+  .animate-pulse-dot {
+    animation: none;
+  }
+}
+
 /* Arabic Typography & RTL support */
 [dir="rtl"] {
   font-family: system-ui, -apple-system, "Segoe UI", "Cairo", "Noto Sans Arabic", Tahoma, sans-serif;

@@ -5,3 +5,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# TS incremental build artifacts
+tsconfig.tsbuildinfo

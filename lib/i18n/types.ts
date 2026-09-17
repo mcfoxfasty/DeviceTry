@@ -1,9 +1,11 @@
-export type Locale = 'en' | 'fr' | 'ar';
+// DeviceTry is intentionally English-only: no locale switcher, no ?lang params,
+// and no language mentions anywhere in the UI or metadata.
+export type Locale = 'en';
 export type TextDirection = 'ltr' | 'rtl';
 
 export interface LocaleConfig {
   code: Locale;
-  name: string; // Native name
+  name: string;
   englishName: string;
   dir: TextDirection;
   localeString: string;
@@ -17,23 +19,13 @@ export const LOCALES: Record<Locale, LocaleConfig> = {
     dir: 'ltr',
     localeString: 'en-US',
   },
-  fr: {
-    code: 'fr',
-    name: 'Français',
-    englishName: 'French',
-    dir: 'ltr',
-    localeString: 'fr-FR',
-  },
-  ar: {
-    code: 'ar',
-    name: 'العربية',
-    englishName: 'Arabic',
-    dir: 'rtl',
-    localeString: 'ar-SA',
-  },
 };
 
 export const DEFAULT_LOCALE: Locale = 'en';
+
+export function isValidLocale(locale: string): locale is Locale {
+  return locale === 'en';
+}
 
 export interface Translations {
   common: {
@@ -105,6 +97,28 @@ export interface Translations {
     featureLocal: string;
     featurePrivacy: string;
     featureNoSignup: string;
+  };
+  landing: {
+    searchPlaceholder: string;
+    searchNoResults: string;
+    toolsTitle: string;
+    toolsSubtitle: string;
+    inspectionTitle: string;
+    inspectionSubtitle: string;
+    inspectionCta: string;
+    popularTitle: string;
+  };
+  permissionPrompt: {
+    title: string;
+    body: string;
+    allowButton: string;
+    troubleshoot: string;
+    troubleshootHint: string;
+    why: string;
+    whyBody: string;
+    deviceSettings: string;
+    windowsHelp: string;
+    macHelp: string;
   };
   toolsOverview: {
     title: string;

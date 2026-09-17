@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Translations, Locale } from '@/lib/i18n/types';
-import { ToolDefinition } from '@/lib/tools/registry';
+import { Translations } from '@/lib/i18n/types';
+import { ToolDefinition } from '@/lib/tools/types';
 
 import { MicrophoneTester } from './tests/MicrophoneTester';
 import { WebcamTester } from './tests/WebcamTester';
@@ -46,7 +46,6 @@ import { ClockTimezoneTester } from './tests/ClockTimezoneTester';
 interface ToolRendererProps {
   tool: ToolDefinition;
   t: Translations;
-  locale: Locale;
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
 }
 
@@ -54,7 +53,7 @@ interface ToolRendererProps {
  * Renders the correct tester component for a registry tool definition.
  * Covers all 38 registry componentName entries — no silent wrong-tool fallbacks.
  */
-export function ToolRenderer({ tool, t, locale }: ToolRendererProps) {
+export function ToolRenderer({ tool, t }: ToolRendererProps) {
   switch (tool.componentName) {
     case 'MicrophoneTester':
       return <MicrophoneTester t={t} />;
@@ -63,75 +62,75 @@ export function ToolRenderer({ tool, t, locale }: ToolRendererProps) {
     case 'SpeakersTester':
       return <SpeakersTester t={t} />;
     case 'VoiceRecorderTester':
-      return <VoiceRecorderTester t={t} locale={locale} />;
+      return <VoiceRecorderTester t={t} />;
     case 'OnlineMirrorTester':
-      return <OnlineMirrorTester t={t} locale={locale} />;
+      return <OnlineMirrorTester t={t} />;
     case 'ToneGeneratorTester':
-      return <ToneGeneratorTester t={t} locale={locale} />;
+      return <ToneGeneratorTester t={t} />;
     case 'ClickCounterTester':
-      return <ClickCounterTester t={t} locale={locale} />;
+      return <ClickCounterTester t={t} />;
     case 'KeyboardTester':
       return <KeyboardTester t={t} />;
     case 'MouseTester':
       return <MouseTester t={t} />;
     case 'TouchscreenTester':
-      return <TouchscreenTester t={t} locale={locale} />;
+      return <TouchscreenTester t={t} />;
     case 'MultitouchTester':
-      return <MultitouchTester t={t} locale={locale} />;
+      return <MultitouchTester t={t} />;
     case 'GamepadTester':
       return <GamepadTester t={t} />;
     case 'DeadPixelTester':
-      return <DeadPixelTester t={t} locale={locale} />;
+      return <DeadPixelTester t={t} />;
     case 'DisplayPatternsTester':
-      return <DisplayPatternsTester t={t} locale={locale} />;
+      return <DisplayPatternsTester t={t} />;
     case 'ScreenInfoTester':
-      return <ScreenInfoTester t={t} locale={locale} />;
+      return <ScreenInfoTester t={t} />;
     case 'DisplayFpsTester':
-      return <DisplayFpsTester t={t} locale={locale} />;
+      return <DisplayFpsTester t={t} />;
     case 'BatteryTester':
       return <BatteryTester t={t} />;
     case 'AccelerometerTester':
-      return <AccelerometerTester t={t} locale={locale} />;
+      return <AccelerometerTester t={t} />;
     case 'GyroscopeTester':
-      return <GyroscopeTester t={t} locale={locale} />;
+      return <GyroscopeTester t={t} />;
     case 'VibrationTester':
-      return <VibrationTester t={t} locale={locale} />;
+      return <VibrationTester t={t} />;
     case 'PitchDetectorTester':
-      return <PitchDetectorTester t={t} locale={locale} />;
+      return <PitchDetectorTester t={t} />;
     case 'InstrumentTunerTester':
-      return <InstrumentTunerTester t={t} locale={locale} />;
+      return <InstrumentTunerTester t={t} />;
     case 'MetronomeTester':
-      return <MetronomeTester t={t} locale={locale} />;
+      return <MetronomeTester t={t} />;
     case 'BrowserSystemInfoTester':
-      return <BrowserSystemInfoTester t={t} locale={locale} />;
+      return <BrowserSystemInfoTester t={t} />;
     case 'BrowserCompatibilityTester':
-      return <BrowserCompatibilityTester t={t} locale={locale} />;
+      return <BrowserCompatibilityTester t={t} />;
     case 'PermissionDiagnosticsTester':
-      return <PermissionDiagnosticsTester t={t} locale={locale} />;
+      return <PermissionDiagnosticsTester t={t} />;
     case 'ClipboardTester':
-      return <ClipboardTester t={t} locale={locale} />;
+      return <ClipboardTester t={t} />;
     case 'BrowserStorageTester':
-      return <BrowserStorageTester t={t} locale={locale} />;
+      return <BrowserStorageTester t={t} />;
     case 'PrivacyStorageInspectorTester':
-      return <PrivacyStorageInspectorTester t={t} locale={locale} />;
+      return <PrivacyStorageInspectorTester t={t} />;
     case 'FontRenderingTester':
-      return <FontRenderingTester t={t} locale={locale} />;
+      return <FontRenderingTester t={t} />;
     case 'CodecSupportTester':
-      return <CodecSupportTester t={t} locale={locale} />;
+      return <CodecSupportTester t={t} />;
     case 'CanvasBenchmarkTester':
-      return <CanvasBenchmarkTester t={t} locale={locale} />;
+      return <CanvasBenchmarkTester t={t} />;
     case 'WebGLTester':
-      return <WebGLTester t={t} locale={locale} />;
+      return <WebGLTester t={t} />;
     case 'JavascriptBenchmarkTester':
-      return <JavascriptBenchmarkTester t={t} locale={locale} />;
+      return <JavascriptBenchmarkTester t={t} />;
     case 'WebAssemblyTester':
-      return <WebAssemblyTester t={t} locale={locale} />;
+      return <WebAssemblyTester t={t} />;
     case 'WebRTCTester':
-      return <WebRTCTester t={t} locale={locale} />;
+      return <WebRTCTester t={t} />;
     case 'OfflineCheckTester':
-      return <OfflineCheckTester t={t} locale={locale} />;
+      return <OfflineCheckTester t={t} />;
     case 'ClockTimezoneTester':
-      return <ClockTimezoneTester t={t} locale={locale} />;
+      return <ClockTimezoneTester t={t} />;
     default:
       return null;
   }

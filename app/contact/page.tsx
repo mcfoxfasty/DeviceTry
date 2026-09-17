@@ -8,7 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 
 export default function ContactPage() {
-  const t = getDictionary('en');
+  const t = getDictionary();
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -22,7 +22,7 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
-      <Navbar t={t} currentLocale="en" />
+      <Navbar t={t} />
 
       <main className="flex-1 max-w-xl w-full mx-auto px-4 py-12">
         <div className="text-center mb-8">
@@ -127,7 +127,7 @@ export default function ContactPage() {
         </div>
       </main>
 
-      <Footer t={t} currentLocale="en" />
+      <Footer t={t} />
     </div>
   );
 }

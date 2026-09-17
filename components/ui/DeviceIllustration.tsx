@@ -283,6 +283,32 @@ export function DeviceIllustration({ type, className = '', size = 64 }: DeviceIl
         </svg>
       );
 
+    case 'gauge':
+      return (
+        <svg
+          width={s}
+          height={s}
+          viewBox="0 0 64 64"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={className}
+          aria-hidden="true"
+        >
+          <rect x="8" y="8" width="48" height="48" rx="12" className="fill-[#0284C7]/10 dark:fill-[#38BDF8]/15" />
+          {/* Gauge dial */}
+          <path d="M16 38C16 27.5066 24.5066 19 35 19C45.4934 19 54 27.5066 54 38" transform="translate(-3 -3)" stroke="#0284C7" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Colored speed zones */}
+          <path d="M18 36C18 27.7157 24.7157 21 33 21" transform="translate(-3 -3)" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M30 18.6C31 18.2 32 18 33 18" transform="translate(-3 -3)" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Needle */}
+          <line x1="30" y1="35" x2="41" y2="22" stroke="#0284C7" strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx="30" cy="35" r="2.5" fill="#0284C7" className="dark:fill-[#38BDF8]" />
+          {/* Speed lines below */}
+          <path d="M22 46H42" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" opacity="0.5" className="dark:stroke-[#38BDF8]" />
+          <path d="M26 51H38" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" opacity="0.3" className="dark:stroke-[#38BDF8]" />
+        </svg>
+      );
+
     default:
       return (
         <svg

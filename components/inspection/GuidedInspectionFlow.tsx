@@ -11,7 +11,7 @@ import {
   ArrowLeft,
   RotateCcw,
 } from 'lucide-react';
-import { Translations, Locale } from '@/lib/i18n/types';
+import { Translations } from '@/lib/i18n/types';
 import { MicrophoneTester } from '../tests/MicrophoneTester';
 import { WebcamTester } from '../tests/WebcamTester';
 import { SpeakersTester } from '../tests/SpeakersTester';
@@ -25,7 +25,6 @@ import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatu
 
 interface GuidedInspectionFlowProps {
   t: Translations;
-  locale: Locale;
   isPro?: boolean;
   workspaceId?: string;
   companyName?: string;
@@ -50,7 +49,7 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
     steps: ['keyboard', 'mouse', 'display', 'speakers'],
   },
   full: {
-    title: 'Full Diagnostic Suite (All 8 Tests)',
+    title: 'Full Diagnostic Check (All 8 Tests)',
     desc: 'Complete inspection evaluating all available browser device APIs.',
     steps: ['mic', 'webcam', 'speakers', 'keyboard', 'mouse', 'display', 'gamepad', 'battery'],
   },
@@ -58,7 +57,6 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
 
 export function GuidedInspectionFlow({
   t,
-  locale,
   companyName,
 }: GuidedInspectionFlowProps) {
   const [selectedSuiteKey, setSelectedSuiteKey] = useState<string>('used_hardware');
@@ -131,7 +129,7 @@ export function GuidedInspectionFlow({
       // Auto-save to local history on completion with newly updated complete test results
       const finalStatus = calculateReportStatus(suite.steps, currentResults);
       saveLocalInspection({
-        locale,
+        locale: 'en',
         deviceLabel: deviceLabel || 'Device',
         operatorName: operatorName || 'Visitor',
         summaryStatus: finalStatus,
@@ -160,7 +158,7 @@ export function GuidedInspectionFlow({
     if (nextIdx >= suite.steps.length) {
       const finalStatus = calculateReportStatus(suite.steps, currentResults);
       saveLocalInspection({
-        locale,
+        locale: 'en',
         deviceLabel: deviceLabel || 'Device',
         operatorName: operatorName || 'Visitor',
         summaryStatus: finalStatus,
@@ -425,7 +423,7 @@ export function GuidedInspectionFlow({
                   {deviceLabel || 'Hardware Inspection'}
                 </h2>
                 <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 font-mono-num">
-                  {t.report.inspectionDate}: {new Date().toLocaleDateString(locale, { dateStyle: 'full' })} | {t.report.testedBy}:{' '}
+                  {t.report.inspectionDate}: {new Date().toLocaleDateString('en', { dateStyle: 'full' })} | {t.report.testedBy}:{' '}
                   {operatorName || 'Anonymous Visitor'}
                 </p>
               </div>
