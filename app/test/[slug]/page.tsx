@@ -8,6 +8,7 @@ import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ToolDetailView } from '@/components/ToolDetailView';
+import { ToolSeoContent } from '@/components/ToolSeoContent';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -77,6 +78,9 @@ export default async function ToolPage({ params }: PageProps) {
         </div>
 
         <ToolDetailView tool={tool} t={t} titleHeading="h1" />
+
+        {/* Long-form content: about, tips, problems, OS guides, FAQ */}
+        <ToolSeoContent tool={tool} />
 
         {/* Related tools */}
         {relatedTools.length > 0 && (

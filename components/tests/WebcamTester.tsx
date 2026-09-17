@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, CameraOff, Download, AlertTriangle, CheckCircle, Video } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 
 interface WebcamTesterProps {
   t: Translations;
@@ -16,6 +17,7 @@ interface WebcamTesterProps {
 export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
 
@@ -178,6 +180,7 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionState('denied');
         setErrorMessage(t.common.permissionDenied);
+        setShowDeniedModal(true);
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setPermissionState('error');
         setErrorMessage(t.common.deviceUnavailable);
@@ -427,6 +430,17 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
           </ul>
         </div>
       </div>
+
+      {/* Permission denied modal */}
+      <PermissionDeniedModal
+        open={showDeniedModal}
+        kind="camera"
+        onRetry={() => {
+          setShowDeniedModal(false);
+          startCamera(selectedDeviceId || undefined);
+        }}
+        onClose={() => setShowDeniedModal(false)}
+      />
     </div>
   );
 }

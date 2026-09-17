@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Square, Download, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 
 interface MicrophoneTesterProps {
   t: Translations;
@@ -16,6 +17,7 @@ interface MicrophoneTesterProps {
 export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [inputLevel, setInputLevel] = useState<number>(0);
@@ -144,6 +146,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionState('denied');
         setErrorMessage(t.micTest.deniedMessage);
+        setShowDeniedModal(true);
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setPermissionState('error');
         setErrorMessage(t.common.deviceUnavailable);
@@ -486,6 +489,17 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
           </ul>
         </div>
       </div>
+
+      {/* Permission denied modal */}
+      <PermissionDeniedModal
+        open={showDeniedModal}
+        kind="microphone"
+        onRetry={() => {
+          setShowDeniedModal(false);
+          startMicrophone(selectedDeviceId || undefined);
+        }}
+        onClose={() => setShowDeniedModal(false)}
+      />
     </div>
   );
 }
