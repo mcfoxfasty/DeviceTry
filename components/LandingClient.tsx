@@ -77,6 +77,30 @@ const faqs = [
     q: 'How many diagnostic tools are available on DeviceTry?',
     a: 'DeviceTry features 38 specialized client-side diagnostic tools covering microphones, webcams, stereo audio, displays, keyboards, mice, gaming controllers, touchscreens, and acoustic instruments.',
   },
+  {
+    q: 'My browser asked for permission and I clicked Block. What now?',
+    a: 'No problem — permissions can be changed at any time. Click the lock (or tune) icon on the left of the address bar, set Microphone or Camera access back to “Allow”, then reload the page. The tester will detect the new permission immediately. Each tool page also links straight to your Windows or Mac system privacy settings in case access was blocked at the operating-system level.',
+  },
+  {
+    q: 'Do the testers work on phones and tablets, or only laptops?',
+    a: 'Both. Every tester runs in any modern mobile browser, and most work great on phones — touchscreen coverage, multi-touch, accelerometer, gyroscope, microphone, webcam, and display tools included. A few are hardware-dependent: the keyboard and mouse testers need physical peripherals, the battery monitor requires a Chromium browser, and vibration testing is Android-only.',
+  },
+  {
+    q: 'What do the pass, warning, and failed results actually mean?',
+    a: 'Passed means the browser observed a healthy, responsive signal from your hardware. Warning means the device works but shows a caveat — for example elevated latency, a lower-than-expected sample rate, or minor stick drift. Failed means the browser could not get a usable signal at all. Every result is explained in plain language and can be included in a printable report.',
+  },
+  {
+    q: 'Can I trust the results when buying or selling used hardware?',
+    a: 'Yes — that is one of the most common uses. A structured pre-purchase check catches dead or stuck pixels, chattering mouse switches, unresponsive keyboard keys, degraded microphone input, and weak batteries before money changes hands. The guided inspection builds a single printable report you can attach to a marketplace listing or keep as a handover record.',
+  },
+  {
+    q: 'Which browser gives the most accurate results?',
+    a: 'Chrome, Edge, Firefox, and Safari all work. For the fullest API coverage we recommend a current version of Chrome or Edge, which expose the complete WebRTC, Web Audio, Gamepad, and Battery Status interfaces. Some diagnostics are inherently limited on certain engines — battery reporting, for instance, was removed from Safari and Firefox for privacy reasons, and those testers will tell you when a measurement is not possible.',
+  },
+  {
+    q: 'Is it really free, and do I need to create an account?',
+    a: 'Every tester and the guided inspection are completely free with no account, email, or credit card required. An optional Pro plan exists for teams who need cloud-saved inspection history, device inventory, and branded reports — but nothing about the free tier is time-limited or feature-locked.',
+  },
 ];
 
 const floatDelays = ['0s', '1.2s', '2.1s', '0.7s', '1.6s'];

@@ -22,22 +22,17 @@ export function DeviceTryLogo({ className = '', size = 36, showText = true, vari
       >
         {/* Rounded badge backdrop */}
         <rect width="40" height="40" rx="10" fill="#0F766E" />
+        {/* Faint screen glow */}
+        <rect x="7" y="8" width="26" height="19" rx="3.5" fill="#FFFFFF" fillOpacity="0.08" />
         {/* Device screen outline */}
-        <rect x="8.5" y="10.5" width="23" height="16" rx="3" stroke="#FFFFFF" strokeWidth="2" fill="none" />
+        <rect x="7" y="8" width="26" height="19" rx="3.5" stroke="#FFFFFF" strokeWidth="2.25" fill="none" />
         {/* Device stand foot */}
-        <path d="M20 26.5V30M15.5 30H24.5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-        {/* Diagnostic loop on the screen */}
-        <g
-          transform="translate(14 12.5) scale(0.5)"
-          stroke="#2DD4BF"
-          strokeWidth="4"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-          <path d="M21 3v5h-5" />
-        </g>
+        <path d="M20 27V31M15 31H25" stroke="#FFFFFF" strokeWidth="2.25" strokeLinecap="round" />
+        {/* Diagnostic lens on the screen */}
+        <circle cx="18.5" cy="16.5" r="5.2" stroke="#2DD4BF" strokeWidth="2.6" fill="none" />
+        <path d="M22.4 20.4L26.6 24.6" stroke="#2DD4BF" strokeWidth="2.6" strokeLinecap="round" />
+        {/* Lens glint */}
+        <path d="M16.2 14.4C16.8 13.7 17.6 13.2 18.5 13.1" stroke="#FFFFFF" strokeWidth="1.3" strokeLinecap="round" opacity="0.85" />
       </svg>
       {showText && (
         <div className="flex flex-col">
