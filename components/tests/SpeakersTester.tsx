@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, CheckCircle, AlertCircle, Play, Square } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface SpeakersTesterProps {
   t: Translations;
@@ -10,6 +11,7 @@ interface SpeakersTesterProps {
 }
 
 export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [playingChannel, setPlayingChannel] = useState<'left' | 'right' | 'both' | null>(null);
   const [userObservation, setUserObservation] = useState<string | null>(null);
 
@@ -83,7 +85,7 @@ export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
   const recordObservation = (obs: 'left' | 'right' | 'both' | 'none') => {
     setUserObservation(obs);
     const passed = obs === 'both' || obs === 'left' || obs === 'right';
-    onRecordResult?.({
+    emitRich({
       status: passed ? 'passed' : 'warning',
       details: `User observation recorded: ${obs}`,
       metrics: { observation: obs },
@@ -239,6 +241,9 @@ export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
       <p className="text-[11px] text-[#8996A6] mt-3 italic">
         {t.speakersTest.physicalDisclaimer}
       </p>
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* Evaluation guidance */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Battery, BatteryCharging, AlertCircle, CheckCircle, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface BatteryTesterProps {
   t: Translations;
@@ -19,6 +20,7 @@ interface BatteryManager {
 }
 
 export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState<boolean | null>(null);
@@ -42,6 +44,10 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
           status: 'unsupported',
           details: 'Battery Status API is not exposed by this browser engine.',
         });
+        emitRich({
+          status: 'unsupported',
+          details: 'Battery Status API is not exposed by this browser engine.',
+        });
         return;
       }
 
@@ -57,7 +63,7 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
           setChargingTime(battery.chargingTime);
           setDischargingTime(battery.dischargingTime);
 
-          onRecordResultRef.current?.({
+          emitRich({
             status: 'passed',
             details: `Battery level: ${currentLevel}%, Charging: ${battery.charging ? 'Yes' : 'No'}`,
             metrics: {
@@ -176,6 +182,9 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
           <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">Checking battery status...</p>
         </div>
       )}
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* Strict Battery Health Disclaimer Required by User Prompt */}
       <div className="mt-6 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-start gap-2.5">

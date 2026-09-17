@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Camera, CameraOff, Download, AlertTriangle, CheckCircle, Video } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface WebcamTesterProps {
   t: Translations;
@@ -15,6 +16,7 @@ interface WebcamTesterProps {
 }
 
 export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
@@ -163,7 +165,7 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
             setResolution({ width: w, height: h });
             measureFpsWithVideoFrameCallback(videoRef.current);
 
-            onRecordResult?.({
+            emitRich({
               status: 'passed',
               details: `Camera operational at ${w}x${h}. Video frame arrival confirmed.`,
               metrics: {
@@ -188,7 +190,7 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);
       }
-      onRecordResult?.({
+      emitRich({
         status: 'failed',
         details: error.message || 'Camera access failed.',
       });
@@ -406,6 +408,9 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
           </p>
         </div>
       )}
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* Technical Interpretation & Troubleshooting */}
       <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

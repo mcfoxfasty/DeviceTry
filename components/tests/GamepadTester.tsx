@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, AlertTriangle, CheckCircle, Crosshair, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface GamepadTesterProps {
   t: Translations;
@@ -34,6 +35,7 @@ const BUTTON_LABELS = [
 ];
 
 export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [gamepads, setGamepads] = useState<{ id: string; index: number; buttons: number[]; axes: number[] }[]>([]);
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
   const [isCalibratingNeutral, setIsCalibratingNeutral] = useState<boolean>(false);
@@ -82,7 +84,7 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
 
         if (active.length > 0 && !isCalibratingRef.current) {
           const current = active.find((p) => p.index === selectedPadIndex) || active[0];
-          onRecordResult?.({
+          emitRich({
             status: 'passed',
             details: `Controller active: ${current.id}. Buttons & axes polling correctly.`,
             metrics: { padId: current.id, buttonCount: current.buttons.length },
@@ -117,7 +119,7 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
         const hasDrift = maxLeft > 0.12 || maxRight > 0.12;
         setNeutralCalibrationPassed(!hasDrift);
 
-        onRecordResult?.({
+        emitRich({
           status: hasDrift ? 'warning' : 'passed',
           details: hasDrift
             ? `Idle stick resting offset exceeded 12% deadzone (Left: ${(maxLeft * 100).toFixed(1)}%, Right: ${(maxRight * 100).toFixed(1)}%).`
@@ -343,6 +345,9 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
           </p>
         </div>
       )}
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* Hardware Disclaimer */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

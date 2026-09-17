@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Square, Download, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface MicrophoneTesterProps {
   t: Translations;
@@ -15,6 +16,7 @@ interface MicrophoneTesterProps {
 }
 
 export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
@@ -136,7 +138,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
 
       drawWaveform();
 
-      onRecordResult?.({
+      emitRich({
         status: 'passed',
         details: 'Browser audio input stream active. Signal level and waveform measured.',
         metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label || 'Microphone' },
@@ -154,7 +156,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);
       }
-      onRecordResult?.({
+      emitRich({
         status: 'failed',
         details: error.message || 'Microphone access failed.',
       });
@@ -465,6 +467,9 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
           </p>
         </div>
       )}
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* How to interpret & Troubleshooting */}
       <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

@@ -74,8 +74,8 @@ export const enTranslations: Translations = {
   landing: {
     searchPlaceholder: 'Search a tester — mic, webcam, keyboard, dead pixels…',
     searchNoResults: 'No tester matches your search. Try “microphone” or “pixel”.',
-    toolsTitle: 'Every tester has its own page',
-    toolsSubtitle: 'Pick a tool below — each tester runs on its dedicated page, with step-by-step guidance and a printable report.',
+    toolsTitle: 'Test every part of your setup',
+    toolsSubtitle: 'From microphones and webcams to keyboards, screens, and controllers — pick a category, run the check, and get your verdict in seconds. Everything runs right in your browser.',
     inspectionTitle: 'In a hurry? Run the guided inspection instead',
     inspectionSubtitle: 'A structured checklist that walks you through several testers in sequence and builds one printable report.',
     inspectionCta: 'Start Guided Inspection',

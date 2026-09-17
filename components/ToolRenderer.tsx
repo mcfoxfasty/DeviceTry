@@ -3,6 +3,7 @@
 import React from 'react';
 import { Translations } from '@/lib/i18n/types';
 import { ToolDefinition } from '@/lib/tools/types';
+import { TesterWithBanner } from '@/components/TestResultBanner';
 
 import { MicrophoneTester } from './tests/MicrophoneTester';
 import { WebcamTester } from './tests/WebcamTester';
@@ -43,94 +44,106 @@ import { WebRTCTester } from './tests/WebRTCTester';
 import { OfflineCheckTester } from './tests/OfflineCheckTester';
 import { ClockTimezoneTester } from './tests/ClockTimezoneTester';
 
+export type ToolResultStatus = 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
+
+export interface ToolResultPayload {
+  status: ToolResultStatus;
+  details: string;
+  metrics?: Record<string, unknown>;
+}
+
 interface ToolRendererProps {
   tool: ToolDefinition;
   t: Translations;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  /** Generic result hook for the 30 testers that report (status, details). */
+  onResultUpdate?: (status: ToolResultStatus, details?: string) => void;
+  /** Rich result hook for the 8 flagship testers that report a full payload. */
+  onRecordResult?: (result: ToolResultPayload) => void;
 }
 
 /**
  * Renders the correct tester component for a registry tool definition.
  * Covers all 38 registry componentName entries — no silent wrong-tool fallbacks.
+ * Result telemetry is wired through so host pages can display outcomes.
  */
-export function ToolRenderer({ tool, t }: ToolRendererProps) {
+export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult }: ToolRendererProps) {
   switch (tool.componentName) {
     case 'MicrophoneTester':
-      return <MicrophoneTester t={t} />;
+      return <MicrophoneTester t={t} onRecordResult={onRecordResult} />;
     case 'WebcamTester':
-      return <WebcamTester t={t} />;
+      return <WebcamTester t={t} onRecordResult={onRecordResult} />;
     case 'SpeakersTester':
-      return <SpeakersTester t={t} />;
+      return <SpeakersTester t={t} onRecordResult={onRecordResult} />;
     case 'VoiceRecorderTester':
-      return <VoiceRecorderTester t={t} />;
+      return <TesterWithBanner tester={VoiceRecorderTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'OnlineMirrorTester':
-      return <OnlineMirrorTester t={t} />;
+      return <TesterWithBanner tester={OnlineMirrorTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'ToneGeneratorTester':
-      return <ToneGeneratorTester t={t} />;
+      return <TesterWithBanner tester={ToneGeneratorTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'ClickCounterTester':
-      return <ClickCounterTester t={t} />;
+      return <TesterWithBanner tester={ClickCounterTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'KeyboardTester':
-      return <KeyboardTester t={t} />;
+      return <KeyboardTester t={t} onRecordResult={onRecordResult} />;
     case 'MouseTester':
-      return <MouseTester t={t} />;
+      return <MouseTester t={t} onRecordResult={onRecordResult} />;
     case 'TouchscreenTester':
-      return <TouchscreenTester t={t} />;
+      return <TesterWithBanner tester={TouchscreenTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'MultitouchTester':
-      return <MultitouchTester t={t} />;
+      return <TesterWithBanner tester={MultitouchTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'GamepadTester':
-      return <GamepadTester t={t} />;
+      return <GamepadTester t={t} onRecordResult={onRecordResult} />;
     case 'DeadPixelTester':
-      return <DeadPixelTester t={t} />;
+      return <TesterWithBanner tester={DeadPixelTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'DisplayPatternsTester':
-      return <DisplayPatternsTester t={t} />;
+      return <TesterWithBanner tester={DisplayPatternsTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'ScreenInfoTester':
-      return <ScreenInfoTester t={t} />;
+      return <TesterWithBanner tester={ScreenInfoTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'DisplayFpsTester':
-      return <DisplayFpsTester t={t} />;
+      return <TesterWithBanner tester={DisplayFpsTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'BatteryTester':
-      return <BatteryTester t={t} />;
+      return <BatteryTester t={t} onRecordResult={onRecordResult} />;
     case 'AccelerometerTester':
-      return <AccelerometerTester t={t} />;
+      return <TesterWithBanner tester={AccelerometerTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'GyroscopeTester':
-      return <GyroscopeTester t={t} />;
+      return <TesterWithBanner tester={GyroscopeTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'VibrationTester':
-      return <VibrationTester t={t} />;
+      return <TesterWithBanner tester={VibrationTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'PitchDetectorTester':
-      return <PitchDetectorTester t={t} />;
+      return <TesterWithBanner tester={PitchDetectorTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'InstrumentTunerTester':
-      return <InstrumentTunerTester t={t} />;
+      return <TesterWithBanner tester={InstrumentTunerTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'MetronomeTester':
-      return <MetronomeTester t={t} />;
+      return <TesterWithBanner tester={MetronomeTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'BrowserSystemInfoTester':
-      return <BrowserSystemInfoTester t={t} />;
+      return <TesterWithBanner tester={BrowserSystemInfoTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'BrowserCompatibilityTester':
-      return <BrowserCompatibilityTester t={t} />;
+      return <TesterWithBanner tester={BrowserCompatibilityTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'PermissionDiagnosticsTester':
-      return <PermissionDiagnosticsTester t={t} />;
+      return <TesterWithBanner tester={PermissionDiagnosticsTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'ClipboardTester':
-      return <ClipboardTester t={t} />;
+      return <TesterWithBanner tester={ClipboardTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'BrowserStorageTester':
-      return <BrowserStorageTester t={t} />;
+      return <TesterWithBanner tester={BrowserStorageTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'PrivacyStorageInspectorTester':
-      return <PrivacyStorageInspectorTester t={t} />;
+      return <TesterWithBanner tester={PrivacyStorageInspectorTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'FontRenderingTester':
-      return <FontRenderingTester t={t} />;
+      return <TesterWithBanner tester={FontRenderingTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'CodecSupportTester':
-      return <CodecSupportTester t={t} />;
+      return <TesterWithBanner tester={CodecSupportTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'CanvasBenchmarkTester':
-      return <CanvasBenchmarkTester t={t} />;
+      return <TesterWithBanner tester={CanvasBenchmarkTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'WebGLTester':
-      return <WebGLTester t={t} />;
+      return <TesterWithBanner tester={WebGLTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'JavascriptBenchmarkTester':
-      return <JavascriptBenchmarkTester t={t} />;
+      return <TesterWithBanner tester={JavascriptBenchmarkTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'WebAssemblyTester':
-      return <WebAssemblyTester t={t} />;
+      return <TesterWithBanner tester={WebAssemblyTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'WebRTCTester':
-      return <WebRTCTester t={t} />;
+      return <TesterWithBanner tester={WebRTCTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'OfflineCheckTester':
-      return <OfflineCheckTester t={t} />;
+      return <TesterWithBanner tester={OfflineCheckTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     case 'ClockTimezoneTester':
-      return <ClockTimezoneTester t={t} />;
+      return <TesterWithBanner tester={ClockTimezoneTester} testerProps={{ t }} onResultUpdate={onResultUpdate} />;
     default:
       return null;
   }

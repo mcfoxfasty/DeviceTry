@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Keyboard, Play, Square, RotateCcw, AlertCircle, Check } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface KeyboardTesterProps {
   t: Translations;
@@ -123,6 +124,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
 ];
 
 export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [isTestActive, setIsTestActive] = useState<boolean>(false);
   const [layout, setLayout] = useState<LayoutType>('qwerty');
   const [pressedCodes, setPressedCodes] = useState<Set<string>>(new Set());
@@ -152,7 +154,7 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
 
       setPressedCodes((prev) => {
         const next = new Set(prev).add(e.code);
-        onRecordResult?.({
+        emitRich({
           status: 'passed',
           details: `${next.size} keys verified response without ghosting.`,
           metrics: { totalKeysTested: next.size },
@@ -312,6 +314,9 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
       <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-3 italic text-center">
         {t.keyboardTest.pressInstruction}
       </p>
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       {/* OS Notice & Troubleshooting */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

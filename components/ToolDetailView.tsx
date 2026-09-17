@@ -54,8 +54,8 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
       {/* Permission encouragement card */}
       <PermissionPromptCard t={t} />
 
-      {/* Live tester */}
-      <ToolRenderer tool={tool} t={t} />
+      {/* Live tester — result banner is rendered INSIDE each tester card */}
+      <ToolRenderer tool={tool} t={t} onResultUpdate={onResultUpdate} />
 
       {/* Instructions & troubleshooting */}
       <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${compact ? '' : 'pt-2'}`}>

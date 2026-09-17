@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Mouse, RotateCcw, AlertTriangle, CheckCircle, ArrowUpDown } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface MouseTesterProps {
   t: Translations;
@@ -10,6 +11,7 @@ interface MouseTesterProps {
 }
 
 export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
   const [leftPressed, setLeftPressed] = useState<boolean>(false);
   const [middlePressed, setMiddlePressed] = useState<boolean>(false);
   const [rightPressed, setRightPressed] = useState<boolean>(false);
@@ -50,7 +52,7 @@ export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
       setRightCount((c) => c + 1);
     }
 
-    onRecordResult?.({
+    emitRich({
       status: 'passed',
       details: `Buttons verified: Left (${leftCount + 1}), Middle (${middleCount}), Right (${rightCount}). Fast double-clicks: ${fastDoubleClicks}`,
       metrics: { leftCount: leftCount + 1, middleCount, rightCount, fastDoubleClicks },
@@ -203,6 +205,9 @@ export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
       <p className="text-[11px] text-[#8996A6] mt-3 italic">
         {t.mouseTest.latencyDisclaimer}
       </p>
+
+      {/* Test result — in-card, directly under the test area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
         <h3 className="font-semibold text-[#142033] dark:text-[#E9EEF4] text-sm mb-1.5">
