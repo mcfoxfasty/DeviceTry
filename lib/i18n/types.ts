@@ -33,7 +33,6 @@ export interface Translations {
     tagline: string;
     homeTitle: string;
     free: string;
-    pro: string;
     startTest: string;
     stopTest: string;
     reset: string;
@@ -63,7 +62,6 @@ export interface Translations {
     learnMore: string;
     privacyNote: string;
     modeFreeOnly: string;
-    modeProEnabled: string;
   };
   nav: {
     home: string;
@@ -77,16 +75,11 @@ export interface Translations {
     gamepad: string;
     battery: string;
     guidedInspection: string;
-    pricing: string;
     help: string;
     about: string;
     contact: string;
     privacy: string;
     terms: string;
-    dashboard: string;
-    signIn: string;
-    signOut: string;
-    account: string;
   };
   hero: {
     badge: string;
@@ -321,70 +314,10 @@ export interface Translations {
     localHistoryExplanation: string;
     printReport: string;
     downloadJson: string;
-    saveToProCloud: string;
   };
-  pricing: {
-    title: string;
-    subtitle: string;
-    monthlyPrice: string;
-    billedMonthly: string;
-    freeTitle: string;
-    freeDesc: string;
-    freePrice: string;
-    freeCta: string;
-    freeFeatures: string[];
-    proTitle: string;
-    proDesc: string;
-    proPrice: string;
-    proCta: string;
-    proFeatures: string[];
-    guarantee: string;
-    faqTitle: string;
-    faqs: Array<{ q: string; a: string }>;
-  };
-  proDashboard: {
-    welcome: string;
-    subscriptionActive: string;
-    subscriptionCanceled: string;
-    subscriptionPastDue: string;
-    renewsOn: string;
-    manageBilling: string;
-    quotaInspections: string;
-    quotaRetention: string;
-    quotaInventory: string;
-    quotaTemplates: string;
-    recentInspections: string;
-    noInspectionsYet: string;
-    deviceInventory: string;
-    noDevicesYet: string;
-    templates: string;
-    newInspectionBtn: string;
-    addDeviceBtn: string;
-    addTemplateBtn: string;
-    exportCsv: string;
-    exportJson: string;
-    accountSettings: string;
-    deleteAccountBtn: string;
-    deleteAccountConfirm: string;
-  };
-  auth: {
-    signInTitle: string;
-    signInSubtitle: string;
-    registerTitle: string;
-    registerSubtitle: string;
-    emailLabel: string;
-    passwordLabel: string;
-    fullNameLabel: string;
-    companyLabel: string;
-    signInBtn: string;
-    registerBtn: string;
-    proOnlyNotice: string;
-    firstTimeSubscribeNotice: string;
-    demoSubscriberBtn: string;
-    demoSubscriberNotice: string;
-    invalidCredentials: string;
-    signedInAs: string;
-  };
+
+
+
   footer: {
     builtForTrust: string;
     copyright: string;
@@ -394,8 +327,6 @@ export interface Translations {
     quickLinks: string;
     tests: string;
     legal: string;
-    cardsPaymentTitle: string;
-    cardsPaymentDesc: string;
   };
   seo: {
     metaTitleHome: string;
@@ -418,7 +349,5 @@ export interface Translations {
     metaDescBattery: string;
     metaTitleInspection: string;
     metaDescInspection: string;
-    metaTitlePricing: string;
-    metaDescPricing: string;
   };
 }

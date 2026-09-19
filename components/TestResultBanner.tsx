@@ -2,8 +2,14 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { ClipboardCheck, RotateCcw } from 'lucide-react';
+import {
+  BannerStatus,
+  ForwardableStatus,
+  forwardGenericResult,
+  forwardRichResult,
+} from '@/lib/testing/resultPolicy';
 
-export type BannerStatus = 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported' | 'skipped';
+export type { BannerStatus } from '@/lib/testing/resultPolicy';
 
 export interface TestResultPayload {
   status: BannerStatus;
@@ -106,12 +112,10 @@ export function TestResultBanner({ result, onClear, variant = 'card' }: TestResu
   );
 }
 
-type ForwardableStatus = 'passed' | 'warning' | 'failed' | 'inconclusive';
-
 interface UseTestResultOptions {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
-  /** Forwarded host callback — typed with the narrowest union testers emit so
-   *  each tester's own onRecordResult prop is assignable directly. */
+  /** Forwarded host callback — narrowed by forwardRichResult() so each
+   *  tester's own onRecordResult prop is assignable directly. */
   onRecordResult?: (result: { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> }) => void;
 }
 
@@ -128,14 +132,16 @@ export function useTestResult(opts: UseTestResultOptions) {
 
   const emit = useCallback((status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
     setResult({ status, details: details ?? '', metrics });
-    if (status !== 'skipped') {
+    if (forwardGenericResult(status)) {
       optsRef.current.onResultUpdate?.(status as Exclude<BannerStatus, 'skipped'>, details);
     }
   }, []);
 
   const emitRich = useCallback((payload: TestResultPayload) => {
     setResult(payload);
-    if (payload.status !== 'skipped' && payload.status !== 'unsupported') {
+    if (forwardRichResult(payload.status)) {
+      // Type guard narrows payload.status to ForwardableStatus, satisfying
+      // each tester's own narrower onRecordResult prop type.
       optsRef.current.onRecordResult?.(payload as { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> });
     }
   }, []);

@@ -20,7 +20,7 @@ test('i18n - Dictionary completeness', () => {
   const en = getDictionary();
 
   // Verify core top-level keys exist
-  const sections = ['common', 'nav', 'hero', 'landing', 'permissionPrompt', 'micTest', 'webcamTest', 'keyboardTest', 'mouseTest', 'speakersTest', 'displayTest', 'gamepadTest', 'batteryTest', 'inspection', 'report', 'pricing', 'seo', 'footer'] as const;
+  const sections = ['common', 'nav', 'hero', 'landing', 'permissionPrompt', 'micTest', 'webcamTest', 'keyboardTest', 'mouseTest', 'speakersTest', 'displayTest', 'gamepadTest', 'batteryTest', 'inspection', 'report', 'seo', 'footer'] as const;
 
   for (const s of sections) {
     assert.ok(en[s], `Missing section ${s} in English dictionary`);
@@ -28,6 +28,14 @@ test('i18n - Dictionary completeness', () => {
 
   // Verify footer copyright was updated (no "2026" year mention)
   assert.ok(!en.footer.copyright.includes('2026'), 'Footer copyright should not mention a year');
+});
+
+test('i18n - No obsolete paid-tier or account claims remain', () => {
+  const en = getDictionary();
+  const all = JSON.stringify(en).toLowerCase();
+  for (const banned of ['stripe', 'upgrade to pro', 'pro workspace', 'subscription', 'billing', 'sync to pro', '$9']) {
+    assert.ok(!all.includes(banned), `Dictionary must not contain obsolete claim: "${banned}"`);
+  }
 });
 
 test('i18n - No language mentions in site chrome or SEO', () => {

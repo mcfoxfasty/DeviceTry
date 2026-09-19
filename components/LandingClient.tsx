@@ -67,7 +67,7 @@ const faqs = [
   },
   {
     q: 'Does DeviceTry record or store my video or audio streams?',
-    a: 'Never. All video feeds, microphone waveforms, key strokes, and audio playback are executed completely in your local browser client memory. Streams are never transmitted to our servers or any third-party cloud. When you close the browser tab, all media tracks are immediately destroyed.',
+    a: 'Never. All video feeds, microphone waveforms, key strokes, and audio playback are executed completely in your local browser client memory. Streams are never transmitted to our servers or any third-party cloud. Optional recordings you create (mic samples, snapshots) are processed locally and can be downloaded to your device — nothing is kept unless you save it yourself. Inspection history is stored in this browser\'s local storage and never leaves your machine.',
   },
   {
     q: 'Why should I run tests before a Zoom, Google Meet, or Microsoft Teams call?',
@@ -99,7 +99,7 @@ const faqs = [
   },
   {
     q: 'Is it really free, and do I need to create an account?',
-    a: 'Every tester and the guided inspection are completely free with no account, email, or credit card required. An optional Pro plan exists for teams who need cloud-saved inspection history, device inventory, and branded reports — but nothing about the free tier is time-limited or feature-locked.',
+    a: 'Every tester and the guided inspection are completely free with no account, email, or credit card required — and there is no paid tier. Nothing is time-limited or feature-locked.',
   },
 ];
 

@@ -5,10 +5,16 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
 
+/**
+ * Fixed, human-controlled revision date. Do not compute from build time —
+ * the text must only change when the policy itself is actually revised.
+ */
+const POLICY_REVISED = 'September 18, 2026';
+
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: 'Privacy Policy — DeviceTry',
-    description: 'DeviceTry privacy policy: Zero cloud audio/video storage, client-side browser testing, and GDPR compliance.',
+    description: 'DeviceTry privacy policy: client-side browser testing, local storage of inspection history, and how optional recordings are handled.',
   };
 }
 
@@ -30,27 +36,41 @@ export default function PrivacyPage() {
               DeviceTry Privacy Policy
             </h1>
             <p className="mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
-              Effective Date: {new Date().toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Revised: {POLICY_REVISED}
             </p>
           </div>
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <Lock className="w-4 h-4 text-[#0F766E]" />
-              1. Zero Cloud Audio & Video Streaming
+              1. Media Streams Stay in Your Browser
             </h2>
             <p>
-              When you test your microphone, webcam, or speakers on DeviceTry, your audio waveforms and video feeds are processed strictly inside your computer’s browser memory via local WebRTC and Web Audio APIs. We never record, stream, save, or transmit your media streams to any server.
+              When you test your microphone, webcam, or speakers on DeviceTry, the audio and video signals are
+              analyzed strictly inside your browser, on your device, using standard Web APIs (WebRTC, Web Audio,
+              MediaRecorder). DeviceTry has no server that receives your media: live streams are never uploaded
+              or transmitted to us.
+            </p>
+            <p>
+              Some testers let <em>you</em> create a recording for your own review — for example, a short
+              microphone sample, a webcam snapshot, or a voice memo. These recordings are created and processed
+              locally in your browser. They are never sent to DeviceTry. If you choose to keep one, you can
+              download it to your own device; if you don&rsquo;t, it is discarded when you close or reload the page.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-[#0F766E]" />
-              2. Local Browser Storage
+              2. Inspection History Is Stored in This Browser
             </h2>
             <p>
-              All hardware inspection history records for free tools are kept entirely in your device’s local browser storage. You can clear this data at any moment with the single click of the &ldquo;Clear All&rdquo; button in the Local History tab.
+              Completed guided inspections are saved in your browser&rsquo;s local storage on this device, so you
+              can review or print past reports without an account. This history is stored only in this browser:
+              it is not synchronized anywhere and DeviceTry cannot see it. You can erase it at any time with the
+              &ldquo;Clear All&rdquo; control in the inspection history, or by clearing your browser&rsquo;s site
+              data. Note that clearing browser data also removes saved inspections — keep a printed copy or a
+              downloaded report if you need a durable record.
             </p>
           </section>
 
@@ -60,17 +80,24 @@ export default function PrivacyPage() {
               3. No Tracking or Invasive Telemetry
             </h2>
             <p>
-              We do not sell personal data, inject third-party ad trackers, or perform biometric surveillance. DeviceTry exists to provide instant, accessible hardware verification for professionals, remote workers, and technicians.
+              We do not sell personal data, inject third-party ad trackers, or perform biometric surveillance.
+              DeviceTry exists to provide instant, accessible hardware verification for professionals, remote
+              workers, and technicians.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <Globe className="w-4 h-4 text-[#0F766E]" />
-              4. Contact & Compliance
+              4. Contact
             </h2>
             <p>
-              If you have any questions regarding privacy or browser permissions handling, you can contact us at privacy@devicetry.com.
+              DeviceTry is a fully client-side website and does not operate a message inbox. The{' '}
+              <a href="/contact" className="text-[#0F766E] dark:text-[#14B8A6] hover:underline font-semibold">
+                contact page
+              </a>{' '}
+              explains how to prepare your question locally so you can send it to us from your own email
+              application. We do not promise a specific response time.
             </p>
           </section>
         </div>

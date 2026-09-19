@@ -3,7 +3,13 @@ import { Metadata } from 'next';
 import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { FileText, ShieldCheck } from 'lucide-react';
+import { FileText } from 'lucide-react';
+
+/**
+ * Fixed, human-controlled revision date. Do not compute from build time —
+ * the text must only change when the terms themselves are actually revised.
+ */
+const TERMS_REVISED = 'September 18, 2026';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -30,7 +36,7 @@ export default function TermsPage() {
               DeviceTry Terms of Service
             </h1>
             <p className="mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
-              Last Updated: {new Date().toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Revised: {TERMS_REVISED}
             </p>
           </div>
 
@@ -54,7 +60,29 @@ export default function TermsPage() {
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4]">
-              3. Disclaimer of Warranties
+              3. Free Service — No Paid Tiers
+            </h2>
+            <p>
+              Every diagnostic tool and the guided inspection are provided free of charge. There are no
+              subscriptions, paid tiers, or premium features. DeviceTry does not process payments and does not
+              require an account.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4]">
+              4. Local Data and Recordings
+            </h2>
+            <p>
+              Inspection history is stored in your browser&rsquo;s local storage on your device. Any test
+              recordings or snapshots are created locally in your browser and are only kept if you explicitly
+              download them. DeviceTry does not receive, store, or process this data on any server.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4]">
+              5. Disclaimer of Warranties
             </h2>
             <p>
               DeviceTry is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo; without warranties of any kind. DeviceTry disclaims all representations and warranties regarding hardware lifespan, used computer purchase disputes, or manufacturer defect claims.
@@ -63,7 +91,7 @@ export default function TermsPage() {
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4]">
-              4. Governing Law
+              6. Governing Law
             </h2>
             <p>
               These terms are governed by and construed in accordance with applicable laws without regard to conflict of law principles.

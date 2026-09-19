@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Monitor, Maximize, CheckCircle, AlertTriangle, Eye, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface DisplayTesterProps {
   t: Translations;
@@ -18,6 +19,9 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const [userObservation, setUserObservation] = useState<'clean' | 'pixels_found' | 'bleed_found' | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // In-card verdict banner — forwards to the guided-inspection report as before.
+  const { result, emitRich, clear } = useTestResult({ onRecordResult });
 
   // Measure browser display refresh rate accurately
   useEffect(() => {
@@ -71,7 +75,7 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const recordObservation = (obs: 'clean' | 'pixels_found' | 'bleed_found') => {
     setUserObservation(obs);
     const passed = obs === 'clean';
-    onRecordResult?.({
+    emitRich({
       status: passed ? 'passed' : 'warning',
       details: `User visual observation: ${obs}. Measured Refresh Rate: ${measuredHz}Hz`,
       metrics: { observation: obs, measuredRefreshRateHz: measuredHz },
@@ -209,6 +213,9 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
           </button>
         </div>
       </div>
+
+      {/* Test result — in-card, directly under the test + observation area */}
+      <TestResultBanner result={result} onClear={clear} />
 
       <p className="text-[11px] text-[#8996A6] mt-3 italic">
         {t.displayTest.refreshRateNotice}
