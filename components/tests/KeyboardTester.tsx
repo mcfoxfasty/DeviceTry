@@ -124,7 +124,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
 ];
 
 export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
   const [isTestActive, setIsTestActive] = useState<boolean>(false);
   const [layout, setLayout] = useState<LayoutType>('qwerty');
   const [pressedCodes, setPressedCodes] = useState<Set<string>>(new Set());
@@ -132,10 +132,23 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
   const [lastKey, setLastKey] = useState<{ key: string; code: string; keyCode: number } | null>(null);
 
   const isTestActiveRef = useRef<boolean>(false);
+  // Run token: keypress emissions captured before a reset/new run are ignored.
+  const runTokenRef = useRef<number>(0);
+  const emitRunRichRef = useRef(emitRunRich);
 
   useEffect(() => {
     isTestActiveRef.current = isTestActive;
   }, [isTestActive]);
+
+  useEffect(() => {
+    emitRunRichRef.current = emitRunRich;
+  }, [emitRunRich]);
+
+  useEffect(() => {
+    // Reset marks a new run; capture its token so stale keydown callbacks from
+    // the previous run are rejected.
+    runTokenRef.current = startRun();
+  }, [startRun]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -154,7 +167,7 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
 
       setPressedCodes((prev) => {
         const next = new Set(prev).add(e.code);
-        emitRich({
+        emitRunRichRef.current(runTokenRef.current, {
           status: 'passed',
           details: `${next.size} keys verified response without ghosting.`,
           metrics: { totalKeysTested: next.size },
@@ -182,12 +195,16 @@ export function KeyboardTester({ t, onRecordResult }: KeyboardTesterProps) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [onRecordResult]);
+  }, []);
 
   const resetAllKeys = () => {
+    setIsTestActive(false);
     setPressedCodes(new Set());
     setActiveCodes(new Set());
     setLastKey(null);
+    // Invalidate the verdict: a reset run is not a passed run. The effect on
+    // startRun below refreshes the token (its identity is stable).
+    reset();
   };
 
   return (

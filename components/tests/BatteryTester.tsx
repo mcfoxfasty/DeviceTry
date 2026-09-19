@@ -20,31 +20,32 @@ interface BatteryManager {
 }
 
 export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+  const { result, emitRunRich, clear, startRun } = useTestResult({ onRecordResult });
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState<boolean | null>(null);
   const [chargingTime, setChargingTime] = useState<number | null>(null);
   const [dischargingTime, setDischargingTime] = useState<number | null>(null);
 
-  const onRecordResultRef = useRef(onRecordResult);
+  // Run token: battery change events arriving after unmount (or captured
+  // before a new run) cannot restore a stale verdict.
+  const runTokenRef = useRef<number>(0);
+
   useEffect(() => {
-    onRecordResultRef.current = onRecordResult;
-  }, [onRecordResult]);
+    runTokenRef.current = startRun();
+  }, [startRun]);
 
   useEffect(() => {
     let batteryManager: BatteryManager | null = null;
+    let unmounted = false;
+    let updateStatus: (() => void) | null = null;
 
     const initBattery = async () => {
       const nav = navigator as unknown as { getBattery?: () => Promise<BatteryManager> };
 
       if (!nav.getBattery) {
         setIsSupported(false);
-        onRecordResultRef.current?.({
-          status: 'unsupported',
-          details: 'Battery Status API is not exposed by this browser engine.',
-        });
-        emitRich({
+        emitRunRich(runTokenRef.current, {
           status: 'unsupported',
           details: 'Battery Status API is not exposed by this browser engine.',
         });
@@ -53,17 +54,21 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
 
       try {
         const battery = await nav.getBattery();
+        if (unmounted) {
+          return;
+        }
         batteryManager = battery;
         setIsSupported(true);
 
-        const updateStatus = () => {
+        updateStatus = () => {
+          if (unmounted) return;
           const currentLevel = Math.round(battery.level * 100);
           setLevel(currentLevel);
           setIsCharging(battery.charging);
           setChargingTime(battery.chargingTime);
           setDischargingTime(battery.dischargingTime);
 
-          emitRich({
+          emitRunRich(runTokenRef.current, {
             status: 'passed',
             details: `Battery level: ${currentLevel}%, Charging: ${battery.charging ? 'Yes' : 'No'}`,
             metrics: {
@@ -80,15 +85,22 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
         battery.addEventListener('chargingtimechange', updateStatus);
         battery.addEventListener('dischargingtimechange', updateStatus);
       } catch {
-        setIsSupported(false);
+        if (!unmounted) setIsSupported(false);
       }
     };
 
     initBattery();
 
     return () => {
-      // cleanup listeners
+      unmounted = true;
+      if (batteryManager && updateStatus) {
+        batteryManager.removeEventListener('chargingchange', updateStatus);
+        batteryManager.removeEventListener('levelchange', updateStatus);
+        batteryManager.removeEventListener('chargingtimechange', updateStatus);
+        batteryManager.removeEventListener('dischargingtimechange', updateStatus);
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only battery subscription; emissions go through the run-token guard
   }, []);
 
   return (

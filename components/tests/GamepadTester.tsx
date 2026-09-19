@@ -35,7 +35,10 @@ const BUTTON_LABELS = [
 ];
 
 export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+  const { result, emitRunRich, clear, startRun } = useTestResult({ onRecordResult });
+  // Run token: emissions from the rAF polling loop or the calibration timeout
+  // captured before a device change are ignored.
+  const runTokenRef = useRef<number>(0);
   const [gamepads, setGamepads] = useState<{ id: string; index: number; buttons: number[]; axes: number[] }[]>([]);
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
   const [isCalibratingNeutral, setIsCalibratingNeutral] = useState<boolean>(false);
@@ -44,6 +47,12 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
 
   const calibrationSamplesRef = useRef<{ leftMax: number; rightMax: number }[]>([]);
   const isCalibratingRef = useRef<boolean>(false);
+
+  const emitRunRichRef = useRef(emitRunRich);
+
+  useEffect(() => {
+    emitRunRichRef.current = emitRunRich;
+  }, [emitRunRich]);
 
   useEffect(() => {
     let animId: number;
@@ -84,7 +93,7 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
 
         if (active.length > 0 && !isCalibratingRef.current) {
           const current = active.find((p) => p.index === selectedPadIndex) || active[0];
-          emitRich({
+          emitRunRichRef.current(runTokenRef.current, {
             status: 'passed',
             details: `Controller active: ${current.id}. Buttons & axes polling correctly.`,
             metrics: { padId: current.id, buttonCount: current.buttons.length },
@@ -98,7 +107,13 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
     animId = requestAnimationFrame(pollGamepads);
 
     return () => cancelAnimationFrame(animId);
-  }, [selectedPadIndex, vibrationSupported, onRecordResult]);
+  }, [selectedPadIndex, vibrationSupported]);
+
+  // New device selection = new observation run: the old run's verdict must not
+  // linger and a stale poll frame must not restore it.
+  useEffect(() => {
+    runTokenRef.current = startRun();
+  }, [selectedPadIndex, startRun]);
 
   // Neutral Drift Calibration Test (Observed 2.5 seconds while idle)
   const startNeutralCalibration = () => {
@@ -119,7 +134,7 @@ export function GamepadTester({ t, onRecordResult }: GamepadTesterProps) {
         const hasDrift = maxLeft > 0.12 || maxRight > 0.12;
         setNeutralCalibrationPassed(!hasDrift);
 
-        emitRich({
+        emitRunRich(runTokenRef.current, {
           status: hasDrift ? 'warning' : 'passed',
           details: hasDrift
             ? `Idle stick resting offset exceeded 12% deadzone (Left: ${(maxLeft * 100).toFixed(1)}%, Right: ${(maxRight * 100).toFixed(1)}%).`

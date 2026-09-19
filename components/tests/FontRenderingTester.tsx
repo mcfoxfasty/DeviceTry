@@ -25,7 +25,6 @@ const SAMPLES: { label: string; text: string; className?: string }[] = [
     label: 'Arabic — RTL shaping & ligatures',
     text: 'النص العربي جميل وواضح — فحص نقاء الخطوط والتنعيم الفرعي للبيكسل',
     className: 'rtl text-right',
-    // eslint-disable-next-line react-hooks/immutability
   },
 ];
 

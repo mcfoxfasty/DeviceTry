@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Play, Square, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -26,15 +26,15 @@ export function ContrastCheckerTester({ onResultUpdate }: ToolComponentProps) {
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
   };
 
-  const computeRatio = (fg: string, bg: string): number => {
+  const computeRatio = useCallback((fg: string, bg: string): number => {
     const l1 = getLuminance(fg);
     const l2 = getLuminance(bg);
     const lighter = Math.max(l1, l2);
     const darker = Math.min(l1, l2);
     return parseFloat(((lighter + 0.05) / (darker + 0.05)).toFixed(2));
-  };
+  }, []);
 
-  const contrastRatio = useMemo(() => computeRatio(fgColor, bgColor), [fgColor, bgColor]);
+  const contrastRatio = useMemo(() => computeRatio(fgColor, bgColor), [fgColor, bgColor, computeRatio]);
 
   useEffect(() => {
     const passed = contrastRatio >= 4.5 ? 'passed' : contrastRatio >= 3.0 ? 'warning' : 'failed';

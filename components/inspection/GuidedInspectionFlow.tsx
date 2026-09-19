@@ -64,6 +64,11 @@ export function GuidedInspectionFlow({
   const [deviceLabel, setDeviceLabel] = useState<string>('');
   const [operatorName, setOperatorName] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  // Set when saving the local report fails (quota exceeded / storage disabled):
+  // shown honestly in the finished-report UI instead of being swallowed.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Guards the async save attempt against a New Inspection reset in flight.
+  const saveRunRef = useRef<number>(0);
 
   // Results tracker
   const [results, setResults] = useState<Record<string, TestResultItem>>({});
@@ -78,9 +83,11 @@ export function GuidedInspectionFlow({
   const isFinished = activeStepIndex >= suite.steps.length;
 
   const startSuite = () => {
+    saveRunRef.current += 1;
     setActiveStepIndex(0);
     setResults({});
     resultsRef.current = {};
+    setSaveError(null);
   };
 
   const handleStepResult = (
@@ -102,6 +109,27 @@ export function GuidedInspectionFlow({
       resultsRef.current = next;
       return next;
     });
+  };
+
+  const persistOnFinish = (currentResults: Record<string, TestResultItem>) => {
+    const finalStatus = calculateReportStatus(suite.steps, currentResults);
+    const saveRun = ++saveRunRef.current;
+    const savedItem = saveLocalInspection({
+      locale: 'en',
+      deviceLabel: deviceLabel || 'Device',
+      operatorName: operatorName || 'Visitor',
+      summaryStatus: finalStatus,
+      testsResults: currentResults,
+      notes,
+    });
+    // saveLocalInspection returns saved:false when localStorage rejected the
+    // write (quota exceeded, disabled storage). Surface it honestly — never
+    // claim the report was stored when it was not.
+    if (!savedItem.saved && saveRun === saveRunRef.current) {
+      setSaveError(
+        'This inspection could NOT be saved to your browser history. Local storage is unavailable or full — use Print / Save as PDF or Export JSON to keep a copy.'
+      );
+    }
   };
 
   const nextStep = () => {
@@ -127,15 +155,7 @@ export function GuidedInspectionFlow({
 
     if (nextIdx >= suite.steps.length) {
       // Auto-save to local history on completion with newly updated complete test results
-      const finalStatus = calculateReportStatus(suite.steps, currentResults);
-      saveLocalInspection({
-        locale: 'en',
-        deviceLabel: deviceLabel || 'Device',
-        operatorName: operatorName || 'Visitor',
-        summaryStatus: finalStatus,
-        testsResults: currentResults,
-        notes,
-      });
+      persistOnFinish(currentResults);
     }
   };
 
@@ -156,15 +176,7 @@ export function GuidedInspectionFlow({
     setActiveStepIndex(nextIdx);
 
     if (nextIdx >= suite.steps.length) {
-      const finalStatus = calculateReportStatus(suite.steps, currentResults);
-      saveLocalInspection({
-        locale: 'en',
-        deviceLabel: deviceLabel || 'Device',
-        operatorName: operatorName || 'Visitor',
-        summaryStatus: finalStatus,
-        testsResults: currentResults,
-        notes,
-      });
+      persistOnFinish(currentResults);
     }
   };
 
@@ -391,6 +403,15 @@ export function GuidedInspectionFlow({
         <div className="space-y-6">
           {/* Action Ribbon (Print / Reset) */}
           <div className="no-print bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-4 flex flex-wrap items-center justify-between gap-4">
+            {saveError && (
+              <div
+                role="alert"
+                className="w-full p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-medium flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <button
                 id="btn-print-report"
@@ -403,7 +424,15 @@ export function GuidedInspectionFlow({
             </div>
 
             <button
-              onClick={() => setActiveStepIndex(-1)}
+              onClick={() => {
+                // Invalidate any in-flight save attempt and clear the flow's
+                // own state so a new inspection starts clean.
+                saveRunRef.current += 1;
+                setResults({});
+                resultsRef.current = {};
+                setSaveError(null);
+                setActiveStepIndex(-1);
+              }}
               className="px-4 py-2 text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />

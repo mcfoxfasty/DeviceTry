@@ -16,7 +16,7 @@ interface MicrophoneTesterProps {
 }
 
 export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
@@ -40,6 +40,9 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   const recordedAudioUrlRef = useRef<string | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Run token: emissions from getUserMedia resolutions, timers, or rAF loops
+  // captured before a stop/device-change/reset are ignored.
+  const runTokenRef = useRef<number>(0);
 
   // Load audio input devices list
   const loadDevices = async () => {
@@ -57,6 +60,11 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   };
 
   const stopMicrophone = () => {
+    // Invalidate the current run first so any in-flight getUserMedia
+    // resolution, recorder stop, or rAF callback cannot restore an old verdict.
+    reset();
+    runTokenRef.current = startRun();
+
     // 1. Cancel animation frame loop
     if (animationFrameRef.current !== null) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -138,7 +146,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
 
       drawWaveform();
 
-      emitRich({
+      emitRunRich(runTokenRef.current, {
         status: 'passed',
         details: 'Browser audio input stream active. Signal level and waveform measured.',
         metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label || 'Microphone' },
@@ -156,7 +164,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);
       }
-      emitRich({
+      emitRunRich(runTokenRef.current, {
         status: 'failed',
         details: error.message || 'Microphone access failed.',
       });
@@ -286,7 +294,9 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     }
   };
 
-  // Unmount & route cleanup
+  // Unmount & route cleanup. stopMicrophone is a stable closure over refs and
+  // stable controller functions, so listing it here would not change behavior
+  // and would only risk re-running cleanup if its identity ever changed.
   useEffect(() => {
     return () => {
       stopMicrophone();
@@ -295,6 +305,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
         recordedAudioUrlRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only cleanup for refs and stable controller functions
   }, []);
 
   return (

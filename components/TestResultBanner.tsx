@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ClipboardCheck, RotateCcw } from 'lucide-react';
-import {
-  BannerStatus,
-  ForwardableStatus,
-  forwardGenericResult,
-  forwardRichResult,
-} from '@/lib/testing/resultPolicy';
+import { BannerStatus } from '@/lib/testing/resultPolicy';
+import { ResultController, ResultSink } from '@/lib/testing/resultController';
 
 export type { BannerStatus } from '@/lib/testing/resultPolicy';
 
@@ -112,47 +108,68 @@ export function TestResultBanner({ result, onClear, variant = 'card' }: TestResu
   );
 }
 
-interface UseTestResultOptions {
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
-  /** Forwarded host callback — narrowed by forwardRichResult() so each
-   *  tester's own onRecordResult prop is assignable directly. */
-  onRecordResult?: (result: { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> }) => void;
-}
-
 /**
  * Captures a tester's result emissions so they can be shown in-card while
  * still forwarding them to host flows (guided inspection, report building).
+ * Forwarding policy, run-guarding, and dedupe live in ResultController.
  * - `emit`   → for testers that report (status, details) pairs.
  * - `emitRich` → for the flagship testers that report a full payload.
+ * - `emitRun`/`emitRunRich` → token-checked variants for delayed callbacks.
+ * - `reset`/`clear` → clears the verdict and invalidates stale callbacks.
  */
-export function useTestResult(opts: UseTestResultOptions) {
+export function useTestResult(opts: ResultSink) {
   const [result, setResult] = useState<TestResultPayload | null>(null);
-  const optsRef = useRef(opts);
-  optsRef.current = opts;
+
+  // The controller is created once via the useState initializer — never
+  // accessed during render — and its callbacks are refreshed in an effect.
+  const [controller] = useState(() => new ResultController({}));
+
+  useEffect(() => {
+    controller.setSink(opts);
+  }, [opts, controller]);
 
   const emit = useCallback((status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
+    controller.emit(status, details, metrics);
     setResult({ status, details: details ?? '', metrics });
-    if (forwardGenericResult(status)) {
-      optsRef.current.onResultUpdate?.(status as Exclude<BannerStatus, 'skipped'>, details);
+  }, [controller]);
+
+  const emitRun = useCallback((runToken: number, status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
+    const outcome = controller.emitRun(runToken, status, details, metrics);
+    if (outcome.accepted) {
+      setResult({ status, details: details ?? '', metrics });
     }
-  }, []);
+  }, [controller]);
 
   const emitRich = useCallback((payload: TestResultPayload) => {
+    controller.emitRich(payload);
     setResult(payload);
-    if (forwardRichResult(payload.status)) {
-      // Type guard narrows payload.status to ForwardableStatus, satisfying
-      // each tester's own narrower onRecordResult prop type.
-      optsRef.current.onRecordResult?.(payload as { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> });
+  }, [controller]);
+
+  const emitRunRich = useCallback((runToken: number, payload: TestResultPayload) => {
+    const outcome = controller.emitRunRich(runToken, payload);
+    if (outcome.accepted) {
+      setResult(payload);
     }
-  }, []);
+  }, [controller]);
 
-  const clear = useCallback(() => setResult(null), []);
+  /**
+   * Clear the visible verdict AND invalidate every token captured by this
+   * run: a late timer, animation frame, permission response, or device-change
+   * callback can no longer restore an old result. Starting the next run
+   * calls startRun() again, so verdicts never leak between runs.
+   */
+  const reset = useCallback(() => {
+    controller.reset();
+    setResult(null);
+  }, [controller]);
 
-  return { result, emit, emitRich, clear };
+  /** Compatibility alias used by existing testers. */
+  const clear = reset;
+
+  return { result, emit, emitRun, emitRich, emitRunRich, clear, reset, startRun: () => controller.startRun() };
 }
 
 interface TesterWithBannerProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tester: React.ComponentType<any>;
   /** Props to pass through to the tester (t, locale, etc). */
   testerProps: Record<string, unknown>;
@@ -165,12 +182,12 @@ interface TesterWithBannerProps {
  * every tester on the site shows its verdict directly under the test area.
  */
 export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate }: TesterWithBannerProps) {
-  const { result, emit, clear } = useTestResult({ onResultUpdate });
+  const { result, emit, reset } = useTestResult({ onResultUpdate });
 
   return (
     <div className="w-full">
       <Tester {...testerProps} onResultUpdate={emit} />
-      <TestResultBanner result={result} onClear={clear} variant="attached" />
+      <TestResultBanner result={result} onClear={reset} variant="attached" />
     </div>
   );
 }

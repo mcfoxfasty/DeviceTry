@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, RefreshCw, Volume2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -19,16 +19,21 @@ export function VoiceRecorderTester({ t, onResultUpdate }: ToolComponentProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [supportedMime, setSupportedMime] = useState<string>('audio/webm');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined') {
       const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      let detected = 'audio/webm';
       for (const type of types) {
         if (MediaRecorder.isTypeSupported(type)) {
-          setSupportedMime(type);
+          detected = type;
           break;
         }
       }
+      // setState is deferred to a microtask so the effect body stays free of
+      // synchronous cascading renders (react-hooks/set-state-in-effect).
+      Promise.resolve().then(() => setSupportedMime(detected));
     }
   }, []);
 
@@ -49,9 +54,30 @@ export function VoiceRecorderTester({ t, onResultUpdate }: ToolComponentProps) {
     return () => {
       if (interval) clearInterval(interval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- timer re-arms on recording state; stopRecording reads fresh state at call time
   }, [isRecording, isPaused]);
 
-  // Clean up object URLs
+  // Unmount-only cleanup of the media recorder. The recorder instance lives in
+  // a ref synced via effect, so the unmount callback never needs the
+  // state-dependent function and never holds a stale node.
+  const mediaRecorderUnmountRef = useRef<MediaRecorder | null>(null);
+  useEffect(() => {
+    mediaRecorderUnmountRef.current = mediaRecorder;
+  }, [mediaRecorder]);
+  useEffect(() => {
+    const recorderAtUnmount = mediaRecorderUnmountRef.current;
+    return () => {
+      if (recorderAtUnmount && recorderAtUnmount.state !== 'inactive') {
+        try {
+          recorderAtUnmount.stop();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  // Clean up object URLs on replacement and unmount
   useEffect(() => {
     return () => {
       if (audioUrl) {

@@ -21,7 +21,19 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // In-card verdict banner — forwards to the guided-inspection report as before.
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
+  const runTokenRef = useRef<number>(0);
+  const emitRunRichRef = useRef(emitRunRich);
+
+  useEffect(() => {
+    emitRunRichRef.current = emitRunRich;
+  }, [emitRunRich]);
+
+  // Start-of-life run token: the refresh-rate rAF loop is mounted once and its
+  // emissions are guarded against reset/new-run invalidation.
+  useEffect(() => {
+    runTokenRef.current = startRun();
+  }, [startRun]);
 
   // Measure browser display refresh rate accurately
   useEffect(() => {
@@ -75,11 +87,19 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const recordObservation = (obs: 'clean' | 'pixels_found' | 'bleed_found') => {
     setUserObservation(obs);
     const passed = obs === 'clean';
-    emitRich({
+    emitRunRich(runTokenRef.current, {
       status: passed ? 'passed' : 'warning',
       details: `User visual observation: ${obs}. Measured Refresh Rate: ${measuredHz}Hz`,
       metrics: { observation: obs, measuredRefreshRateHz: measuredHz },
     });
+  };
+
+  /** Clear the observation and the verdict: starting over must not keep the
+   *  previous run's result, and stale re-emissions cannot restore it. */
+  const startNewTest = () => {
+    setUserObservation(null);
+    reset();
+    runTokenRef.current = startRun();
   };
 
   const getPatternBgClass = (pattern: PatternType) => {
@@ -213,6 +233,17 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
           </button>
         </div>
       </div>
+
+      {/* Clear observation + verdict so a new run never shows the old result */}
+      {userObservation !== null && (
+        <button
+          onClick={startNewTest}
+          className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Start New Test
+        </button>
+      )}
 
       {/* Test result — in-card, directly under the test + observation area */}
       <TestResultBanner result={result} onClear={clear} />

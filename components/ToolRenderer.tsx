@@ -67,7 +67,6 @@ interface ToolRendererProps {
  * their prop types, so the map is typed loosely and the rich/flagship split
  * below applies the correct callbacks per tester.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const TESTER_COMPONENTS: Record<string, React.ComponentType<any>> = {
   MicrophoneTester,
   WebcamTester,
