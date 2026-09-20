@@ -1,30 +1,28 @@
 import { TOOLS_REGISTRY, ToolDefinition } from './registry';
 
 /**
- * Lenient tool search for the landing page search bar.
+ * Landing-page tool search: strong matches first, fuzzy fallback second.
  *
- * The previous implementation was a strict substring match of the raw query
- * against title/shortDesc/keywords, which made the search bar feel broken for
- * any query that was not an exact substring:
- * - word order:   "mirror camera"    -> 0 results
- * - extra words:  "test my mic"      -> 0 results
- * - typos:        "microfon"         -> 0 results
- * - spacing:      "dead pixel" ok, "deadpixel" -> 0 results
- *
- * Matching strategy (per query token, AND across tokens):
- * 1. Exact/prefix word match on the tool's own words — highest score.
- * 2. Token containment (a query token inside a tool word or vice versa).
- * 3. Single-edit typo tolerance (1 substitution/insertion/deletion or a
- *    transposition) — bounded Levenshtein distance <= 1 against tool words.
- *
- * A tool matches when EVERY query token matches one of its words. Scoring
- * rewards title hits over keyword hits so the best matches sort first.
+ * Rules (per product spec):
+ * - Strong matches: exact title/keyword/alias word, prefix, substring.
+ * - Fuzzy fallback (only when no strong match exists for the token):
+ *   edit distance 1 for medium words (>=5), distance 2 for long words (>=8),
+ *   NEVER distance 3.
+ * - Fuzzy applies ONLY to title, keyword, and alias words — never to
+ *   description words, which caused false positives ("battery" -> Display
+ *   Patterns via the description word "patterns").
+ * - Stop words and negation words ("not working") are stripped from natural
+ *   queries like "my mic is not working".
+ * - Multi-device queries ("camera and microphone test") rank tools matching
+ *   more query tokens higher instead of returning zero.
  */
 
 export interface ToolSearchHit {
   tool: ToolDefinition;
   /** Higher is better. Same score -> original registry order is preserved. */
   score: number;
+  /** Query tokens the tool matched, for multi-device ranking/debugging. */
+  matchedTokens: string[];
 }
 
 /** Bounded Levenshtein: returns true when edit distance <= maxDist. */
@@ -32,7 +30,6 @@ export function withinEditDistance(a: string, b: string, maxDist: number): boole
   if (Math.abs(a.length - b.length) > maxDist) return false;
   if (a === b) return true;
 
-  // Classic DP row, early-exits when the row minimum exceeds maxDist.
   let prev = new Array<number>(b.length + 1);
   let curr = new Array<number>(b.length + 1);
   for (let j = 0; j <= b.length; j++) prev[j] = j;
@@ -42,11 +39,7 @@ export function withinEditDistance(a: string, b: string, maxDist: number): boole
     let rowMin = curr[0];
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(
-        prev[j] + 1, // deletion
-        curr[j - 1] + 1, // insertion
-        prev[j - 1] + cost // substitution
-      );
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
       if (curr[j] < rowMin) rowMin = curr[j];
     }
     if (rowMin > maxDist) return false;
@@ -55,8 +48,8 @@ export function withinEditDistance(a: string, b: string, maxDist: number): boole
   return prev[b.length] <= maxDist;
 }
 
-/** Lowercase word tokens of a string (apostrophes kept, punctuation dropped). */
-function tokenize(text: string): string[] {
+/** Lowercase word tokens of a string (punctuation dropped, hyphens split). */
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9\u00C0-\u024F\u0600-\u06FF\s-]/g, ' ')
@@ -65,173 +58,224 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Common filler words that carry no diagnostic meaning. They are stripped
- * from queries so "test my mic" and "check webcam online" still resolve.
+ * Filler words that carry no diagnostic meaning in natural queries
+ * ("I want to test my camera"). Stripped before matching.
  */
 const STOP_WORDS = new Set([
-  'test', 'tests', 'tester', 'check', 'checker', 'online', 'free', 'my', 'a',
-  'an', 'the', 'for', 'of', 'is', 'it', 'to', 'tool', 'tools', 'diagnostic',
-  'diagnostics', 'scan', 'diagnose', 'verify', 'detect',
+  'test', 'tests', 'tester', 'check', 'checks', 'checker', 'checking',
+  'online', 'free', 'my', 'me', 'i', 'want', 'need', 'to', 'a', 'an', 'the',
+  'for', 'of', 'is', 'it', 'its', 'this', 'that', 'if', 'does', 'do',
+  'doesnt', 'isnt', 'not', 'working', 'work', 'works', 'and', 'or', 'with',
+  'on', 'in', 'how', 'can', 'will', 'should', 'laptop', 'computer', 'pc',
+  'device', 'tool', 'tools', 'diagnostic', 'diagnostics', 'scan', 'verify',
+  'detect', 'please', 'help',
 ]);
+
+/**
+ * Explicit search aliases per tool slug: synonyms and common misspellings
+ * that edit-distance cannot reach ("camera" vs "webcam", "microfon" vs
+ * "microphone", "print screen" style guesses). Aliases are strong-match
+ * surfaces — exact word, prefix, and substring — and the ONLY place where
+ * tokens not present in the tool's own text can match.
+ */
+const TOOL_ALIASES: Record<string, string[]> = {
+  'microphone-test': ['mic', 'mics', 'microfon', 'microfone', 'mikrofon', 'voice input', 'audio input'],
+  'webcam-test': ['camera', 'cam', 'cams', 'video call', 'kamera', 'cammera', 'facetime'],
+  'online-mirror': ['mirror', 'selfie', 'self view', 'selfview'],
+  'speakers-test': ['speaker', 'speakers', 'sound', 'audio output', 'stereo', 'headphone', 'headphones', 'left right'],
+  'voice-recorder': ['recording', 'record audio', 'dictaphone'],
+  'keyboard-test': ['key', 'keys', 'keybord', 'keeb', 'typing', 'ghosting'],
+  'mouse-test': ['click', 'clicks', 'buttons', 'scroll', 'scrollwheel', 'double click'],
+  'click-counter-test': ['cps', 'clicker', 'click speed'],
+  'gamepad-test': ['gamepad', 'controller', 'game controller', 'joypad', 'joystick', 'xbox', 'playstation', 'ps5'],
+  'battery-monitor': ['battery', 'batterie', 'charge', 'charging', 'power level'],
+  'dead-pixel-test': ['dead pixel', 'pixels', 'stuck pixel', 'deadpixel', 'screen defect'],
+  'display-fps-test': ['fps', 'refresh rate', 'hertz', 'hz', 'frames'],
+  'screen-resolution-test': ['resolution', 'screen size', 'display size', 'ppi'],
+  'gyroscope-test': ['gyro', 'orientation', 'tilt'],
+  'accelerometer-test': ['acceleration', 'motion sensor', 'shake'],
+  'touchscreen-test': ['touch screen', 'touch', 'touchscreen digitizer'],
+  'multitouch-test': ['multi touch', 'multitouch', 'fingers'],
+};
+
+function aliasesFor(tool: ToolDefinition): string[] {
+  return TOOL_ALIASES[tool.slug] ?? [];
+}
 
 function queryTokens(query: string): string[] {
   const raw = tokenize(query).filter((t) => !STOP_WORDS.has(t));
-  // Keep at least the raw tokens if the user typed only stop words
-  // ("test" alone should still list testers).
-  return raw.length > 0 ? raw : tokenize(query);
+  // Keep the raw tokens if the user typed only stop words ("test" alone
+  // should still list testers).
+  return raw.length > 0 ? raw : tokenize(query).filter((t) => t.length >= 2);
 }
 
 interface IndexedTool {
   tool: ToolDefinition;
   titleWords: string[];
-  descWords: string[];
   keywordWords: string[];
-  /** All words concatenated for quick token containment checks. */
-  allWords: string[];
+  aliasWords: string[];
+  /** Strong surfaces: exact / prefix / substring matching applies here. */
+  strongWords: string[];
+  /** All strong words for compound ("deadpixel") decomposition. */
 }
 
 function buildIndex(): IndexedTool[] {
   return TOOLS_REGISTRY.map((tool) => {
     const titleWords = tokenize(tool.title);
-    const descWords = tokenize(tool.shortDesc);
     const keywordWords = tool.keywords.flatMap((k) => tokenize(k));
+    const aliasWords = aliasesFor(tool).flatMap((k) => tokenize(k));
     return {
       tool,
       titleWords,
-      descWords,
       keywordWords,
-      allWords: [...titleWords, ...descWords, ...keywordWords],
+      aliasWords,
+      strongWords: [...new Set([...titleWords, ...keywordWords, ...aliasWords])],
     };
   });
 }
 
 let cachedIndex: IndexedTool[] | null = null;
 
+/** Fuzzy ceiling per spec: 1 for medium words, 2 for long words, never 3. */
+function fuzzyDistanceFor(wordLength: number): number {
+  if (wordLength >= 8) return 2;
+  if (wordLength >= 5) return 1;
+  return 0; // short words (<=4) never fuzzy-match
+}
+
+const FUZZY_SCORE = 0.5; // weaker than any strong match (min strong = 1)
+
 /**
- * True when the token minus one occurrence of `word` is itself a tool word
- * (exact or within 1 edit). Verifies the token is a genuine concatenation of
+ * Score one query token against a tool. 0 = no match.
+ * Strong surfaces: title (weight 4), keywords (2), aliases (2).
+ * Descriptions are intentionally NOT matched — they caused false positives.
+ */
+function scoreToken(token: string, tool: IndexedTool): { score: number; strong: boolean } {
+  const sets: Array<{ words: string[]; weight: number }> = [
+    { words: tool.titleWords, weight: 4 },
+    { words: tool.keywordWords, weight: 2 },
+    { words: tool.aliasWords, weight: 2 },
+  ];
+
+  let bestStrong = 0;
+  let bestFuzzy = 0;
+
+  for (const { words, weight } of sets) {
+    for (const word of words) {
+      // ---- strong matches ----
+      if (word === token) {
+        bestStrong = Math.max(bestStrong, weight * 3);
+      } else if (word.startsWith(token) && token.length >= 2) {
+        // Prefix: "mic" -> microphone, "web" -> webcam
+        bestStrong = Math.max(bestStrong, weight * 2);
+      } else if (token.length >= 3 && word.includes(token)) {
+        // Substring: "pixel" inside "pixels", "cam" inside "camera"
+        bestStrong = Math.max(bestStrong, weight);
+      } else if (
+        token.length >= 4 &&
+        word.length >= 3 &&
+        token.includes(word) &&
+        compoundRestMatches(token, word, tool)
+      ) {
+        // Reverse substring for abbreviations: "microphone" matches alias
+        // "mic", "webcam" matches keyword "cam". Requires the REST of the
+        // token to also be a tool word, so "xylophone" containing "phone"
+        // does NOT match the phone-sensor tools.
+        bestStrong = Math.max(bestStrong, weight);
+      } else if (
+        token.length >= 5 &&
+        word.length >= 4 &&
+        token.includes(word) &&
+        compoundRestMatches(token, word, tool)
+      ) {
+        // Glued compounds: "deadpixel" = "dead" + "pixel" (both tool words).
+        // Requires the REST to also be a tool word, so "xylophone" containing
+        // "phone" does not match the motion-sensor tools.
+        bestStrong = Math.max(bestStrong, weight);
+      }
+
+      // ---- fuzzy fallback (titles/keywords/aliases only, bounded distance) ----
+      if (bestFuzzy === 0 && token !== word && token.length >= 5 && word.length >= 5) {
+        const maxDist = fuzzyDistanceFor(word.length);
+        if (maxDist > 0 && withinEditDistance(token, word, maxDist)) {
+          bestFuzzy = FUZZY_SCORE;
+        }
+      }
+    }
+  }
+
+  if (bestStrong > 0) return { score: bestStrong, strong: true };
+  return { score: bestFuzzy, strong: false };
+}
+
+/**
+ * True when the token minus one occurrence of `word` is itself a strong word
+ * of the tool (exact or within 1 edit). Verifies a genuine concatenation of
  * two tool words, e.g. "deadpixel" -> "dead" + "pixel".
  */
 function compoundRestMatches(token: string, word: string, tool: IndexedTool): boolean {
   const idx = token.indexOf(word);
   const rest = token.slice(0, idx) + token.slice(idx + word.length);
   if (rest.length < 3) return false;
-  return tool.allWords.some(
+  return tool.strongWords.some(
     (w) => w === rest || (w.length >= 3 && withinEditDistance(rest, w, 1))
   );
 }
 
-/** Score one query token against a tool's words. 0 = no match. */
-function scoreToken(token: string, tool: IndexedTool): number {
-  let best = 0;
-
-  const matchSets: Array<{ words: string[]; base: number }> = [
-    { words: tool.titleWords, base: 4 },
-    { words: tool.keywordWords, base: 2 },
-    { words: tool.descWords, base: 1 },
-  ];
-
-  for (const { words, base } of matchSets) {
-    for (const word of words) {
-      if (word === token) {
-        const s = base * 3;
-        if (s > best) best = s;
-      } else if (word.startsWith(token) && token.length >= 3) {
-        // Prefix matches need 3+ chars to stay meaningful ("mic" -> Microphone).
-        const s = base * 2;
-        if (s > best) best = s;
-      } else if (token.length >= 3 && word.includes(token)) {
-        // Containment handles glued queries ("deadpixel") and stemmed forms.
-        const s = base;
-        if (s > best) best = s;
-      } else if (
-        token.length >= 5 &&
-        word.length >= 4 &&
-        withinEditDistance(token, word, 2)
-      ) {
-        // Typo tolerance for longer words: "microfon" -> "microphone"
-        // (distance 3 in plain Levenshtein: e->o, o->o… handled below instead),
-        // "keybord" -> "keyboard" (transposition = 2). Minimum lengths keep
-        // short words like "on" safe.
-        const s = base;
-        if (s > best) best = s;
-      } else if (
-        token.length >= 6 &&
-        word.length >= 4 &&
-        withinEditDistance(token, word, 3)
-      ) {
-        // Distant typos on long words: "microfon" -> "microphone" is distance
-        // 3. Bounded to tokens of 5+ and words of 4+ chars so ordinary short
-        // words never collide.
-        const s = base > 2 ? base - 1 : 1; // slight penalty for loose matches
-        if (s > best) best = s;
-      } else if (
-        token.length >= 6 &&
-        word.length >= 4 &&
-        token.includes(word) &&
-        compoundRestMatches(token, word, tool)
-      ) {
-        // Glued/compound queries: "deadpixel" = "dead" + "pixel", both words
-        // of the Dead Pixel tool. The remainder after removing this word must
-        // also be a tool word, so "xylophone" containing "phone" does NOT
-        // match the phone-sensor tools.
-        const s = base;
-        if (s > best) best = s;
-      }
-    }
-  }
-
-  // A token can also match the glued whole-string form (e.g. query "pixel"
-  // against keyword word "deadpixel-test" is impossible, but token "mirror"
-  // inside "webcam-mirror" is already handled above; this catches the case
-  // where a tool word is contained in a longer token).
-  if (best === 0 && token.length >= 4) {
-    for (const word of tool.allWords) {
-      if (word.includes(token)) {
-        best = 1;
-        break;
-      }
-    }
-  }
-
-  return best;
-}
-
 /**
- * Search the tool registry with a lenient, typo-tolerant strategy.
- * Returns matches ordered by score (best first), stable within equal scores.
+ * Search the tool registry.
+ *
+ * Matching model per token: a tool must match EVERY content token of the
+ * query, but each token may match via a strong or a fuzzy hit. Tools matching
+ * more tokens strongly rank higher; multi-device queries ("camera and
+ * microphone") therefore list relevant tools separately instead of returning
+ * zero (each tool matches its own token).
  */
 export function searchTools(query: string, tools: ToolDefinition[] = TOOLS_REGISTRY): ToolSearchHit[] {
   const tokens = queryTokens(query);
   if (tokens.length === 0) {
-    return tools.map((tool) => ({ tool, score: 0 }));
+    return tools.map((tool) => ({ tool, score: 0, matchedTokens: [] }));
   }
 
   const index = cachedIndex ?? buildIndex();
-  const byTool = new Map<string, IndexedTool>();
-  // Only index tools that are part of the requested subset.
   const subsetIds = new Set(tools.map((t) => t.id));
 
-  const hits: ToolSearchHit[] = [];
+  interface PartialHit {
+    tool: ToolDefinition;
+    score: number;
+    strongTokenCount: number;
+    matchedTokens: string[];
+  }
+  const partials: PartialHit[] = [];
 
   for (const entry of index) {
     if (!subsetIds.has(entry.tool.id)) continue;
 
     let total = 0;
-    let allTokensMatched = true;
+    let strongTokenCount = 0;
+    const matched: string[] = [];
+
     for (const token of tokens) {
-      const s = scoreToken(token, entry);
-      if (s === 0) {
-        allTokensMatched = false;
-        break;
-      }
-      total += s;
+      const { score, strong } = scoreToken(token, entry);
+      if (score === 0) continue;
+      total += score;
+      if (strong) strongTokenCount += 1;
+      matched.push(token);
     }
-    if (allTokensMatched && total > 0) {
-      hits.push({ tool: entry.tool, score: total });
+
+    if (total > 0) {
+      partials.push({ tool: entry.tool, score: total, strongTokenCount, matchedTokens: matched });
     }
   }
 
-  // Stable sort: score desc, registry order preserved for ties.
+  // Rank: tools matching more query tokens first (multi-device queries list
+  // each relevant device's tool separately), then by accumulated score. A
+  // full-AND match gets a bonus so single-device intent still wins.
+  const hits: ToolSearchHit[] = partials.map((p) => ({
+    tool: p.tool,
+    score: p.matchedTokens.length * 100 + p.score +
+      (p.strongTokenCount === tokens.length && tokens.length > 1 ? 2 : 0),
+    matchedTokens: p.matchedTokens,
+  }));
   return hits.sort((a, b) => b.score - a.score);
 }

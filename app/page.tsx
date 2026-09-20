@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
@@ -40,7 +40,11 @@ export default function HomePage() {
       <Navbar t={t} />
 
       <main className="flex-1">
-        <LandingClient t={t} />
+        {/* useSearchParams inside LandingClient requires a Suspense boundary
+            for static prerendering (missing-suspense-with-csr-bailout). */}
+        <Suspense fallback={<div className="min-h-[60vh]" aria-hidden="true" /> }>
+          <LandingClient t={t} />
+        </Suspense>
       </main>
 
       <Footer t={t} />

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search,
   ShieldCheck,
@@ -106,14 +107,62 @@ const faqs = [
 
 const floatDelays = ['0s', '1.2s', '2.1s', '0.7s', '1.6s'];
 
+const VALID_CATEGORIES = new Set<string>(CATEGORY_META.map((c) => c.key));
+
 export function LandingClient({ t }: LandingClientProps) {
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<ToolCategory | 'all'>('all');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Query + category are URL-driven so browser Back/Forward restores them.
+  const urlQuery = searchParams.get('q') ?? '';
+  const urlCategory = searchParams.get('category') ?? 'all';
+  const selectedCategory = (VALID_CATEGORIES.has(urlCategory) ? urlCategory : 'all') as ToolCategory | 'all';
+
+  const [inputValue, setInputValue] = useState<string>(urlQuery);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
-  // Lenient search: word-order independent, extra words tolerated, single-char
-  // typos forgiven ("microfon" -> Microphone Test). Filtered by category first,
-  // then scored + ranked so best matches appear first.
+  // Autocomplete state: open, highlighted suggestion index (-1 = none).
+  const [suggestionsOpen, setSuggestionsOpen] = useState<boolean>(false);
+  const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
+
+  // Track the URL value the input was last synced from, so we can adopt
+  // external URL changes (browser Back) during render instead of via an
+  // effect that calls setState (react-hooks/set-state-in-effect).
+  const [lastUrlQuery, setLastUrlQuery] = useState<string>(urlQuery);
+  if (urlQuery !== lastUrlQuery) {
+    setLastUrlQuery(urlQuery);
+    setInputValue(urlQuery);
+  }
+
+  /** Push query + category to the URL without re-scrolling. */
+  const syncUrl = useCallback(
+    (query: string, category: ToolCategory | 'all') => {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set('q', query.trim());
+      if (category !== 'all') params.set('category', category);
+      const qs = params.toString();
+      router.replace(qs ? `/?${qs}` : '/', { scroll: false });
+    },
+    [router]
+  );
+
+  const handleQueryChange = (value: string) => {
+    setInputValue(value);
+    syncUrl(value, selectedCategory);
+    setSuggestionsOpen(Boolean(value.trim()));
+    setActiveIndex(-1);
+  };
+
+  const handleCategoryChange = (key: ToolCategory | 'all') => {
+    syncUrl(inputValue, key);
+  };
+
+  const searchQuery = urlQuery;
+
+  // Lenient search: word-order independent, filler words tolerated, typos
+  // forgiven. Filtered by category first, then scored + ranked.
   const filteredTools = useMemo(() => {
     const inCategory =
       selectedCategory === 'all'
@@ -123,6 +172,16 @@ export function LandingClient({ t }: LandingClientProps) {
     if (!searchQuery.trim()) return inCategory;
 
     return searchTools(searchQuery, inCategory).map((hit) => hit.tool);
+  }, [selectedCategory, searchQuery]);
+
+  // Top 5 suggestions for the autocomplete panel.
+  const suggestions = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const inCategory =
+      selectedCategory === 'all'
+        ? TOOLS_REGISTRY
+        : TOOLS_REGISTRY.filter((tool) => tool.category === selectedCategory);
+    return searchTools(searchQuery, inCategory).slice(0, 5);
   }, [selectedCategory, searchQuery]);
 
   const popularTools = POPULAR_SLUGS.map((slug) =>
@@ -136,9 +195,82 @@ export function LandingClient({ t }: LandingClientProps) {
     TOOLS_REGISTRY.filter((tool) => tool.category === key).length;
 
   const selectCategoryAndScroll = (key: ToolCategory) => {
-    setSelectedCategory(key);
+    handleCategoryChange(key);
     document.getElementById('tools')?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const scrollToTools = () => {
+    document.getElementById('tools')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  /** Clear Search: reset query, close suggestions, restore tools, refocus. */
+  const clearSearch = () => {
+    setInputValue('');
+    syncUrl('', selectedCategory);
+    setSuggestionsOpen(false);
+    setActiveIndex(-1);
+    inputRef.current?.focus();
+  };
+
+  /** Quick-search chip: focus input, apply term, show suggestions. */
+  const applyQuickSearch = (term: string) => {
+    setInputValue(term);
+    syncUrl(term, selectedCategory);
+    setSuggestionsOpen(true);
+    setActiveIndex(-1);
+    inputRef.current?.focus();
+    // Ensure the search box + suggestions are visible.
+    requestAnimationFrame(() => {
+      searchBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  };
+
+  const openSuggestion = (tool: ToolDefinition) => {
+    setSuggestionsOpen(false);
+    router.push(`/test/${tool.slug}`);
+  };
+
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!suggestionsOpen || suggestions.length === 0) {
+        setSuggestionsOpen(Boolean(searchQuery.trim()));
+        return;
+      }
+      setActiveIndex((prev) => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((prev) =>
+        prev <= 0 ? suggestions.length - 1 : prev - 1
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const chosen = activeIndex >= 0 ? suggestions[activeIndex] : suggestions[0];
+      if (chosen) {
+        openSuggestion(chosen.tool);
+      } else {
+        // No suggestions: jump to the full results grid.
+        setSuggestionsOpen(false);
+        scrollToTools();
+      }
+    } else if (e.key === 'Escape') {
+      setSuggestionsOpen(false);
+      setActiveIndex(-1);
+    }
+  };
+
+  // Close suggestions on outside click.
+  useEffect(() => {
+    if (!suggestionsOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!searchBoxRef.current?.contains(e.target as Node)) {
+        setSuggestionsOpen(false);
+        setActiveIndex(-1);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [suggestionsOpen]);
 
   return (
     <div className="space-y-20 pb-4">
@@ -165,25 +297,105 @@ export function LandingClient({ t }: LandingClientProps) {
                 {t.hero.subtitle}
               </p>
 
-              {/* Search bar */}
-              <div className="mt-8 max-w-xl mx-auto lg:mx-0">
+              {/* Search bar (accessible combobox) */}
+              <div className="mt-8 max-w-xl mx-auto lg:mx-0" ref={searchBoxRef}>
                 <div className="relative group">
                   <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0F766E] dark:group-focus-within:text-[#14B8A6] transition-colors" />
+                  <label htmlFor="tool-search" className="sr-only">
+                    Search hardware testers — try “camera”, “mic”, or “keyboard”
+                  </label>
                   <input
+                    ref={inputRef}
+                    id="tool-search"
                     type="text"
+                    role="combobox"
+                    aria-expanded={suggestionsOpen && suggestions.length > 0}
+                    aria-controls="tool-search-suggestions"
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                      suggestionsOpen && activeIndex >= 0
+                        ? `tool-search-option-${activeIndex}`
+                        : undefined
+                    }
+                    autoComplete="off"
                     placeholder={t.landing.searchPlaceholder}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={inputValue}
+                    onChange={(e) => handleQueryChange(e.target.value)}
+                    onKeyDown={onSearchKeyDown}
+                    onFocus={() => {
+                      if (searchQuery.trim()) setSuggestionsOpen(true);
+                    }}
                     className="w-full pl-12 pr-11 py-4 rounded-2xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-sm text-[#142033] dark:text-[#E9EEF4] placeholder-slate-400 shadow-lg shadow-slate-900/5 focus:outline-none focus:border-[#0F766E] focus:ring-4 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] dark:focus:ring-[#14B8A6]/15 transition-all"
                   />
-                  {searchQuery && (
+                  {inputValue && (
                     <button
-                      onClick={() => setSearchQuery('')}
+                      onClick={clearSearch}
                       aria-label="Clear search"
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#192332] transition-colors cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  )}
+
+                  {/* Autocomplete suggestions (top 5) */}
+                  {suggestionsOpen && suggestions.length > 0 && (
+                    <ul
+                      id="tool-search-suggestions"
+                      role="listbox"
+                      aria-label="Search suggestions"
+                      className="absolute z-30 left-0 right-0 top-full mt-2 rounded-2xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] shadow-2xl shadow-slate-900/10 overflow-hidden"
+                    >
+                      {suggestions.map((hit, idx) => {
+                        const meta = CATEGORY_META.find((c) => c.key === hit.tool.category);
+                        return (
+                          <li
+                            key={hit.tool.id}
+                            id={`tool-search-option-${idx}`}
+                            role="option"
+                            aria-selected={idx === activeIndex}
+                          >
+                            <Link
+                              href={`/test/${hit.tool.slug}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openSuggestion(hit.tool);
+                              }}
+                              onMouseEnter={() => setActiveIndex(idx)}
+                              className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                                idx === activeIndex
+                                  ? 'bg-[#E6F4F2] dark:bg-[#133230]'
+                                  : 'bg-white dark:bg-[#131B27]'
+                              }`}
+                            >
+                              <DeviceIllustration type={hit.tool.iconType} size={34} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-[#142033] dark:text-[#E9EEF4] truncate">
+                                  {hit.tool.title}
+                                </span>
+                                <span className="block text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] truncate">
+                                  {meta?.label ?? hit.tool.categoryLabel}
+                                </span>
+                              </span>
+                              <ArrowRight className="w-4 h-4 shrink-0 text-[#0F766E] dark:text-[#14B8A6]" />
+                            </Link>
+                          </li>
+                        );
+                      })}
+                      {suggestions.length > 0 && (
+                        <li role="presentation">
+                          <button
+                            onClick={() => {
+                              setSuggestionsOpen(false);
+                              scrollToTools();
+                            }}
+                            className="w-full px-4 py-2.5 text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] dark:hover:bg-[#133230] transition-colors cursor-pointer text-left"
+                          >
+                            View all {filteredTools.length} result{filteredTools.length === 1 ? '' : 's'}
+                            <ArrowRight className="w-3 h-3 inline ml-1" />
+                          </button>
+                        </li>
+                      )}
+                    </ul>
                   )}
                 </div>
 
@@ -193,7 +405,7 @@ export function LandingClient({ t }: LandingClientProps) {
                   {QUICK_SEARCHES.map((term) => (
                     <button
                       key={term}
-                      onClick={() => setSearchQuery(term)}
+                      onClick={() => applyQuickSearch(term)}
                       className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
                         searchQuery === term
                           ? 'bg-[#0F766E] text-white border-[#0F766E] dark:bg-[#14B8A6] dark:border-[#14B8A6] dark:text-[#0B111A]'
@@ -402,9 +614,10 @@ export function LandingClient({ t }: LandingClientProps) {
       {/* ================= All tools (searchable) ================= */}
       <section id="tools" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-20">
         {/* Category filter chips */}
-        <div className="flex flex-wrap justify-center gap-1.5 mb-8">
+        <div className="flex flex-wrap justify-center gap-1.5 mb-6">
           <button
-            onClick={() => setSelectedCategory('all')}
+            onClick={() => handleCategoryChange('all')}
+            aria-pressed={selectedCategory === 'all'}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               selectedCategory === 'all'
                 ? 'bg-[#0F766E] text-white shadow-sm dark:bg-[#14B8A6] dark:text-[#0B111A]'
@@ -416,7 +629,8 @@ export function LandingClient({ t }: LandingClientProps) {
           {CATEGORY_META.map((c) => (
             <button
               key={c.key}
-              onClick={() => setSelectedCategory(c.key)}
+              onClick={() => handleCategoryChange(c.key)}
+              aria-pressed={selectedCategory === c.key}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 selectedCategory === c.key
                   ? 'bg-[#0F766E] text-white shadow-sm dark:bg-[#14B8A6] dark:text-[#0B111A]'
@@ -428,12 +642,35 @@ export function LandingClient({ t }: LandingClientProps) {
           ))}
         </div>
 
+        {/* Active filter summary: query + category, each clearly clearable */}
         {isFiltering && (
-          <p className="text-center text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mb-5" role="status" aria-live="polite">
-            {filteredTools.length === 1
-              ? '1 tester found'
-              : `${filteredTools.length} testers found`}
-          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
+            {searchQuery.trim() && (
+              <button
+                onClick={clearSearch}
+                aria-label={`Clear search query “${searchQuery.trim()}”`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#E6F4F2] dark:bg-[#132E2E] text-[#0F766E] dark:text-[#14B8A6] border border-[#0F766E]/30 hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors cursor-pointer"
+              >
+                “{searchQuery.trim()}”
+                <X className="w-3 h-3" aria-hidden="true" />
+                <span className="sr-only">Clear search query</span>
+              </button>
+            )}
+            {selectedCategory !== 'all' && (
+              <button
+                onClick={() => handleCategoryChange('all')}
+                aria-label={`Clear category filter ${CATEGORY_META.find((c) => c.key === selectedCategory)?.label ?? selectedCategory}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#E6F4F2] dark:bg-[#132E2E] text-[#0F766E] dark:text-[#14B8A6] border border-[#0F766E]/30 hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors cursor-pointer"
+              >
+                {CATEGORY_META.find((c) => c.key === selectedCategory)?.label ?? selectedCategory}
+                <X className="w-3 h-3" aria-hidden="true" />
+                <span className="sr-only">Clear category filter</span>
+              </button>
+            )}
+            <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]" role="status" aria-live="polite">
+              {filteredTools.length === 1 ? '1 tester found' : `${filteredTools.length} testers found`}
+            </p>
+          </div>
         )}
 
         {filteredTools.length > 0 ? (
