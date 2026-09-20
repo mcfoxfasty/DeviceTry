@@ -21,6 +21,7 @@ import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
 import { DeviceIllustration } from '@/components/ui/DeviceIllustration';
 import { CATEGORY_META } from '@/lib/tools/categories';
+import { searchTools } from '@/lib/tools/search';
 
 interface LandingClientProps {
   t: Translations;
@@ -110,19 +111,18 @@ export function LandingClient({ t }: LandingClientProps) {
   const [selectedCategory, setSelectedCategory] = useState<ToolCategory | 'all'>('all');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
+  // Lenient search: word-order independent, extra words tolerated, single-char
+  // typos forgiven ("microfon" -> Microphone Test). Filtered by category first,
+  // then scored + ranked so best matches appear first.
   const filteredTools = useMemo(() => {
-    return TOOLS_REGISTRY.filter((tool) => {
-      const matchCategory = selectedCategory === 'all' || tool.category === selectedCategory;
-      if (!matchCategory) return false;
+    const inCategory =
+      selectedCategory === 'all'
+        ? TOOLS_REGISTRY
+        : TOOLS_REGISTRY.filter((tool) => tool.category === selectedCategory);
 
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      const titleMatch = tool.title.toLowerCase().includes(q);
-      const descMatch = tool.shortDesc.toLowerCase().includes(q);
-      const keywordMatch = tool.keywords.some((k) => k.toLowerCase().includes(q));
+    if (!searchQuery.trim()) return inCategory;
 
-      return titleMatch || descMatch || keywordMatch;
-    });
+    return searchTools(searchQuery, inCategory).map((hit) => hit.tool);
   }, [selectedCategory, searchQuery]);
 
   const popularTools = POPULAR_SLUGS.map((slug) =>
@@ -427,6 +427,14 @@ export function LandingClient({ t }: LandingClientProps) {
             </button>
           ))}
         </div>
+
+        {isFiltering && (
+          <p className="text-center text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mb-5" role="status" aria-live="polite">
+            {filteredTools.length === 1
+              ? '1 tester found'
+              : `${filteredTools.length} testers found`}
+          </p>
+        )}
 
         {filteredTools.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
