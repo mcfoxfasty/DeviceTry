@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Camera, CameraOff, Download, AlertTriangle, CheckCircle, Video } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import { CameraSession } from '@/lib/testing/cameraSession';
 
 interface WebcamTesterProps {
   t: Translations;
@@ -17,7 +18,7 @@ interface WebcamTesterProps {
 }
 
 export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterProps) {
-  const { result, emitRich, clear, invalidate, currentRun } = useTestResult({
+  const { result, emitRunRich, clear, invalidate, startRun, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
   });
@@ -40,27 +41,15 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
   const fpsFrameCountRef = useRef<number>(0);
   const fpsLastTimeRef = useRef<number>(0);
   const snapshotUrlRef = useRef<string | null>(null);
-  // Track the stream request in flight so a resolution after stop/device
-  // change/unmount can be rejected and its obsolete tracks stopped immediately.
-  const pendingStreamRef = useRef<MediaStream | null>(null);
   // Set on unmount only: in-flight getUserMedia must never touch state after it.
   const unmountedRef = useRef<boolean>(false);
 
-  const loadCameras = async () => {
-    try {
-      if (!navigator.mediaDevices?.enumerateDevices) return;
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = allDevices.filter((d) => d.kind === 'videoinput');
-      setDevices(cameras);
-      if (cameras.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(cameras[0].deviceId);
-      }
-    } catch {
-      // ignore
-    }
-  };
+  // Camera acquisition guard: binds each getUserMedia attempt to the run
+  // token captured at attempt start; stale resolutions are stopped and ignored.
+  const [session] = useState(() => new CameraSession<MediaStream>());
 
-  const stopCamera = () => {
+  /** Pure resource teardown — no lifecycle or result-state changes. */
+  const releaseCameraResources = useCallback(() => {
     // 1. Cancel requestVideoFrameCallback if supported and active
     if (
       videoRef.current &&
@@ -79,7 +68,7 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
       videoFrameCallbackIdRef.current = null;
     }
 
-    // 2. Stop and release all tracks on streamRef
+    // 2. Stop and release all adopted tracks
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
         try {
@@ -97,23 +86,41 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
       videoRef.current.onloadedmetadata = null;
     }
 
-    if (pendingStreamRef.current && pendingStreamRef.current !== streamRef.current) {
-      pendingStreamRef.current.getTracks().forEach((track) => {
-        try {
-          track.stop();
-        } catch {
-          // ignore
-        }
-      });
-    }
-    pendingStreamRef.current = null;
+    // 4. Release any still-adopted-but-not-yet-attached stream
+    session.releaseAll();
+  }, [session]);
 
+  /** Device enumeration guarded against stale runs and unmount. */
+  const loadCameras = useCallback(
+    async (runToken: number) => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        if (unmountedRef.current || runToken !== currentRun()) return;
+        const cameras = allDevices.filter((d) => d.kind === 'videoinput');
+        setDevices(cameras);
+        if (cameras.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(cameras[0].deviceId);
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [currentRun, selectedDeviceId]
+  );
+
+  /** Explicit user Stop: invalidate pending callbacks, then release resources.
+   *  Resource cleanup, not Reset — a completed guided result is preserved. */
+  const stopCamera = useCallback(() => {
+    session.invalidate();
+    releaseCameraResources();
     setResolution(null);
     setObservedFps(null);
     setPermissionState('idle');
-  };
+  }, [session, releaseCameraResources]);
 
-  const measureFpsWithVideoFrameCallback = (videoEl: HTMLVideoElement) => {
+  /** FPS measurement via requestVideoFrameCallback, guarded by streamRef identity. */
+  const measureFpsWithVideoFrameCallback = useCallback((videoEl: HTMLVideoElement) => {
     if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
       setFpsSupported(false);
       setObservedFps(null);
@@ -157,99 +164,99 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
         requestVideoFrameCallback: (cb: typeof callback) => number;
       }
     ).requestVideoFrameCallback(callback);
-  };
+  }, []);
 
-  const startCamera = async (deviceId?: string) => {
-    stopCamera();
-    setPermissionState('requesting');
-    setErrorMessage('');
+  const startCamera = useCallback(
+    async (deviceId?: string) => {
+      // Exactly ONE lifecycle transition per start/restart/device change:
+      // startRun() clears the previous verdict and the host/guided result,
+      // and returns the immutable token this request is bound to.
+      const runToken = startRun();
+      session.begin(runToken);
 
-    // Capture the run token NOW (operation start), never inside the later
-    // promise resolution. stopCamera() bumped the token, so this token
-    // uniquely identifies this getUserMedia request.
-    const runToken = currentRun();
+      releaseCameraResources();
+      setPermissionState('requesting');
+      setErrorMessage('');
+      setResolution(null);
+      setObservedFps(null);
 
-    try {
-      const constraints: MediaStreamConstraints = {
-        video: deviceId
-          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-          : { width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      };
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      if (unmountedRef.current || runToken !== currentRun()) {
-        // Obsolete request: stop every track immediately and report nothing.
-        mediaStream.getTracks().forEach((track) => {
-          try {
-            track.stop();
-          } catch {
-            // ignore
-          }
-        });
-        return;
-      }
-
-      pendingStreamRef.current = mediaStream;
-      streamRef.current = mediaStream;
-      setPermissionState('granted');
-      await loadCameras();
-
-      if (unmountedRef.current || runToken !== currentRun()) {
-        return;
-      }
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        videoRef.current.onloadedmetadata = () => {
-          if (
-            videoRef.current &&
-            !unmountedRef.current &&
-            runToken === currentRun() &&
-            streamRef.current === mediaStream
-          ) {
-            const w = videoRef.current.videoWidth;
-            const h = videoRef.current.videoHeight;
-            setResolution({ width: w, height: h });
-            measureFpsWithVideoFrameCallback(videoRef.current);
-
-            emitRich({
-              status: 'passed',
-              details: `Camera operational at ${w}x${h}. Video frame arrival confirmed.`,
-              metrics: {
-                width: w,
-                height: h,
-                deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
-              },
-            });
-          }
+      try {
+        const constraints: MediaStreamConstraints = {
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+            : { width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
         };
+
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        // Adopt only if this attempt is still live; stale resolutions have
+        // every returned track stopped and update no UI/result.
+        const adoption = session.resolve(runToken, mediaStream);
+        if (unmountedRef.current || !adoption.live) {
+          return;
+        }
+
+        streamRef.current = adoption.stream;
+        setPermissionState('granted');
+        await loadCameras(runToken);
+
+        if (unmountedRef.current || runToken !== currentRun() || streamRef.current !== mediaStream) {
+          return;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          videoRef.current.onloadedmetadata = () => {
+            if (
+              videoRef.current &&
+              !unmountedRef.current &&
+              runToken === currentRun() &&
+              streamRef.current === mediaStream
+            ) {
+              const w = videoRef.current.videoWidth;
+              const h = videoRef.current.videoHeight;
+              setResolution({ width: w, height: h });
+              measureFpsWithVideoFrameCallback(videoRef.current);
+
+              emitRunRich(runToken, {
+                status: 'passed',
+                details: `Camera operational at ${w}x${h}. Video frame arrival confirmed.`,
+                metrics: {
+                  width: w,
+                  height: h,
+                  deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
+                },
+              });
+            }
+          };
+        }
+      } catch (err: unknown) {
+        const error = err as Error;
+        if (unmountedRef.current || !session.reject(runToken)) {
+          // Stale rejection after stop/device change/unmount: do not overwrite
+          // the newer UI state with an old failure.
+          return;
+        }
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setPermissionState('denied');
+          setErrorMessage(t.common.permissionDenied);
+          setShowDeniedModal(true);
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          setPermissionState('error');
+          setErrorMessage(t.common.deviceUnavailable);
+        } else {
+          setPermissionState('error');
+          setErrorMessage(error.message || t.common.error);
+        }
+        emitRunRich(runToken, {
+          status: 'failed',
+          details: error.message || 'Camera access failed.',
+        });
       }
-    } catch (err: unknown) {
-      const error = err as Error;
-      if (unmountedRef.current || runToken !== currentRun()) {
-        // Stale rejection after stop/device change/unmount: do not overwrite
-        // the newer UI state with an old failure.
-        return;
-      }
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        setPermissionState('denied');
-        setErrorMessage(t.common.permissionDenied);
-        setShowDeniedModal(true);
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        setPermissionState('error');
-        setErrorMessage(t.common.deviceUnavailable);
-      } else {
-        setPermissionState('error');
-        setErrorMessage(error.message || t.common.error);
-      }
-      emitRich({
-        status: 'failed',
-        details: error.message || 'Camera access failed.',
-      });
-    }
-  };
+    },
+    [startRun, session, releaseCameraResources, loadCameras, currentRun, emitRunRich, measureFpsWithVideoFrameCallback, t.common.permissionDenied, t.common.deviceUnavailable, t.common.error]
+  );
 
   const takeSnapshot = () => {
     if (!videoRef.current || !resolution) return;
@@ -276,24 +283,14 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
     }, 'image/jpeg', 0.92);
   };
 
-  // Unmount & route cleanup. Unmount must NOT clear a legitimately recorded
-  // guided result, so it uses invalidate() plus direct resource teardown —
-  // not stopCamera(), which is an explicit user-visible stop.
+  // Unmount & route cleanup: invalidate + pure teardown, no setState, and the
+  // completed guided result is NOT cleared.
   useEffect(() => {
     return () => {
       unmountedRef.current = true;
       invalidate();
-      stopCamera();
-      if (pendingStreamRef.current) {
-        pendingStreamRef.current.getTracks().forEach((track) => {
-          try {
-            track.stop();
-          } catch {
-            // ignore
-          }
-        });
-        pendingStreamRef.current = null;
-      }
+      session.invalidate();
+      releaseCameraResources();
       if (snapshotUrlRef.current) {
         URL.revokeObjectURL(snapshotUrlRef.current);
         snapshotUrlRef.current = null;

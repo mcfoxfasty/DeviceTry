@@ -1,9 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Battery, BatteryCharging, AlertCircle, CheckCircle, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Battery, BatteryCharging, AlertCircle, CheckCircle, Zap, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import {
+  BatterySubscriptionController,
+  BatterySnapshotLike,
+  BatterySource,
+} from '@/lib/testing/batterySubscription';
 
 interface BatteryTesterProps {
   t: Translations;
@@ -21,7 +26,7 @@ interface BatteryManager {
 }
 
 export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTesterProps) {
-  const { result, emitRunRich, clear, invalidate, currentRun } = useTestResult({
+  const { result, emitRunRich, clear, invalidate, startRun, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
   });
@@ -31,21 +36,26 @@ export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTeste
   const [chargingTime, setChargingTime] = useState<number | null>(null);
   const [dischargingTime, setDischargingTime] = useState<number | null>(null);
 
-  // No mount-time startRun: a mount is not a new observation. getBattery()
-  // resolution and battery change events capture their token at operation
-  // start; unmount invalidation rejects everything captured before it.
+  // Live subscription controller instance (created in the mount effect).
+  const controllerRef = useRef<BatterySubscriptionController | null>(null);
+  // Version counter bumped by clear/refresh so the mount effect can
+  // re-subscribe with a fresh token without remounting the component.
+  const [subscriptionVersion, setSubscriptionVersion] = useState(0);
+
+  // Subscribe (and re-subscribe after a clear/refresh). Each subscription
+  // captures its token at subscribe time; events validate that captured token,
+  // so old-listener events stay rejected while fresh events report again.
   useEffect(() => {
-    let batteryManager: BatteryManager | null = null;
-    let unmounted = false;
-    let updateStatus: (() => void) | null = null;
+    const nav = navigator as unknown as { getBattery?: () => Promise<BatteryManager> };
+    let cancelled = false;
+    let controller: BatterySubscriptionController | null = null;
 
     const initBattery = async () => {
-      const nav = navigator as unknown as { getBattery?: () => Promise<BatteryManager> };
-
-      // Capture at operation start, never inside the later promise resolution.
+      // Capture the token NOW (operation start), never inside the promise.
       const runToken = currentRun();
 
       if (!nav.getBattery) {
+        if (cancelled) return;
         setIsSupported(false);
         emitRunRich(runToken, {
           status: 'unsupported',
@@ -56,58 +66,99 @@ export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTeste
 
       try {
         const battery = await nav.getBattery();
-        if (unmounted || runToken !== currentRun()) {
+        if (cancelled || runToken !== currentRun()) {
           return;
         }
-        batteryManager = battery;
-        setIsSupported(true);
 
-        updateStatus = () => {
-          if (unmounted) return;
-          // Token was captured when the subscription began; events arriving
-          // after unmount/new run are rejected.
-          const currentLevel = Math.round(battery.level * 100);
-          setLevel(currentLevel);
-          setIsCharging(battery.charging);
-          setChargingTime(battery.chargingTime);
-          setDischargingTime(battery.dischargingTime);
-
-          emitRunRich(runToken, {
-            status: 'passed',
-            details: `Battery level: ${currentLevel}%, Charging: ${battery.charging ? 'Yes' : 'No'}`,
-            metrics: {
-              levelPercent: currentLevel,
-              charging: battery.charging,
-            },
-          });
+        const source: BatterySource = {
+          read: () => ({
+            level: battery.level,
+            charging: battery.charging,
+            chargingTime: battery.chargingTime,
+            dischargingTime: battery.dischargingTime,
+          }),
+          addEventListener: (type, listener) => battery.addEventListener(type, listener as EventListener),
+          removeEventListener: (type, listener) => battery.removeEventListener(type, listener as EventListener),
         };
 
-        updateStatus();
+        controller = new BatterySubscriptionController(
+          source,
+          {
+            onEvent: (token, snapshot: BatterySnapshotLike) => {
+              if (cancelled || token !== currentRun()) return;
+              const currentLevel = Math.round(snapshot.level * 100);
+              setLevel(currentLevel);
+              setIsCharging(snapshot.charging);
+              setChargingTime(snapshot.chargingTime);
+              setDischargingTime(snapshot.dischargingTime);
 
-        battery.addEventListener('chargingchange', updateStatus);
-        battery.addEventListener('levelchange', updateStatus);
-        battery.addEventListener('chargingtimechange', updateStatus);
-        battery.addEventListener('dischargingtimechange', updateStatus);
+              emitRunRich(token, {
+                status: 'passed',
+                details: `Battery level: ${currentLevel}%, Charging: ${snapshot.charging ? 'Yes' : 'No'}`,
+                metrics: { levelPercent: currentLevel, charging: snapshot.charging },
+              });
+            },
+            onSuperseded: () => {
+              // No lifecycle action here: refreshReading() has already called
+              // startRun() BEFORE controller.refresh(token), so the visible
+              // verdict and host/guided result were cleared exactly once.
+              // Calling startRun() here would double-bump the token.
+            },
+          },
+          runToken
+        );
+
+        controller.subscribe(runToken);
+        controllerRef.current = controller;
+        if (cancelled) {
+          // Unmount raced the subscription: tear down immediately.
+          controller.unsubscribeAll();
+          controllerRef.current = null;
+          return;
+        }
+        setIsSupported(true);
       } catch {
-        if (!unmounted) setIsSupported(false);
+        if (!cancelled) setIsSupported(false);
       }
     };
 
     initBattery();
 
     return () => {
-      unmounted = true;
-      if (batteryManager && updateStatus) {
-        batteryManager.removeEventListener('chargingchange', updateStatus);
-        batteryManager.removeEventListener('levelchange', updateStatus);
-        batteryManager.removeEventListener('chargingtimechange', updateStatus);
-        batteryManager.removeEventListener('dischargingtimechange', updateStatus);
+      cancelled = true;
+      // Remove ALL listeners. Pure teardown: does not touch tokens, does not
+      // clear the completed guided result.
+      if (controller) {
+        controller.unsubscribeAll();
       }
-      // Unmount: invalidate in-flight emissions without deleting a completed
-      // guided result.
+      controllerRef.current = null;
+      // Unmount/version-bump invalidation: in-flight getBattery resolutions
+      // from older versions can no longer report.
       invalidate();
     };
-  }, [currentRun, emitRunRich, invalidate]);
+  }, [subscriptionVersion, currentRun, emitRunRich, startRun, invalidate]);
+
+  /**
+   * Clearing the result starts a genuinely new observation: the stale entry
+   * is dropped from the host, a fresh token is captured, and the battery is
+   * re-subscribed — so later battery events produce NEW results again
+   * (previously clearing permanently invalidated reporting).
+   */
+  const handleClearAndRefresh = useCallback(() => {
+    startRun(); // clears visible verdict + host/guided result exactly once
+    setSubscriptionVersion((v) => v + 1); // re-subscribe with a fresh token
+  }, [startRun]);
+
+  const refreshReading = useCallback(() => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    // ONE lifecycle transition: startRun() clears the visible verdict and the
+    // host/guided result exactly once and returns the fresh immutable token;
+    // the controller re-subscribes its listeners bound to THAT token. Old
+    // listeners stay rejected; fresh battery events report again.
+    const token = startRun();
+    controller.refresh(token);
+  }, [startRun]);
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -119,6 +170,27 @@ export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTeste
           </h2>
           <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">{t.batteryTest.shortDesc}</p>
         </div>
+
+        {isSupported === true && (
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-refresh-battery"
+              onClick={refreshReading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              Refresh Reading
+            </button>
+            <button
+              id="btn-reset-battery"
+              onClick={handleClearAndRefresh}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
+            </button>
+          </div>
+        )}
       </div>
 
       {isSupported === true ? (
@@ -201,8 +273,9 @@ export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTeste
         </div>
       )}
 
-      {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      {/* Test result — in-card. Clearing now refreshes the subscription instead
+          of permanently invalidating it. */}
+      <TestResultBanner result={result} onClear={handleClearAndRefresh} />
 
       {/* Strict Battery Health Disclaimer Required by User Prompt */}
       <div className="mt-6 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-start gap-2.5">
