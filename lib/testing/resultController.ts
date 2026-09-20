@@ -4,30 +4,59 @@ import type { TestResultPayload } from '@/components/TestResultBanner';
 /**
  * Run-guarded, deduplicating result emission.
  *
- * A controller instance represents one observation run. Each `startRun()`
- * bumps a monotonically increasing token; callbacks that captured an older
- * token (timers, animation frames, permission resolutions, device-change
- * events, polling loops) are ignored after reset/new run, so a stale result
- * can never restore an old verdict.
+ * A controller instance represents one observation run. Run tokens are
+ * monotonically increasing integers; delayed operations (timers, animation
+ * frames, permission resolutions, device-change events) capture the token
+ * when the operation BEGINS and present it when reporting. Emissions from an
+ * older token are rejected, so a stale callback can never restore an old
+ * verdict or adopt a newer run.
  *
- * Identical status+details emissions are forwarded to the host exactly once
- * until the run changes, preventing spam from animation/polling loops.
+ * Three distinct lifecycle operations:
+ * - startRun()     — a new user-visible observation: invalidates old tokens
+ *                    and notifies the host's onResultClear exactly once (only
+ *                    when a result was actually recorded for the previous run).
+ * - clearResult()  — explicit user reset: identical to startRun() semantically.
+ * - invalidateRun()— unmount/resource cleanup: invalidates tokens WITHOUT
+ *                    notifying the host, so a legitimately completed guided
+ *                    result survives the component unmounting.
+ *
+ * Identical status+details+metrics emissions are forwarded to the host exactly
+ * once per run, preventing spam from animation/polling loops while still
+ * allowing a real metrics change through.
  */
 export interface ResultSink {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
   onRecordResult?: (result: { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> }) => void;
+  /** Optional: host must drop the recorded result for this run (explicit reset, retest, device change). */
+  onResultClear?: () => void;
 }
 
 export interface EmitResult {
-  /** false when the emission was ignored (stale run) or identical to the last forwarded one. */
+  /** false when the emission came from a stale run token (ignored entirely). */
   accepted: boolean;
+  /** false when the emission was identical (status+details+metrics) to the last one in this run. */
+  changed: boolean;
   /** false when policy dropped the status from host forwarding (skipped/unsupported for rich). */
   forwarded: boolean;
 }
 
+/** Stable dedupe key across status, details, and metrics (key order-insensitive). */
+function emissionKey(status: BannerStatus, details?: string, metrics?: Record<string, unknown>): string {
+  let metricsKey = '';
+  if (metrics) {
+    metricsKey = Object.keys(metrics)
+      .sort()
+      .map((k) => `${k}=${JSON.stringify(metrics[k])}`)
+      .join(',');
+  }
+  return `${status}\u0000${details ?? ''}\u0000${metricsKey}`;
+}
+
 export class ResultController {
   private runToken = 0;
-  private lastForwardedKey: string | null = null;
+  private lastEmittedKey: string | null = null;
+  /** Tracks whether the host may currently hold a result for this run. */
+  private hostHasResult = false;
   private sink: ResultSink;
 
   constructor(sink: ResultSink) {
@@ -38,89 +67,108 @@ export class ResultController {
     this.sink = sink;
   }
 
-  /** Begin a new run: clears the dedupe state and invalidates all old tokens. */
-  startRun(): number {
+  private bumpToken(): void {
     this.runToken += 1;
-    this.lastForwardedKey = null;
+    this.lastEmittedKey = null;
+  }
+
+  /** Notify the host exactly once per run that a recorded result must be dropped. */
+  private notifyClearIfNeeded(): void {
+    if (this.hostHasResult) {
+      this.hostHasResult = false;
+      this.sink.onResultClear?.();
+    }
+  }
+
+  /**
+   * Begin a new user-visible observation: invalidates all old tokens, resets
+   * dedupe, and clears the corresponding host result exactly once (only when
+   * one was actually recorded). Returns the token to capture for delayed work.
+   */
+  startRun(): number {
+    this.bumpToken();
+    this.notifyClearIfNeeded();
     return this.runToken;
   }
 
-  /** Alias for startRun() — clearer at reset/new-run call sites. */
+  /** Explicit user reset. Same semantics as startRun(); clearer at reset call sites. Returns the new token. */
+  clearResult(): number {
+    return this.startRun();
+  }
+
+  /** Backward-compatible alias for clearResult(). */
   reset(): void {
-    this.startRun();
+    this.clearResult();
+  }
+
+  /**
+   * Unmount/resource cleanup: invalidates all tokens so in-flight promises,
+   * timers, rAF loops, and permission resolutions can no longer report — but
+   * deliberately does NOT notify onResultClear, so a legitimately completed
+   * guided result is preserved when a step unmounts.
+   */
+  invalidateRun(): void {
+    this.bumpToken();
   }
 
   getCurrentRun(): number {
     return this.runToken;
   }
 
-  /**
-   * Emit a verdict for the given run token. Emissions from an older token are
-   * ignored. Returns whether it was accepted and whether it was forwarded.
-   */
+  /** True when an accepted, forwarded emission exists for the current run. */
+  hasEmittedForCurrentRun(): boolean {
+    return this.hostHasResult;
+  }
+
+  /** Emit a verdict for the given run token (captured when the operation began). */
   emitRun(runToken: number, status: BannerStatus, details?: string, metrics?: Record<string, unknown>): EmitResult {
     if (runToken !== this.runToken) {
-      return { accepted: false, forwarded: false };
+      return { accepted: false, changed: false, forwarded: false };
     }
     return this.emit(status, details, metrics);
   }
 
   /**
-   * Emit a verdict for the current run (no token check — callers without a
-   * captured token, e.g. direct user interactions, use this).
+   * Emit a verdict for the current run (no token check — direct user
+   * interactions and live observers use this).
    */
   emit(status: BannerStatus, details?: string, metrics?: Record<string, unknown>): EmitResult {
-    const payload: TestResultPayload = { status, details: details ?? '', metrics };
-    const forwardKey = `${status}\u0000${details ?? ''}`;
-
-    // Dedupe identical forwards within the same run; a repeated emission from
-    // an animation frame or poll must not re-forward the same verdict.
-    const changed = forwardKey !== this.lastForwardedKey;
+    const key = emissionKey(status, details, metrics);
+    const changed = key !== this.lastEmittedKey;
     let forwarded = false;
 
-    if (forwardGenericResult(status)) {
-      if (changed) {
+    if (changed) {
+      if (forwardGenericResult(status)) {
         this.sink.onResultUpdate?.(status as Exclude<BannerStatus, 'skipped'>, details);
         forwarded = true;
       }
-    }
-    if (forwardRichResult(status) && changed) {
-      this.sink.onRecordResult?.(payload as { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> });
-      forwarded = true;
+      if (forwardRichResult(status)) {
+        this.sink.onRecordResult?.({
+          status: status as ForwardableStatus,
+          details: details ?? '',
+          metrics,
+        });
+        forwarded = true;
+      }
+      this.lastEmittedKey = key;
     }
 
-    if (changed) {
-      this.lastForwardedKey = forwardKey;
+    if (forwarded) {
+      this.hostHasResult = true;
     }
-    return { accepted: true, forwarded };
+    return { accepted: true, changed, forwarded };
   }
 
-  /** Token-checked rich emission. */
+  /** Token-checked rich payload emission. */
   emitRunRich(runToken: number, payload: TestResultPayload): EmitResult {
     if (runToken !== this.runToken) {
-      return { accepted: false, forwarded: false };
+      return { accepted: false, changed: false, forwarded: false };
     }
-    return this.emitRich(payload);
+    return this.emit(payload.status, payload.details, payload.metrics);
   }
 
   /** Rich payload emission for the current run. */
   emitRich(payload: TestResultPayload): EmitResult {
-    const forwardKey = `${payload.status}\u0000${payload.details}`;
-    const changed = forwardKey !== this.lastForwardedKey;
-    let forwarded = false;
-
-    if (forwardRichResult(payload.status) && changed) {
-      this.sink.onRecordResult?.(payload as { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> });
-      forwarded = true;
-    }
-    if (forwardGenericResult(payload.status) && changed) {
-      this.sink.onResultUpdate?.(payload.status as Exclude<BannerStatus, 'skipped'>, payload.details);
-      forwarded = true;
-    }
-
-    if (changed) {
-      this.lastForwardedKey = forwardKey;
-    }
-    return { accepted: true, forwarded };
+    return this.emit(payload.status, payload.details, payload.metrics);
   }
 }

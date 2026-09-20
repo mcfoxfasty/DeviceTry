@@ -8,6 +8,7 @@ import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 interface BatteryTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported'; details: string; metrics?: Record<string, unknown> }) => void;
+  onResultClear?: () => void;
 }
 
 interface BatteryManager {
@@ -19,22 +20,20 @@ interface BatteryManager {
   removeEventListener: (type: string, listener: EventListener) => void;
 }
 
-export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
-  const { result, emitRunRich, clear, startRun } = useTestResult({ onRecordResult });
+export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTesterProps) {
+  const { result, emitRunRich, clear, invalidate, currentRun } = useTestResult({
+    onRecordResult,
+    onResultClear,
+  });
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState<boolean | null>(null);
   const [chargingTime, setChargingTime] = useState<number | null>(null);
   const [dischargingTime, setDischargingTime] = useState<number | null>(null);
 
-  // Run token: battery change events arriving after unmount (or captured
-  // before a new run) cannot restore a stale verdict.
-  const runTokenRef = useRef<number>(0);
-
-  useEffect(() => {
-    runTokenRef.current = startRun();
-  }, [startRun]);
-
+  // No mount-time startRun: a mount is not a new observation. getBattery()
+  // resolution and battery change events capture their token at operation
+  // start; unmount invalidation rejects everything captured before it.
   useEffect(() => {
     let batteryManager: BatteryManager | null = null;
     let unmounted = false;
@@ -43,9 +42,12 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
     const initBattery = async () => {
       const nav = navigator as unknown as { getBattery?: () => Promise<BatteryManager> };
 
+      // Capture at operation start, never inside the later promise resolution.
+      const runToken = currentRun();
+
       if (!nav.getBattery) {
         setIsSupported(false);
-        emitRunRich(runTokenRef.current, {
+        emitRunRich(runToken, {
           status: 'unsupported',
           details: 'Battery Status API is not exposed by this browser engine.',
         });
@@ -54,7 +56,7 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
 
       try {
         const battery = await nav.getBattery();
-        if (unmounted) {
+        if (unmounted || runToken !== currentRun()) {
           return;
         }
         batteryManager = battery;
@@ -62,13 +64,15 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
 
         updateStatus = () => {
           if (unmounted) return;
+          // Token was captured when the subscription began; events arriving
+          // after unmount/new run are rejected.
           const currentLevel = Math.round(battery.level * 100);
           setLevel(currentLevel);
           setIsCharging(battery.charging);
           setChargingTime(battery.chargingTime);
           setDischargingTime(battery.dischargingTime);
 
-          emitRunRich(runTokenRef.current, {
+          emitRunRich(runToken, {
             status: 'passed',
             details: `Battery level: ${currentLevel}%, Charging: ${battery.charging ? 'Yes' : 'No'}`,
             metrics: {
@@ -99,9 +103,11 @@ export function BatteryTester({ t, onRecordResult }: BatteryTesterProps) {
         batteryManager.removeEventListener('chargingtimechange', updateStatus);
         batteryManager.removeEventListener('dischargingtimechange', updateStatus);
       }
+      // Unmount: invalidate in-flight emissions without deleting a completed
+      // guided result.
+      invalidate();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only battery subscription; emissions go through the run-token guard
-  }, []);
+  }, [currentRun, emitRunRich, invalidate]);
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">

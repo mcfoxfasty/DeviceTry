@@ -13,10 +13,14 @@ interface MicrophoneTesterProps {
     details: string;
     metrics?: Record<string, unknown>;
   }) => void;
+  onResultClear?: () => void;
 }
 
-export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
-  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
+export function MicrophoneTester({ t, onRecordResult, onResultClear }: MicrophoneTesterProps) {
+  const { result, emitRunRich, clear, reset, startRun, invalidate, currentRun } = useTestResult({
+    onRecordResult,
+    onResultClear,
+  });
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
@@ -40,9 +44,11 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   const recordedAudioUrlRef = useRef<string | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  // Run token: emissions from getUserMedia resolutions, timers, or rAF loops
-  // captured before a stop/device-change/reset are ignored.
-  const runTokenRef = useRef<number>(0);
+  // Track the stream request in flight so a resolution after stop/device
+  // change/reset can be rejected and its obsolete tracks stopped immediately.
+  const pendingStreamRef = useRef<MediaStream | null>(null);
+  // Set on unmount only: in-flight getUserMedia must never touch state after it.
+  const unmountedRef = useRef<boolean>(false);
 
   // Load audio input devices list
   const loadDevices = async () => {
@@ -60,10 +66,10 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
   };
 
   const stopMicrophone = () => {
-    // Invalidate the current run first so any in-flight getUserMedia
-    // resolution, recorder stop, or rAF callback cannot restore an old verdict.
-    reset();
-    runTokenRef.current = startRun();
+    // Explicit stop: one lifecycle transition only. startRun() clears the
+    // visible verdict and the host/guided result exactly once and invalidates
+    // every token captured by the old run.
+    startRun();
 
     // 1. Cancel animation frame loop
     if (animationFrameRef.current !== null) {
@@ -120,6 +126,11 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     setPermissionState('requesting');
     setErrorMessage('');
 
+    // Capture the run token NOW (operation start), never inside the later
+    // promise resolution. stopMicrophone() bumped the token, so this token
+    // uniquely identifies this getUserMedia request.
+    const runToken = currentRun();
+
     try {
       const constraints: MediaStreamConstraints = {
         audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -127,9 +138,27 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
       };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      if (unmountedRef.current || runToken !== currentRun()) {
+        // Obsolete request: stop every track immediately and report nothing.
+        mediaStream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+        return;
+      }
+
+      pendingStreamRef.current = mediaStream;
       streamRef.current = mediaStream;
       setPermissionState('granted');
       await loadDevices();
+
+      if (unmountedRef.current || runToken !== currentRun()) {
+        return;
+      }
 
       // Setup Web Audio Analyzer
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -146,13 +175,18 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
 
       drawWaveform();
 
-      emitRunRich(runTokenRef.current, {
+      emitRunRich(runToken, {
         status: 'passed',
         details: 'Browser audio input stream active. Signal level and waveform measured.',
         metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label || 'Microphone' },
       });
     } catch (err: unknown) {
       const error = err as Error;
+      if (unmountedRef.current || runToken !== currentRun()) {
+        // Stale rejection after stop/device change/unmount: UI already reflects
+        // the newer state; do not overwrite it with an old failure.
+        return;
+      }
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionState('denied');
         setErrorMessage(t.micTest.deniedMessage);
@@ -164,7 +198,7 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);
       }
-      emitRunRich(runTokenRef.current, {
+      emitRunRich(runToken, {
         status: 'failed',
         details: error.message || 'Microphone access failed.',
       });
@@ -294,12 +328,60 @@ export function MicrophoneTester({ t, onRecordResult }: MicrophoneTesterProps) {
     }
   };
 
-  // Unmount & route cleanup. stopMicrophone is a stable closure over refs and
-  // stable controller functions, so listing it here would not change behavior
-  // and would only risk re-running cleanup if its identity ever changed.
+  // Unmount & route cleanup. Unmount must NOT clear a legitimately recorded
+  // guided result, so it uses invalidate() (token bump, no host clear) plus
+  // direct resource teardown — not stopMicrophone(), which is an explicit
+  // user-visible stop and would erase the step's recorded verdict.
   useEffect(() => {
     return () => {
-      stopMicrophone();
+      unmountedRef.current = true;
+      invalidate();
+      // Release live resources without touching result state.
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // ignore
+        }
+        mediaRecorderRef.current = null;
+      }
+      if (pendingStreamRef.current) {
+        pendingStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+        pendingStreamRef.current = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+        streamRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try {
+          audioContextRef.current.close().catch(() => {});
+        } catch {
+          // ignore
+        }
+        audioContextRef.current = null;
+      }
+      analyserRef.current = null;
       if (recordedAudioUrlRef.current) {
         URL.revokeObjectURL(recordedAudioUrlRef.current);
         recordedAudioUrlRef.current = null;

@@ -111,6 +111,24 @@ export function GuidedInspectionFlow({
     });
   };
 
+  /**
+   * Backward-compatible clear callback (onResultClear): removes the step's
+   * old entry from BOTH results state and resultsRef when the user resets,
+   * retests, or changes the selected device. The report becomes inconclusive
+   * until the new observation produces a result. A completed step is never
+   * erased merely because its component unmounted — clear only fires from
+   * explicit user actions inside the tester.
+   */
+  const clearStepResult = (key: TestKey) => {
+    setResults((prev) => {
+      if (!(key in prev)) return prev; // nothing recorded — no state change
+      const next = { ...prev };
+      delete next[key];
+      resultsRef.current = next;
+      return next;
+    });
+  };
+
   const persistOnFinish = (currentResults: Record<string, TestResultItem>) => {
     const finalStatus = calculateReportStatus(suite.steps, currentResults);
     const saveRun = ++saveRunRef.current;
@@ -317,48 +335,56 @@ export function GuidedInspectionFlow({
               <MicrophoneTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('mic', res)}
+                onResultClear={() => clearStepResult('mic')}
               />
             )}
             {activeStepKey === 'webcam' && (
               <WebcamTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('webcam', res)}
+                onResultClear={() => clearStepResult('webcam')}
               />
             )}
             {activeStepKey === 'speakers' && (
               <SpeakersTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('speakers', res)}
+                onResultClear={() => clearStepResult('speakers')}
               />
             )}
             {activeStepKey === 'keyboard' && (
               <KeyboardTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('keyboard', res)}
+                onResultClear={() => clearStepResult('keyboard')}
               />
             )}
             {activeStepKey === 'mouse' && (
               <MouseTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('mouse', res)}
+                onResultClear={() => clearStepResult('mouse')}
               />
             )}
             {activeStepKey === 'display' && (
               <DisplayTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('display', res)}
+                onResultClear={() => clearStepResult('display')}
               />
             )}
             {activeStepKey === 'gamepad' && (
               <GamepadTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('gamepad', res)}
+                onResultClear={() => clearStepResult('gamepad')}
               />
             )}
             {activeStepKey === 'battery' && (
               <BatteryTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('battery', res)}
+                onResultClear={() => clearStepResult('battery')}
               />
             )}
 

@@ -111,11 +111,22 @@ export function TestResultBanner({ result, onClear, variant = 'card' }: TestResu
 /**
  * Captures a tester's result emissions so they can be shown in-card while
  * still forwarding them to host flows (guided inspection, report building).
+ *
+ * Three distinct lifecycle operations:
+ * - `startRun()`  — a new user-visible observation (Start Test, device
+ *                   change, retest): invalidates old run tokens, clears the
+ *                   visible verdict, and clears the parent/guided result
+ *                   exactly once. Returns the token to capture for delayed work.
+ * - `reset()`     — explicit user clear (Reset button, banner clear button):
+ *                   identical mechanics, returns the new token.
+ * - `invalidate()`— unmount/resource cleanup: invalidates tokens WITHOUT
+ *                   clearing the parent/guided result, so a completed step's
+ *                   record survives its component unmounting.
+ *
  * Forwarding policy, run-guarding, and dedupe live in ResultController.
- * - `emit`   → for testers that report (status, details) pairs.
- * - `emitRich` → for the flagship testers that report a full payload.
- * - `emitRun`/`emitRunRich` → token-checked variants for delayed callbacks.
- * - `reset`/`clear` → clears the verdict and invalidates stale callbacks.
+ * Local React state is updated only for accepted AND changed emissions, so
+ * identical polling/animation-frame emissions update neither the host
+ * callbacks nor this banner.
  */
 export function useTestResult(opts: ResultSink) {
   const [result, setResult] = useState<TestResultPayload | null>(null);
@@ -129,44 +140,71 @@ export function useTestResult(opts: ResultSink) {
   }, [opts, controller]);
 
   const emit = useCallback((status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
-    controller.emit(status, details, metrics);
-    setResult({ status, details: details ?? '', metrics });
+    const outcome = controller.emit(status, details, metrics);
+    if (outcome.changed) {
+      setResult({ status, details: details ?? '', metrics });
+    }
   }, [controller]);
 
   const emitRun = useCallback((runToken: number, status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
     const outcome = controller.emitRun(runToken, status, details, metrics);
-    if (outcome.accepted) {
+    if (outcome.accepted && outcome.changed) {
       setResult({ status, details: details ?? '', metrics });
     }
   }, [controller]);
 
   const emitRich = useCallback((payload: TestResultPayload) => {
-    controller.emitRich(payload);
-    setResult(payload);
+    const outcome = controller.emitRich(payload);
+    if (outcome.changed) {
+      setResult(payload);
+    }
   }, [controller]);
 
   const emitRunRich = useCallback((runToken: number, payload: TestResultPayload) => {
     const outcome = controller.emitRunRich(runToken, payload);
-    if (outcome.accepted) {
+    if (outcome.accepted && outcome.changed) {
       setResult(payload);
     }
   }, [controller]);
 
   /**
-   * Clear the visible verdict AND invalidate every token captured by this
-   * run: a late timer, animation frame, permission response, or device-change
-   * callback can no longer restore an old result. Starting the next run
-   * calls startRun() again, so verdicts never leak between runs.
+   * Explicit user reset (Reset button / banner clear): clears the visible
+   * verdict AND the parent/guided result exactly once, and invalidates every
+   * token captured by the old run. Returns the new run token.
    */
-  const reset = useCallback(() => {
-    controller.reset();
+  const reset = useCallback((): number => {
+    const token = controller.clearResult();
     setResult(null);
+    return token;
   }, [controller]);
+
+  /**
+   * Begin a new user-visible observation (Start Test / device change /
+   * retest). Same clearing semantics as reset; named for clarity at
+   * new-run call sites. Returns the token to capture for delayed work.
+   */
+  const startRun = useCallback((): number => {
+    const token = controller.startRun();
+    setResult(null);
+    return token;
+  }, [controller]);
+
+  /**
+   * Unmount/resource cleanup only: invalidates in-flight callbacks so they
+   * can no longer report, but deliberately does NOT clear the parent/guided
+   * result — a completed observation survives its component unmounting.
+   */
+  const invalidate = useCallback((): void => {
+    controller.invalidateRun();
+  }, [controller]);
+
+  /** Current run token — capture it when a delayed operation begins. */
+  const currentRun = useCallback((): number => controller.getCurrentRun(), [controller]);
 
   /** Compatibility alias used by existing testers. */
   const clear = reset;
 
-  return { result, emit, emitRun, emitRich, emitRunRich, clear, reset, startRun: () => controller.startRun() };
+  return { result, emit, emitRun, emitRich, emitRunRich, clear, reset, startRun, invalidate, currentRun };
 }
 
 interface TesterWithBannerProps {
@@ -175,14 +213,16 @@ interface TesterWithBannerProps {
   testerProps: Record<string, unknown>;
   /** Host-page telemetry hook, forwarded untouched. */
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  /** Host hook notified when the user clears/resets this tester's result. */
+  onResultClear?: () => void;
 }
 
 /**
  * Renders a tester and fuses the result banner to its bottom edge, so
  * every tester on the site shows its verdict directly under the test area.
  */
-export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate }: TesterWithBannerProps) {
-  const { result, emit, reset } = useTestResult({ onResultUpdate });
+export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, onResultClear }: TesterWithBannerProps) {
+  const { result, emit, reset } = useTestResult({ onResultUpdate, onResultClear });
 
   return (
     <div className="w-full">

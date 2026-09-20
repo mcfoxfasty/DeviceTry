@@ -8,10 +8,14 @@ import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 interface MouseTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onResultClear?: () => void;
 }
 
-export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
-  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
+export function MouseTester({ t, onRecordResult, onResultClear }: MouseTesterProps) {
+  const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
+    onRecordResult,
+    onResultClear,
+  });
   const [leftPressed, setLeftPressed] = useState<boolean>(false);
   const [middlePressed, setMiddlePressed] = useState<boolean>(false);
   const [rightPressed, setRightPressed] = useState<boolean>(false);
@@ -27,13 +31,22 @@ export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
   const [lastIntervalMs, setLastIntervalMs] = useState<number | null>(null);
   const [fastDoubleClicks, setFastDoubleClicks] = useState<number>(0);
 
-  // Run token: click emissions captured before a reset are ignored.
-  const runTokenRef = useRef<number>(0);
+  // Live click emissions go through the controller directly: it dedupes
+  // identical verdicts, and reset()/startRun() invalidate everything captured
+  // before them. No manual run-token plumbing needed.
+  const emitRef = useRef(emit);
 
-  // Start-of-life run token: emissions before any user action belong to run 0.
   useEffect(() => {
-    runTokenRef.current = startRun();
-  }, [startRun]);
+    emitRef.current = emit;
+  }, [emit]);
+
+  // Unmount: invalidate in-flight emissions without deleting a completed
+  // guided result.
+  useEffect(() => {
+    return () => {
+      invalidate();
+    };
+  }, [invalidate]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -60,11 +73,11 @@ export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
       setRightCount((c) => c + 1);
     }
 
-    emitRunRich(runTokenRef.current, {
-      status: 'passed',
-      details: `Buttons verified: Left (${leftCount + 1}), Middle (${middleCount}), Right (${rightCount}). Fast double-clicks: ${fastDoubleClicks}`,
-      metrics: { leftCount: leftCount + 1, middleCount, rightCount, fastDoubleClicks },
-    });
+    emitRef.current(
+      'passed',
+      `Buttons verified: Left (${leftCount + 1}), Middle (${middleCount}), Right (${rightCount}). Fast double-clicks: ${fastDoubleClicks}`,
+      { leftCount: leftCount + 1, middleCount, rightCount, fastDoubleClicks }
+    );
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
@@ -88,9 +101,9 @@ export function MouseTester({ t, onRecordResult }: MouseTesterProps) {
     setLastClickTime(null);
     setLastIntervalMs(null);
     setFastDoubleClicks(0);
-    // Invalidate the verdict AND the run token: a reset run is not a passed run.
+    // Explicit user reset: one lifecycle transition — clears the verdict and
+    // the host/guided result exactly once and invalidates old emissions.
     reset();
-    runTokenRef.current = startRun();
   };
 
   return (

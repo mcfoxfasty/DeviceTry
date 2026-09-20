@@ -8,11 +8,12 @@ import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 interface DisplayTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onResultClear?: () => void;
 }
 
 type PatternType = 'red' | 'green' | 'blue' | 'white' | 'black' | 'gray' | 'gradient' | 'grid';
 
-export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
+export function DisplayTester({ t, onRecordResult, onResultClear }: DisplayTesterProps) {
   const [selectedPattern, setSelectedPattern] = useState<PatternType>('white');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [measuredHz, setMeasuredHz] = useState<number | null>(null);
@@ -21,19 +22,23 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // In-card verdict banner — forwards to the guided-inspection report as before.
-  const { result, emitRunRich, clear, reset, startRun } = useTestResult({ onRecordResult });
-  const runTokenRef = useRef<number>(0);
-  const emitRunRichRef = useRef(emitRunRich);
+  const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
+    onRecordResult,
+    onResultClear,
+  });
+  const emitRef = useRef(emit);
 
   useEffect(() => {
-    emitRunRichRef.current = emitRunRich;
-  }, [emitRunRich]);
+    emitRef.current = emit;
+  }, [emit]);
 
-  // Start-of-life run token: the refresh-rate rAF loop is mounted once and its
-  // emissions are guarded against reset/new-run invalidation.
+  // Unmount: invalidate in-flight emissions without deleting a completed
+  // guided result.
   useEffect(() => {
-    runTokenRef.current = startRun();
-  }, [startRun]);
+    return () => {
+      invalidate();
+    };
+  }, [invalidate]);
 
   // Measure browser display refresh rate accurately
   useEffect(() => {
@@ -87,19 +92,21 @@ export function DisplayTester({ t, onRecordResult }: DisplayTesterProps) {
   const recordObservation = (obs: 'clean' | 'pixels_found' | 'bleed_found') => {
     setUserObservation(obs);
     const passed = obs === 'clean';
-    emitRunRich(runTokenRef.current, {
-      status: passed ? 'passed' : 'warning',
-      details: `User visual observation: ${obs}. Measured Refresh Rate: ${measuredHz}Hz`,
-      metrics: { observation: obs, measuredRefreshRateHz: measuredHz },
-    });
+    // Direct emission: the controller dedupes; a real observation change has
+    // different details/metrics and forwards once.
+    emitRef.current(
+      passed ? 'passed' : 'warning',
+      `User visual observation: ${obs}. Measured Refresh Rate: ${measuredHz}Hz`,
+      { observation: obs, measuredRefreshRateHz: measuredHz }
+    );
   };
 
   /** Clear the observation and the verdict: starting over must not keep the
-   *  previous run's result, and stale re-emissions cannot restore it. */
+   *  previous run's result. One lifecycle transition — startRun clears the
+   *  visible verdict and the host/guided result exactly once. */
   const startNewTest = () => {
     setUserObservation(null);
-    reset();
-    runTokenRef.current = startRun();
+    startRun();
   };
 
   const getPatternBgClass = (pattern: PatternType) => {

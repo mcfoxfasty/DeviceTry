@@ -8,10 +8,11 @@ import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 interface SpeakersTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onResultClear?: () => void;
 }
 
-export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTesterProps) {
+  const { result, emitRich, clear } = useTestResult({ onRecordResult, onResultClear });
   const [playingChannel, setPlayingChannel] = useState<'left' | 'right' | 'both' | null>(null);
   const [userObservation, setUserObservation] = useState<string | null>(null);
 
@@ -19,6 +20,7 @@ export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const pannerRef = useRef<StereoPannerNode | null>(null);
+  const toneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const playTone = (channel: 'left' | 'right' | 'both') => {
     stopTone();
@@ -57,7 +59,8 @@ export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
       setPlayingChannel(channel);
 
       // Automatically stop tone after 3 seconds for comfort
-      setTimeout(() => {
+      toneTimeoutRef.current = setTimeout(() => {
+        toneTimeoutRef.current = null;
         stopTone();
       }, 3000);
     } catch {
@@ -94,6 +97,10 @@ export function SpeakersTester({ t, onRecordResult }: SpeakersTesterProps) {
 
   useEffect(() => {
     return () => {
+      if (toneTimeoutRef.current !== null) {
+        clearTimeout(toneTimeoutRef.current);
+        toneTimeoutRef.current = null;
+      }
       stopTone();
     };
   }, []);

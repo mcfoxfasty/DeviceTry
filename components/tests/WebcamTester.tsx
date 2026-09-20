@@ -13,10 +13,14 @@ interface WebcamTesterProps {
     details: string;
     metrics?: Record<string, unknown>;
   }) => void;
+  onResultClear?: () => void;
 }
 
-export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
-  const { result, emitRich, clear } = useTestResult({ onRecordResult });
+export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterProps) {
+  const { result, emitRich, clear, invalidate, currentRun } = useTestResult({
+    onRecordResult,
+    onResultClear,
+  });
   const [permissionState, setPermissionState] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
@@ -36,6 +40,11 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
   const fpsFrameCountRef = useRef<number>(0);
   const fpsLastTimeRef = useRef<number>(0);
   const snapshotUrlRef = useRef<string | null>(null);
+  // Track the stream request in flight so a resolution after stop/device
+  // change/unmount can be rejected and its obsolete tracks stopped immediately.
+  const pendingStreamRef = useRef<MediaStream | null>(null);
+  // Set on unmount only: in-flight getUserMedia must never touch state after it.
+  const unmountedRef = useRef<boolean>(false);
 
   const loadCameras = async () => {
     try {
@@ -85,7 +94,19 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     // 3. Clear video element source
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.onloadedmetadata = null;
     }
+
+    if (pendingStreamRef.current && pendingStreamRef.current !== streamRef.current) {
+      pendingStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
+    }
+    pendingStreamRef.current = null;
 
     setResolution(null);
     setObservedFps(null);
@@ -143,6 +164,11 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     setPermissionState('requesting');
     setErrorMessage('');
 
+    // Capture the run token NOW (operation start), never inside the later
+    // promise resolution. stopCamera() bumped the token, so this token
+    // uniquely identifies this getUserMedia request.
+    const runToken = currentRun();
+
     try {
       const constraints: MediaStreamConstraints = {
         video: deviceId
@@ -152,14 +178,37 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
       };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      if (unmountedRef.current || runToken !== currentRun()) {
+        // Obsolete request: stop every track immediately and report nothing.
+        mediaStream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+        return;
+      }
+
+      pendingStreamRef.current = mediaStream;
       streamRef.current = mediaStream;
       setPermissionState('granted');
       await loadCameras();
 
+      if (unmountedRef.current || runToken !== currentRun()) {
+        return;
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
+          if (
+            videoRef.current &&
+            !unmountedRef.current &&
+            runToken === currentRun() &&
+            streamRef.current === mediaStream
+          ) {
             const w = videoRef.current.videoWidth;
             const h = videoRef.current.videoHeight;
             setResolution({ width: w, height: h });
@@ -179,6 +228,11 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
       }
     } catch (err: unknown) {
       const error = err as Error;
+      if (unmountedRef.current || runToken !== currentRun()) {
+        // Stale rejection after stop/device change/unmount: do not overwrite
+        // the newer UI state with an old failure.
+        return;
+      }
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermissionState('denied');
         setErrorMessage(t.common.permissionDenied);
@@ -222,15 +276,30 @@ export function WebcamTester({ t, onRecordResult }: WebcamTesterProps) {
     }, 'image/jpeg', 0.92);
   };
 
-  // Unmount & route cleanup
+  // Unmount & route cleanup. Unmount must NOT clear a legitimately recorded
+  // guided result, so it uses invalidate() plus direct resource teardown —
+  // not stopCamera(), which is an explicit user-visible stop.
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
+      invalidate();
       stopCamera();
+      if (pendingStreamRef.current) {
+        pendingStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore
+          }
+        });
+        pendingStreamRef.current = null;
+      }
       if (snapshotUrlRef.current) {
         URL.revokeObjectURL(snapshotUrlRef.current);
         snapshotUrlRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only cleanup for refs and stable functions
   }, []);
 
   return (
