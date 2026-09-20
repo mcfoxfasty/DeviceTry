@@ -59,36 +59,50 @@ function formatBytes(bytes: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(0)} MB`;
 }
 
+/**
+ * Read-only navigator snapshot. Pure collection — no React state writes — so
+ * the effect below can adopt the snapshot from a callback instead of calling
+ * setState synchronously in the effect body.
+ */
+function collectSystemInfo(): SystemInfo {
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    connection?: { downlink?: number; effectiveType?: string; rtt?: number };
+  };
+
+  const conn = nav.connection;
+  const networkType = conn?.effectiveType || 'Unknown';
+  const networkDownlink = conn?.downlink ? `${conn.downlink} Mbps (RTT ${conn.rtt ?? '?'}ms)` : 'Unknown';
+
+  return {
+    userAgent: nav.userAgent,
+    platform: nav.platform || 'Unknown',
+    language: nav.language,
+    languages: (nav.languages || []).join(', '),
+    cpuCores: nav.hardwareConcurrency ? `${nav.hardwareConcurrency} logical cores` : 'Not exposed',
+    deviceMemory: nav.deviceMemory ? `≈ ${nav.deviceMemory} GB (bucketed)` : 'Not exposed',
+    maxTouchPoints: String(nav.maxTouchPoints ?? 0),
+    cookieEnabled: nav.cookieEnabled ? 'Enabled' : 'Disabled',
+    onlineStatus: nav.onLine ? 'Online' : 'Offline',
+    connection: conn?.effectiveType ? `${conn.effectiveType.toUpperCase()}` : 'Network Information API not exposed',
+    networkType,
+    networkDownlink,
+    vendor: nav.vendor || 'Not exposed',
+  };
+}
+
 export function BrowserSystemInfoTester({ onResultUpdate }: TesterProps) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
-    const nav = navigator as Navigator & {
-      deviceMemory?: number;
-      connection?: { downlink?: number; effectiveType?: string; rtt?: number };
-    };
-
-    const conn = nav.connection;
-    const networkType = conn?.effectiveType || 'Unknown';
-    const networkDownlink = conn?.downlink ? `${conn.downlink} Mbps (RTT ${conn.rtt ?? '?'}ms)` : 'Unknown';
-
-    const data: SystemInfo = {
-      userAgent: nav.userAgent,
-      platform: nav.platform || 'Unknown',
-      language: nav.language,
-      languages: (nav.languages || []).join(', '),
-      cpuCores: nav.hardwareConcurrency ? `${nav.hardwareConcurrency} logical cores` : 'Not exposed',
-      deviceMemory: nav.deviceMemory ? `≈ ${nav.deviceMemory} GB (bucketed)` : 'Not exposed',
-      maxTouchPoints: String(nav.maxTouchPoints ?? 0),
-      cookieEnabled: nav.cookieEnabled ? 'Enabled' : 'Disabled',
-      onlineStatus: nav.onLine ? 'Online' : 'Offline',
-      connection: conn?.effectiveType ? `${conn.effectiveType.toUpperCase()}` : 'Network Information API not exposed',
-      networkType,
-      networkDownlink,
-      vendor: nav.vendor || 'Not exposed',
-    };
-    setInfo(data);
-    onResultUpdate?.('passed', `Engine: ${parseEngine(nav.userAgent)} • ${parseOS(nav.userAgent, nav.platform)} • ${data.cpuCores}`);
+    // Adopt the snapshot one frame later (outside the effect body): the state
+    // update happens in a callback, not synchronously during the effect.
+    const raf = requestAnimationFrame(() => {
+      const data = collectSystemInfo();
+      setInfo(data);
+      onResultUpdate?.('passed', `Engine: ${parseEngine(data.userAgent)} • ${parseOS(data.userAgent, data.platform)} • ${data.cpuCores}`);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [onResultUpdate]);
 
   if (!info) {

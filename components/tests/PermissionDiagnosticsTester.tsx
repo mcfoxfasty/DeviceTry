@@ -101,7 +101,12 @@ export function PermissionDiagnosticsTester({ onResultUpdate }: TesterProps) {
   }, [onResultUpdate]);
 
   useEffect(() => {
-    runQuery();
+    // First query deferred to a frame callback so no setState happens
+    // synchronously in the effect body; later queries come from the button.
+    const raf = requestAnimationFrame(() => {
+      void runQuery();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [runQuery]);
 
   return (

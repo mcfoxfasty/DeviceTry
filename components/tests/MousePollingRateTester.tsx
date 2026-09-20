@@ -19,7 +19,7 @@ export function MousePollingRateTester({ onResultUpdate }: ToolComponentProps) {
 
   const eventsCountRef = useRef<number>(0);
   const samplesRef = useRef<number[]>([]);
-  const lastTimeRef = useRef<number>(performance.now());
+  const lastTimeRef = useRef<number>(0); // set when measurement starts, before any elapsed math uses it
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const startMeasuring = useCallback(() => {

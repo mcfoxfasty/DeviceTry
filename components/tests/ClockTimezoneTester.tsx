@@ -44,7 +44,6 @@ function isDstObserved(date: Date): boolean | null {
 
 export function ClockTimezoneTester({ locale, onResultUpdate }: TesterProps) {
   const [now, setNow] = useState<Date | null>(null);
-  const [dst, setDst] = useState<boolean | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -55,9 +54,10 @@ export function ClockTimezoneTester({ locale, onResultUpdate }: TesterProps) {
     return () => clearInterval(interval);
   }, []);
 
+  // Report the observation once the clock has been read — no setState here;
+  // DST is derived during render from the current timestamp below.
   useEffect(() => {
     if (!now) return;
-    setDst(isDstObserved(now));
     const tz = getTimezone();
     const offset = getUtcOffsetMinutes(now);
     onResultUpdate?.('passed', `Timezone ${tz} (${formatOffset(offset)})`);
@@ -75,6 +75,7 @@ export function ClockTimezoneTester({ locale, onResultUpdate }: TesterProps) {
 
   const tz = getTimezone();
   const offsetMin = getUtcOffsetMinutes(now);
+  const dst = isDstObserved(now); // derived during render from the live timestamp
   const localeStr = locale || 'en';
 
   const cards = [

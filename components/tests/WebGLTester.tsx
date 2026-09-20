@@ -22,6 +22,28 @@ interface GlInfo {
   antialias: boolean;
 }
 
+// Built once at module load: the effect below references CUBE_VERTICES, so the
+// constant must exist before the component — a render-scope declaration would
+// be read before initialization and rebuilt on every render.
+const CUBE_VERTICES: number[] = buildCube();
+
+function buildCube(): number[] {
+  // 6 faces × 2 triangles × 3 vertices, centered at origin
+  const faces: number[][][] = [
+    [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], // front
+    [[1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]], // back
+    [[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]], // top
+    [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]], // bottom
+    [[1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]], // right
+    [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], // left
+  ];
+  const out: number[] = [];
+  for (const f of faces) {
+    out.push(...f[0], ...f[1], ...f[2], ...f[0], ...f[2], ...f[3]);
+  }
+  return out;
+}
+
 export function WebGLTester({ onResultUpdate }: TesterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -114,8 +136,6 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const CUBE_VERTICES = buildCube();
-
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
       <div className="flex items-center gap-3 pb-4 border-b border-[#DFE5EB] dark:border-[#223043]">
@@ -176,21 +196,4 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
       </div>
     </div>
   );
-}
-
-function buildCube(): number[] {
-  // 6 faces × 2 triangles × 3 vertices, centered at origin
-  const faces: number[][][] = [
-    [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], // front
-    [[1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]], // back
-    [[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]], // top
-    [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]], // bottom
-    [[1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]], // right
-    [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], // left
-  ];
-  const out: number[] = [];
-  for (const f of faces) {
-    out.push(...f[0], ...f[1], ...f[2], ...f[0], ...f[2], ...f[3]);
-  }
-  return out;
 }

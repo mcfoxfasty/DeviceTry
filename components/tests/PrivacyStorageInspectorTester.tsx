@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Trash2, Download, FileText, AlertTriangle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { getLocalInspections, clearAllLocalInspections, LocalInspectionItem } from '@/lib/testing/localHistory';
@@ -21,7 +21,7 @@ export function PrivacyStorageInspectorTester({ onResultUpdate }: TesterProps) {
   const [inspections, setInspections] = useState<LocalInspectionItem[]>([]);
   const [cookieCount, setCookieCount] = useState<number>(0);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     const list: StorageKeyInfo[] = [];
     try {
       for (let i = 0; i < window.localStorage.length; i++) {
@@ -36,11 +36,14 @@ export function PrivacyStorageInspectorTester({ onResultUpdate }: TesterProps) {
     setKeys(list);
     setInspections(getLocalInspections());
     setCookieCount(document.cookie ? document.cookie.split(';').length : 0);
-  };
+  }, []);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    // Initial refresh deferred to a frame callback so no setState happens
+    // synchronously in the effect body; later refreshes come from clearAll.
+    const raf = requestAnimationFrame(refresh);
+    return () => cancelAnimationFrame(raf);
+  }, [refresh]);
 
   const exportBackup = () => {
     const payload = JSON.stringify({ exportedAt: new Date().toISOString(), inspections }, null, 2);

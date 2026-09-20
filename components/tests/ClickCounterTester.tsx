@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mouse, RotateCcw, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -29,13 +29,32 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     startTimeRef.current = null;
   }, [duration]);
 
-  // Reset state synchronously when the configuration changes, without an effect.
-  const configKey = useMemo(() => `${duration}:${mode}`, [duration, mode]);
-  const [prevConfigKey, setPrevConfigKey] = useState(configKey);
-  if (prevConfigKey !== configKey) {
-    setPrevConfigKey(configKey);
-    resetTest();
-  }
+  // Changing configuration starts a fresh challenge: reset in the event
+  // handler (allowed) instead of during render.
+  const setDurationWithReset = useCallback(
+    (sec: number) => {
+      setDuration(sec);
+      if (timerRef.current) clearInterval(timerRef.current);
+      setStatus('idle');
+      setClicks(0);
+      setTimeLeft(sec);
+      setCps(0);
+      startTimeRef.current = null;
+    },
+    []
+  );
+
+  const setModeWithReset = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setStatus('idle');
+    setClicks(0);
+    setTimeLeft(duration);
+    setCps(0);
+    startTimeRef.current = null;
+  }, [duration]);
+
+  // Reset on configuration change is handled by the config buttons above
+  // (setDurationWithReset/setModeWithReset) — never during render.
 
   const finishTest = useCallback((finalCount: number, elapsedSecs: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -107,7 +126,10 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
         {/* Mode Selector */}
         <div className="flex items-center gap-1 bg-[#F6F8FB] dark:bg-[#192332] p-1 rounded-lg border border-[#DFE5EB] dark:border-[#223043]">
           <button
-            onClick={() => setMode('mouse')}
+            onClick={() => {
+              setMode('mouse');
+              setModeWithReset();
+            }}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-all ${
               mode === 'mouse'
                 ? 'bg-[#0F766E] text-white shadow-xs'
@@ -117,7 +139,10 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
             Mouse Clicks
           </button>
           <button
-            onClick={() => setMode('spacebar')}
+            onClick={() => {
+              setMode('spacebar');
+              setModeWithReset();
+            }}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-all ${
               mode === 'spacebar'
                 ? 'bg-[#0F766E] text-white shadow-xs'
@@ -134,7 +159,7 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
           {[5, 10, 30].map((sec) => (
             <button
               key={sec}
-              onClick={() => setDuration(sec)}
+              onClick={() => setDurationWithReset(sec)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                 duration === sec
                   ? 'bg-[#0F766E] text-white border-[#0D665F]'

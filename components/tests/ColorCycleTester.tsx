@@ -13,7 +13,6 @@ interface ToolComponentProps {
 export function ColorCycleTester({ onResultUpdate }: ToolComponentProps) {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [speedMs, setSpeedMs] = useState<number>(1000);
-  const [currentColor, setCurrentColor] = useState<string>('#FF0000');
   const [cycleIndex, setCycleIndex] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -49,16 +48,14 @@ export function ColorCycleTester({ onResultUpdate }: ToolComponentProps) {
     }
   }, [speedMs, stopCycle, onResultUpdate, colors]);
 
-  // Keep the displayed color in sync with the cycle index without cascading setState-in-effect.
-  useEffect(() => {
-    setCurrentColor(colors[cycleIndex] ?? '#FF0000');
-  }, [cycleIndex, colors]);
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // Displayed color is derived from the cycle index — no sync state/effect needed.
+  const currentColor = colors[cycleIndex] ?? '#FF0000';
 
   return (
     <div className="space-y-6">

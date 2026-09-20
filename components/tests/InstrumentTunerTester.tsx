@@ -83,7 +83,10 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
     setIsListening(false);
   }, []);
 
-  const evaluatePitch = useCallback(() => {
+  // Hoisted function declaration: the rAF loop must reference itself, and a
+  // declaration is initialized before any code runs (unlike a const useCallback
+  // self-reference, which accesses the variable before initialization).
+  function evaluatePitch() {
     if (!analyserRef.current || !audioCtxRef.current) return;
     const buf = new Float32Array(analyserRef.current.fftSize);
     analyserRef.current.getFloatTimeDomainData(buf);
@@ -157,7 +160,7 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
       }
     }
     rafRef.current = requestAnimationFrame(evaluatePitch);
-  }, [selectedPresetIndex, targetFreq, targetString]);
+  }
 
   const startListening = async () => {
     setErrorMsg(null);

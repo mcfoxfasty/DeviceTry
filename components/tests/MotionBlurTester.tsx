@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Eye, RotateCcw } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -16,70 +16,70 @@ export function MotionBlurTester({ onResultUpdate }: ToolComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const posRef = useRef<number>(0);
-  const lastTimeRef = useRef<number>(performance.now());
+  const lastTimeRef = useRef<number>(0); // timestamp set when the animation starts
 
-  const renderFrame = useCallback(() => {
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const now = performance.now();
-    const dt = (now - lastTimeRef.current) / 1000;
-    lastTimeRef.current = now;
-
-    const w = canvas.width;
-    const h = canvas.height;
-
-    ctx.fillStyle = '#0F172A';
-    ctx.fillRect(0, 0, w, h);
-
-    // Update position
-    posRef.current = (posRef.current + speed * dt) % (w + 100);
-    const x = posRef.current - 50;
-
-    // Track 1: Moving UFO-style high-contrast saucers
-    const rowY1 = h * 0.28;
-    ctx.fillStyle = '#1E293B';
-    ctx.fillRect(0, rowY1 - 40, w, 80);
-
-    // Saucer body
-    ctx.fillStyle = '#10B981';
-    ctx.beginPath();
-    ctx.ellipse(x, rowY1, 35, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Saucer dome & eyes
-    ctx.fillStyle = '#38BDF8';
-    ctx.beginPath();
-    ctx.arc(x, rowY1 - 8, 14, Math.PI, 0);
-    ctx.fill();
-
-    // Track 2: Pinstripe vertical bars for ghosting / overdrive overshoot
-    const rowY2 = h * 0.72;
-    ctx.fillStyle = '#1E293B';
-    ctx.fillRect(0, rowY2 - 40, w, 80);
-
-    if (showSyncBars) {
-      for (let i = 0; i < 8; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#FFFFFF' : '#EF4444';
-        ctx.fillRect(x - 30 + i * 8, rowY2 - 25, 5, 50);
-      }
-    } else {
-      ctx.fillStyle = '#F59E0B';
-      ctx.fillRect(x - 30, rowY2 - 25, 60, 50);
-    }
-
-    rafRef.current = requestAnimationFrame(renderFrame);
-  }, [speed, showSyncBars]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * (window.devicePixelRatio || 1);
     canvas.height = rect.height * (window.devicePixelRatio || 1);
-    lastTimeRef.current = performance.now();
+    lastTimeRef.current = performance.now(); // pure here: inside the effect
+
+    // Self-scheduling frame loop, declared INSIDE the effect so it closes over
+    // speed/showSyncBars directly — no self-referencing useCallback needed.
+    const renderFrame = () => {
+      const now = performance.now();
+      const dt = (now - lastTimeRef.current) / 1000;
+      lastTimeRef.current = now;
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, w, h);
+
+      // Update position
+      posRef.current = (posRef.current + speed * dt) % (w + 100);
+      const x = posRef.current - 50;
+
+      // Track 1: Moving UFO-style high-contrast saucers
+      const rowY1 = h * 0.28;
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(0, rowY1 - 40, w, 80);
+
+      // Saucer body
+      ctx.fillStyle = '#10B981';
+      ctx.beginPath();
+      ctx.ellipse(x, rowY1, 35, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Saucer dome & eyes
+      ctx.fillStyle = '#38BDF8';
+      ctx.beginPath();
+      ctx.arc(x, rowY1 - 8, 14, Math.PI, 0);
+      ctx.fill();
+
+      // Track 2: Pinstripe vertical bars for ghosting / overdrive overshoot
+      const rowY2 = h * 0.72;
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(0, rowY2 - 40, w, 80);
+
+      if (showSyncBars) {
+        for (let i = 0; i < 8; i++) {
+          ctx.fillStyle = i % 2 === 0 ? '#FFFFFF' : '#EF4444';
+          ctx.fillRect(x - 30 + i * 8, rowY2 - 25, 5, 50);
+        }
+      } else {
+        ctx.fillStyle = '#F59E0B';
+        ctx.fillRect(x - 30, rowY2 - 25, 60, 50);
+      }
+
+      rafRef.current = requestAnimationFrame(renderFrame);
+    };
 
     rafRef.current = requestAnimationFrame(renderFrame);
     if (onResultUpdate) {
@@ -89,7 +89,7 @@ export function MotionBlurTester({ onResultUpdate }: ToolComponentProps) {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [renderFrame, speed, onResultUpdate]);
+  }, [speed, showSyncBars, onResultUpdate]);
 
   return (
     <div className="space-y-6">

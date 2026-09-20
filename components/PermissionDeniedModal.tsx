@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Video, Mic, ShieldAlert, RotateCw, ExternalLink, Lock, Loader2, CheckCircle2 } from 'lucide-react';
 
 export type PermissionKind = 'microphone' | 'camera' | 'both';
@@ -70,33 +70,35 @@ export function PermissionDeniedModal({ open, kind, onRetry, onClose }: Permissi
     stream?.getTracks().forEach((track) => track.stop());
   };
 
-  /** Ask the browser what it currently thinks about our permission. */
-  const queryPermission = useCallback(async () => {
-    try {
-      if (navigator.permissions?.query) {
-        const name = kind === 'camera' ? 'camera' : 'microphone';
-        const status = await navigator.permissions.query({ name: name as PermissionName });
-        setPermState(status.state as CheckState);
-        status.onchange = () => setPermState(status.state as CheckState);
-      }
-    } catch {
-      // Safari/Firefox may not support camera/mic permission queries — leave as unknown.
-    }
-  }, [kind]);
-
   useEffect(() => {
     if (!open) return;
-    queryPermission();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    // Subscribe, don't set state in the effect body: the permission query is
+    // asynchronous, so its state updates happen in the promise callback.
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (navigator.permissions?.query) {
+          const name = kind === 'camera' ? 'camera' : 'microphone';
+          const status = await navigator.permissions.query({ name: name as PermissionName });
+          if (cancelled) return;
+          setPermState(status.state as CheckState);
+          status.onchange = () => setPermState(status.state as CheckState);
+        }
+      } catch {
+        // Safari/Firefox may not support camera/mic permission queries — leave as unknown.
+      }
+    })();
     return () => {
+      cancelled = true;
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [open, queryPermission, onClose]);
+  }, [open, kind, onClose]);
 
   if (!open) return null;
 
