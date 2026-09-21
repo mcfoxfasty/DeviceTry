@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Square, Plus, Minus, Volume2 } from 'lucide-react';
+import { Play, Square, Plus, Minus, Timer } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface ToolComponentProps {
@@ -18,12 +18,37 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
   const [volume, setVolume] = useState<number>(0.2);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const timerWorkerRef = useRef<number | null>(null);
+  const timerWorkerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextNoteTimeRef = useRef<number>(0);
   const currentBeatRef = useRef<number>(0);
   const tapTimesRef = useRef<number[]>([]);
+  // UI beat-indicator timers: every scheduled setTimeout is tracked here and
+  // ALL are cleared on stop/unmount — previously they fired after stop,
+  // updating state for a metronome that was no longer running.
+  const uiTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Live tempo mirrors: the running scheduler reads these refs so tempo and
+  // time-signature changes take effect immediately during playback — no
+  // restart needed, no stale interval closure.
+  const bpmRef = useRef<number>(120);
+  const beatsRef = useRef<number>(4);
+  const volumeRef = useRef<number>(0.2);
 
-  // Web Audio lookahead scheduler
+  const clearUiTimeouts = useCallback(() => {
+    for (const id of uiTimeoutsRef.current) {
+      clearTimeout(id);
+    }
+    uiTimeoutsRef.current = [];
+  }, []);
+
+  const scheduleUiBeat = useCallback((beat: number, delayMs: number) => {
+    const id = setTimeout(() => {
+      setCurrentBeat(beat);
+      // Remove this id once fired to keep the array bounded.
+      uiTimeoutsRef.current = uiTimeoutsRef.current.filter((t) => t !== id);
+    }, Math.max(0, delayMs));
+    uiTimeoutsRef.current.push(id);
+  }, []);
+
   const scheduleNote = useCallback((beatNumber: number, time: number) => {
     if (!audioCtxRef.current) return;
     const osc = audioCtxRef.current.createOscillator();
@@ -33,7 +58,7 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
     const isAccent = beatNumber === 0;
     osc.frequency.setValueAtTime(isAccent ? 1200 : 800, time);
 
-    gain.gain.setValueAtTime(volume, time);
+    gain.gain.setValueAtTime(volumeRef.current, time);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
 
     osc.connect(gain);
@@ -41,36 +66,40 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
 
     osc.start(time);
     osc.stop(time + 0.05);
-  }, [volume]);
+  }, []);
 
+  // Web Audio lookahead scheduler. Reads bpm/beats from refs: changes apply
+  // to the NEXT scheduled beat while playing (immediate, no loop stacking —
+  // there is exactly one interval per session).
   const scheduler = useCallback(() => {
     if (!audioCtxRef.current) return;
-    // Look ahead 0.1s
-    while (nextNoteTimeRef.current < audioCtxRef.current.currentTime + 0.1) {
+    const ctx = audioCtxRef.current;
+    while (nextNoteTimeRef.current < ctx.currentTime + 0.1) {
       scheduleNote(currentBeatRef.current, nextNoteTimeRef.current);
-      const beat = currentBeatRef.current;
-      setTimeout(() => {
-        setCurrentBeat(beat);
-      }, Math.max(0, (nextNoteTimeRef.current - audioCtxRef.current!.currentTime) * 1000));
+      scheduleUiBeat(
+        currentBeatRef.current,
+        (nextNoteTimeRef.current - ctx.currentTime) * 1000
+      );
 
-      const secondsPerBeat = 60.0 / bpm;
+      const secondsPerBeat = 60.0 / bpmRef.current;
       nextNoteTimeRef.current += secondsPerBeat;
-      currentBeatRef.current = (currentBeatRef.current + 1) % beatsPerMeasure;
+      currentBeatRef.current = (currentBeatRef.current + 1) % beatsRef.current;
     }
-  }, [bpm, beatsPerMeasure, scheduleNote]);
+  }, [scheduleNote, scheduleUiBeat]);
 
   const stopMetronome = useCallback(() => {
-    if (timerWorkerRef.current) {
+    if (timerWorkerRef.current !== null) {
       clearInterval(timerWorkerRef.current);
       timerWorkerRef.current = null;
     }
+    clearUiTimeouts();
     if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
       audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
     }
     setIsPlaying(false);
     setCurrentBeat(0);
-  }, []);
+  }, [clearUiTimeouts]);
 
   const startMetronome = () => {
     stopMetronome();
@@ -79,19 +108,34 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
     const ctx = new AudioContextClass();
     audioCtxRef.current = ctx;
 
+    bpmRef.current = bpm;
+    beatsRef.current = beatsPerMeasure;
+    volumeRef.current = volume;
     currentBeatRef.current = 0;
     nextNoteTimeRef.current = ctx.currentTime + 0.05;
 
-    timerWorkerRef.current = window.setInterval(scheduler, 25);
+    // Exactly ONE scheduler interval per session.
+    timerWorkerRef.current = setInterval(scheduler, 25);
     setIsPlaying(true);
 
-    if (onResultUpdate) {
-      onResultUpdate('passed', `Metronome active at ${bpm} BPM (${beatsPerMeasure}/4)`);
-    }
+    onResultUpdate?.('inconclusive', `Metronome playing at ${bpm} BPM (${beatsPerMeasure}/4) — audible confirmation requires the user to hear the ticks`);
   };
+
+  // Keep the live refs in sync so mid-playback changes apply immediately.
+  useEffect(() => {
+    bpmRef.current = bpm;
+  }, [bpm]);
+  useEffect(() => {
+    beatsRef.current = beatsPerMeasure;
+  }, [beatsPerMeasure]);
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
 
   useEffect(() => {
     return () => {
+      // Navigation/departure: stop everything — interval, every pending UI
+      // beat timer, and the AudioContext.
       stopMetronome();
     };
   }, [stopMetronome]);
@@ -180,6 +224,19 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
           ))}
         </div>
 
+        {/* Volume */}
+        <div className="flex items-center gap-3 w-full max-w-xs">
+          <span className="text-xs font-semibold text-[#59677D] dark:text-[#9AA6B8]">Volume</span>
+          <input
+            type="range"
+            min="0"
+            max="60"
+            value={Math.round(volume * 100)}
+            onChange={(e) => setVolume(parseInt(e.target.value) / 100)}
+            className="w-full h-2 bg-[#DFE5EB] dark:bg-[#223043] rounded-lg appearance-none cursor-pointer accent-[#0F766E]"
+          />
+        </div>
+
         {/* Controls: Time Signature & Tap Tempo */}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <div className="flex items-center gap-1 bg-[#F6F8FB] dark:bg-[#192332] p-1 rounded-xl border border-[#DFE5EB] dark:border-[#223043]">
@@ -226,6 +283,20 @@ export function MetronomeTester({ onResultUpdate }: ToolComponentProps) {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Honest timing disclosure */}
+      <div className="p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] space-y-1">
+        <p className="flex items-start gap-1.5">
+          <Timer className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>
+            <strong>Timing accuracy:</strong> audio ticks are scheduled on the Web Audio clock with a 100 ms
+            look-ahead, which keeps the beat steady while the tab is focused. Browsers throttle timers in
+            background tabs, so the visual beat dots (and any newly scheduled audio) can lag when this page is
+            not visible. Supported tempo range: 30–280 BPM — the full slider range is genuinely schedulable
+            by the look-ahead loop.
+          </span>
+        </p>
       </div>
     </div>
   );

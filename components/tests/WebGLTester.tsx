@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
-import { Box, Play, RotateCcw, CheckCircle, XCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, Pause, Play, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface TesterProps {
@@ -22,7 +22,84 @@ interface GlInfo {
   antialias: boolean;
 }
 
-// Built once at module load: the effect below references CUBE_VERTICES, so the
+type FailureKind = 'compile' | 'link' | 'attrib';
+
+interface RenderFailure {
+  kind: FailureKind;
+  detail: string;
+}
+
+/** Compile one shader and honestly report compile status. */
+function compileShader(
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string
+): { shader: WebGLShader | null; error: string | null } {
+  const shader = gl.createShader(type);
+  if (!shader) return { shader: null, error: 'createShader returned null' };
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader) ?? 'unknown compile error';
+    gl.deleteShader(shader); // release the failed shader immediately
+    return { shader: null, error: log.trim() };
+  }
+  return { shader, error: null };
+}
+
+/**
+ * Build the cube program. Returns null (with a failure reason) when any
+ * shader fails to compile or the program fails to link — context availability
+ * alone is NEVER proof that rendering works.
+ */
+function buildCubeProgram(
+  gl: WebGLRenderingContext
+): { program: WebGLProgram | null; failure: RenderFailure | null } {
+  const vs = `
+    attribute vec3 aPos;
+    uniform float uAngle;
+    void main() {
+      float c = cos(uAngle); float s = sin(uAngle);
+      mat3 rotY = mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c);
+      mat3 rotX = mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c);
+      vec3 p = rotX * rotY * aPos;
+      gl_Position = vec4(p * 0.55, 1.0);
+    }`;
+  const fs = `
+    precision mediump float;
+    void main() { gl_FragColor = vec4(0.06, 0.46, 0.43, 1.0); }`;
+
+  const vert = compileShader(gl, gl.VERTEX_SHADER, vs);
+  if (!vert.shader) return { program: null, failure: { kind: 'compile', detail: `vertex: ${vert.error}` } };
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, fs);
+  if (!frag.shader) {
+    gl.deleteShader(vert.shader);
+    return { program: null, failure: { kind: 'compile', detail: `fragment: ${frag.error}` } };
+  }
+
+  const program = gl.createProgram();
+  if (!program) {
+    gl.deleteShader(vert.shader);
+    gl.deleteShader(frag.shader);
+    return { program: null, failure: { kind: 'link', detail: 'createProgram returned null' } };
+  }
+  gl.attachShader(program, vert.shader);
+  gl.attachShader(program, frag.shader);
+  gl.linkProgram(program);
+  const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
+  gl.detachShader(program, vert.shader);
+  gl.detachShader(program, frag.shader);
+  gl.deleteShader(vert.shader);
+  gl.deleteShader(frag.shader);
+  if (!linked) {
+    const log = gl.getProgramInfoLog(program) ?? 'unknown link error';
+    gl.deleteProgram(program);
+    return { program: null, failure: { kind: 'link', detail: log.trim() } };
+  }
+  return { program, failure: null };
+}
+
+// Built once at module load: the effect references CUBE_VERTICES, so the
 // constant must exist before the component — a render-scope declaration would
 // be read before initialization and rebuilt on every render.
 const CUBE_VERTICES: number[] = buildCube();
@@ -44,12 +121,70 @@ function buildCube(): number[] {
   return out;
 }
 
+/** Seconds to radians — the cube completes one revolution in 2.5 s. */
+const ANGLE_PER_SECOND = Math.PI / 2.5;
+
 export function WebGLTester({ onResultUpdate }: TesterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
+  const playingRef = useRef<boolean>(true);
+  const angleRef = useRef<number>(0);
+  const glRef = useRef<WebGLRenderingContext | null>(null);
+  const programRef = useRef<WebGLProgram | null>(null);
+  const uAngleRef = useRef<WebGLUniformLocation | null>(null);
+  const bufferRef = useRef<WebGLBuffer | null>(null);
   const [info, setInfo] = useState<GlInfo | null>(null);
   const [unavailable, setUnavailable] = useState<boolean>(false);
+  const [failure, setFailure] = useState<RenderFailure | null>(null);
   const [spinning, setSpinning] = useState<boolean>(true);
+
+  const stopLoop = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Start (or restart) the render loop. Always cancels any prior pending
+   * frame first, so Pause→Resume can never stack a second loop. Rotation
+   * continues from angleRef — the exact angle where it paused.
+   */
+  const startLoop = useCallback(
+    (gl: WebGLRenderingContext, program: WebGLProgram, uAngle: WebGLUniformLocation | null) => {
+      stopLoop();
+      let last = performance.now();
+      const frame = () => {
+        if (!playingRef.current) {
+          rafRef.current = null; // paused: idle, nothing scheduled
+          return;
+        }
+        const now = performance.now();
+        angleRef.current += ((now - last) / 1000) * ANGLE_PER_SECOND;
+        last = now;
+        gl.clearColor(0.043, 0.066, 0.102, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.uniform1f(uAngle, angleRef.current);
+        gl.drawArrays(gl.TRIANGLES, 0, CUBE_VERTICES.length / 3);
+        rafRef.current = requestAnimationFrame(frame);
+      };
+      rafRef.current = requestAnimationFrame(frame);
+    },
+    [stopLoop]
+  );
+
+  const handleToggle = useCallback(() => {
+    const next = !playingRef.current;
+    playingRef.current = next;
+    setSpinning(next);
+    if (next) {
+      const gl = glRef.current;
+      const program = programRef.current;
+      if (gl && program) startLoop(gl, program, uAngleRef.current);
+    } else {
+      stopLoop();
+    }
+  }, [startLoop, stopLoop]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -58,9 +193,10 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
     const gl = (canvas.getContext('webgl2') || canvas.getContext('webgl')) as WebGLRenderingContext | null;
     if (!gl) {
       setUnavailable(true);
-      onResultUpdate?.('unsupported', 'No WebGL context available');
+      onResultUpdate?.('unsupported', 'No WebGL context available — hardware acceleration may be disabled');
       return;
     }
+    glRef.current = gl;
 
     const isGl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
     const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
@@ -77,42 +213,35 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
       antialias: !!gl.getContextAttributes()?.antialias,
     };
     setInfo(data);
-    onResultUpdate?.('passed', `WebGL ${isGl2 ? '2' : '1'} OK — ${data.renderer}`);
 
-    // Spinning cube
-    const vs = `
-      attribute vec3 aPos;
-      uniform float uAngle;
-      void main() {
-        float c = cos(uAngle); float s = sin(uAngle);
-        mat3 rotY = mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c);
-        mat3 rotX = mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c);
-        vec3 p = rotX * rotY * aPos;
-        gl_Position = vec4(p * 0.55, 1.0);
-      }`;
-    const fs = `
-      precision mediump float;
-      void main() { gl_FragColor = vec4(0.06, 0.46, 0.43, 1.0); }`;
+    // Render pipeline: validate compile + link BEFORE claiming success.
+    const { program, failure: buildFailure } = buildCubeProgram(gl);
+    if (!program || buildFailure) {
+      setFailure(buildFailure ?? { kind: 'link', detail: 'program unavailable' });
+      onResultUpdate?.('failed', `WebGL context exists but the render pipeline failed: ${buildFailure?.detail ?? 'unknown'}`);
+      return; // nothing scheduled; no resources to release
+    }
+    programRef.current = program;
+    gl.useProgram(program);
 
-    const compile = (type: number, src: string) => {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      return sh;
-    };
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
-    gl.linkProgram(prog);
-    gl.useProgram(prog);
+    const aPos = gl.getAttribLocation(program, 'aPos');
+    if (aPos < 0) {
+      setFailure({ kind: 'attrib', detail: 'aPos attribute not found in linked program' });
+      onResultUpdate?.('failed', 'WebGL program linked but is missing the expected aPos attribute');
+      gl.deleteProgram(program);
+      programRef.current = null;
+      return;
+    }
 
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(CUBE_VERTICES), gl.STATIC_DRAW);
-    const aPos = gl.getAttribLocation(prog, 'aPos');
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
-    const uAngle = gl.getUniformLocation(prog, 'uAngle');
+    bufferRef.current = buffer;
+
+    const uAngle = gl.getUniformLocation(program, 'uAngle');
+    uAngleRef.current = uAngle;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = canvas.clientWidth * dpr;
@@ -120,21 +249,25 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.enable(gl.CULL_FACE);
 
-    const start = performance.now();
-    const loop = () => {
-      gl.clearColor(0.043, 0.066, 0.102, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl.uniform1f(uAngle, ((performance.now() - start) / 1000) * Math.PI / 2.5);
-      gl.drawArrays(gl.TRIANGLES, 0, CUBE_VERTICES.length / 3);
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
+    // A verified pipeline that actually drew = honest passed verdict.
+    onResultUpdate?.('passed', `WebGL ${isGl2 ? '2' : '1'} rendering verified — ${data.renderer}`);
+
+    if (playingRef.current) startLoop(gl, program, uAngle);
 
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      // Departure: stop animation work and release GPU resources.
+      stopLoop();
+      playingRef.current = true; // reset for a potential remount
+      angleRef.current = 0;
+      programRef.current = null;
+      uAngleRef.current = null;
+      if (bufferRef.current) {
+        gl.deleteBuffer(bufferRef.current);
+        bufferRef.current = null;
+      }
+      gl.deleteProgram(program);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onResultUpdate, startLoop, stopLoop]);
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -156,15 +289,27 @@ export function WebGLTester({ onResultUpdate }: TesterProps) {
             <p className="mt-1 opacity-80">Update your GPU drivers or check that hardware acceleration is enabled in browser settings.</p>
           </div>
         </div>
+      ) : failure ? (
+        <div className="mt-5 p-6 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">WebGL context available, but rendering failed</p>
+            <p className="mt-1 opacity-80 font-mono break-all">
+              {failure.kind === 'compile' ? 'Shader compile error' : failure.kind === 'link' ? 'Program link error' : 'Pipeline error'}: {failure.detail}
+            </p>
+          </div>
+        </div>
       ) : (
         <>
           <div className="mt-5 relative rounded-xl overflow-hidden border border-[#DFE5EB] dark:border-[#223043]">
             <canvas ref={canvasRef} className={`w-full h-[280px] block ${spinning ? '' : 'opacity-60'}`} />
             <button
-              onClick={() => setSpinning((s) => !s)}
+              onClick={handleToggle}
+              aria-pressed={!spinning}
               className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-[#0F766E] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> {spinning ? 'Cube Spinning' : 'Paused'}
+              {spinning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {spinning ? 'Pause rotation' : 'Resume rotation'}
             </button>
           </div>
 

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Gamepad2, AlertTriangle, CheckCircle, Crosshair, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import { CalibrationTracker, DRIFT_THRESHOLD, DriftVerdict } from '@/lib/testing/gamepadDrift';
 
 interface GamepadTesterProps {
   t: Translations;
@@ -43,12 +44,23 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
   const [gamepads, setGamepads] = useState<{ id: string; index: number; buttons: number[]; axes: number[] }[]>([]);
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
   const [isCalibratingNeutral, setIsCalibratingNeutral] = useState<boolean>(false);
-  const [neutralCalibrationPassed, setNeutralCalibrationPassed] = useState<boolean | null>(null);
+  // UI mirror of the tracker's retained verdict, bound to the pad id that
+  // produced it. Reconciled ONLY from event/callback contexts (rAF poll frame,
+  // calibration timeout) — never from an effect body.
+  const [verdictForPad, setVerdictForPad] = useState<{ padId: string; verdict: DriftVerdict } | null>(null);
   const [vibrationSupported, setVibrationSupported] = useState<boolean>(false);
+  // Mirror for the rAF loop, which must not depend on state (would restart
+  // the loop every time support flips).
+  const vibrationSupportedRef = useRef<boolean>(false);
 
-  const calibrationSamplesRef = useRef<{ leftMax: number; rightMax: number }[]>([]);
+  // Calibration state machine (extracted for regression testing). The tracker
+  // owns verdict retention; the component keeps UI-only mirrors of it.
+  const trackerRef = useRef<CalibrationTracker>(new CalibrationTracker());
   const isCalibratingRef = useRef<boolean>(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The selected pad's identity. Verdicts are locked per pad id, so a
+  // different or reconnected controller can never inherit another pad's result.
+  const selectedPadIdRef = useRef<string>('');
 
   // Unmount: cancel the calibration timeout and invalidate in-flight
   // emissions without deleting a completed guided result.
@@ -65,8 +77,10 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
 
   useEffect(() => {
     let animId: number;
+    let cancelled = false;
 
     const pollGamepads = () => {
+      if (cancelled) return;
       if (typeof navigator !== 'undefined' && navigator.getGamepads) {
         const rawPads = navigator.getGamepads();
         const active: { id: string; index: number; buttons: number[]; axes: number[] }[] = [];
@@ -83,33 +97,65 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
 
             // Check vibration actuator support
             if (
-              (pad as unknown as { vibrationActuator?: { playEffect: unknown } }).vibrationActuator &&
-              !vibrationSupported
+              (pad as unknown as { vibrationActuator?: unknown }).vibrationActuator &&
+              !vibrationSupportedRef.current
             ) {
+              vibrationSupportedRef.current = true;
               setVibrationSupported(true);
             }
 
-            // If currently taking idle calibration samples
-            if (isCalibratingRef.current && pad.index === selectedPadIndex) {
+            // Feed the live calibration sampler (only for the selected pad).
+            if (pad.index === selectedPadIndex && trackerRef.current.isCollectingFor(pad.id)) {
               const leftDist = Math.hypot(pad.axes[0] || 0, pad.axes[1] || 0);
               const rightDist = Math.hypot(pad.axes[2] || 0, pad.axes[3] || 0);
-              calibrationSamplesRef.current.push({ leftMax: leftDist, rightMax: rightDist });
+              trackerRef.current.addSample({ leftMax: leftDist, rightMax: rightDist });
             }
           }
         }
 
         setGamepads(active);
 
-        if (active.length > 0 && !isCalibratingRef.current) {
-          const current = active.find((p) => p.index === selectedPadIndex) || active[0];
-          // Token captured at poll time (per frame): if the device changed or
-          // the run was reset, this frame's token is stale and its emission is
-          // rejected — it can never report for a newer run or device.
-          emitRunRich(currentRun(), {
-            status: 'passed',
-            details: `Controller active: ${current.id}. Buttons & axes polling correctly.`,
-            metrics: { padId: current.id, buttonCount: current.buttons.length },
-          });
+        const current = active.find((p) => p.index === selectedPadIndex) || active[0];
+
+        // Selected pad identity tracking: selection change, disconnection, or
+        // a reconnected pad (different id under the same index) invalidates
+        // any verdict bound to the previous pad, so no result is retained
+        // across controllers.
+        const currentId = current?.id ?? '';
+        if (currentId !== selectedPadIdRef.current) {
+          trackerRef.current.invalidatePad(selectedPadIdRef.current);
+          selectedPadIdRef.current = currentId;
+          // Mirror the tracker: null unless the NEW pad retains its own verdict.
+          setVerdictForPad(trackerRef.current.snapshot());
+        }
+
+        // Calibration completion is driven by the timeout (below); polling
+        // frames only sample while the window is open.
+
+        if (active.length === 0 && isCalibratingRef.current) {
+          // Controller unplugged mid-calibration: the window can no longer
+          // produce a verdict for this pad. Abort the window; the timeout
+          // fires into a non-collecting tracker and reports nothing.
+          isCalibratingRef.current = false;
+          trackerRef.current.invalidatePad(selectedPadIdRef.current);
+          setIsCalibratingNeutral(false);
+          setVerdictForPad(null);
+        }
+
+        // CONNECTION verdict: emitted only while no calibration verdict is
+        // retained for this pad. This is the audited fix — the next polling
+        // frame can no longer overwrite a drift warning with "passed".
+        if (active.length > 0 && !isCalibratingRef.current && !trackerRef.current.hasRetainedVerdict) {
+          if (current) {
+            // Token captured per frame: a stale frame's emission is rejected
+            // if the run was reset meanwhile. Identical re-emissions dedupe in
+            // the ResultController, so this stays cheap per frame.
+            emitRunRich(currentRun(), {
+              status: 'passed',
+              details: `Controller connected: ${current.id}. Live button and axis polling works. Connection alone does not verify every button — press each control to observe it.`,
+              metrics: { padId: current.id, buttonCount: current.buttons.length },
+            });
+          }
         }
       }
 
@@ -118,21 +164,34 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
 
     animId = requestAnimationFrame(pollGamepads);
 
-    return () => cancelAnimationFrame(animId);
-  }, [selectedPadIndex, vibrationSupported, emitRunRich, currentRun]);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animId);
+    };
+  }, [selectedPadIndex, emitRunRich, currentRun]);
 
   // New device selection = new observation run: the old run's verdict must not
-  // linger and a stale poll frame must not restore it.
+  // linger and a stale poll frame must not restore it. The UI mirror is
+  // reconciled from the poll frame's identity-change branch.
   useEffect(() => {
     startRun();
+    // Selection change also drops the calibration verdict of the old pad.
+    trackerRef.current.invalidatePad(selectedPadIdRef.current);
   }, [selectedPadIndex, startRun]);
 
   // Neutral Drift Calibration Test (Observed 2.5 seconds while idle)
   const startNeutralCalibration = () => {
+    const rawPads = typeof navigator !== 'undefined' ? navigator.getGamepads?.() ?? [] : [];
+    const pad = rawPads[selectedPadIndex] || rawPads[0];
+    if (!pad) return;
+
     setIsCalibratingNeutral(true);
-    setNeutralCalibrationPassed(null);
-    calibrationSamplesRef.current = [];
+    setVerdictForPad(null);
     isCalibratingRef.current = true;
+    // Open the sampling window for THIS pad; rAF frames feed it while open.
+    // (Without this the window never opens and no samples can be collected.)
+    trackerRef.current.beginNewCalibration(pad.id);
+    selectedPadIdRef.current = pad.id;
 
     // Capture the token NOW (operation start): if the user switches device,
     // resets, or the component unmounts during calibration, this timeout's
@@ -152,22 +211,27 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
 
       setIsCalibratingNeutral(false);
 
-      const samples = calibrationSamplesRef.current;
-      if (samples.length > 10) {
-        const maxLeft = Math.max(...samples.map((s) => s.leftMax));
-        const maxRight = Math.max(...samples.map((s) => s.rightMax));
-        // Standard dead-zone threshold: 12%
-        const hasDrift = maxLeft > 0.12 || maxRight > 0.12;
-        setNeutralCalibrationPassed(!hasDrift);
-
+      const verdict = trackerRef.current.finish(10);
+      if (!verdict) {
+        // Not enough samples (pad vanished, background throttling): honest
+        // inconclusive instead of silently passing.
+        setVerdictForPad(null);
         emitRunRich(runToken, {
-          status: hasDrift ? 'warning' : 'passed',
-          details: hasDrift
-            ? `Idle stick resting offset exceeded 12% deadzone (Left: ${(maxLeft * 100).toFixed(1)}%, Right: ${(maxRight * 100).toFixed(1)}%).`
-            : `Neutral calibration verified clean centering within 12% deadzone.`,
-          metrics: { maxLeftIdleOffset: maxLeft, maxRightIdleOffset: maxRight },
+          status: 'inconclusive',
+          details: 'Not enough idle samples were collected to assess stick centering. Keep the controller connected and try again.',
+          metrics: { samplesCollected: 'low' },
         });
+        return;
       }
+
+      setVerdictForPad(trackerRef.current.snapshot()); // pad-bound verdict for the UI
+      emitRunRich(runToken, {
+        status: verdict.hasDrift ? 'warning' : 'passed',
+        details: verdict.hasDrift
+          ? `Idle stick resting offset exceeded this tool's ~${Math.round(DRIFT_THRESHOLD * 100)}% deadzone (Left: ${(verdict.maxLeft * 100).toFixed(1)}%, Right: ${(verdict.maxRight * 100).toFixed(1)}%). This is an approximate heuristic for this tester, not a universal certification.`
+          : `Idle sticks rested within this tool's ~${Math.round(DRIFT_THRESHOLD * 100)}% neutral deadzone over the 2.5 s window.`,
+        metrics: { maxLeftIdleOffset: verdict.maxLeft, maxRightIdleOffset: verdict.maxRight, threshold: DRIFT_THRESHOLD },
+      });
     }, 2500);
   };
 
@@ -190,6 +254,9 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
   };
 
   const activePad = gamepads.find((p) => p.index === selectedPadIndex) || gamepads[0];
+  // The verdict shown for THIS controller only — never another pad's result.
+  const activeVerdict =
+    verdictForPad && activePad && verdictForPad.padId === activePad.id ? verdictForPad.verdict : null;
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -251,7 +318,7 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4]">
                   Neutral Stick Drift Check
                 </h3>
-                <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-0.5">
+                <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] mt-0.5">
                   Release both sticks and observe resting deadzone for 2.5 seconds.
                 </p>
               </div>
@@ -266,23 +333,23 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
               </button>
             </div>
 
-            {neutralCalibrationPassed !== null && (
+            {activeVerdict !== null && (
               <div
                 className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                  neutralCalibrationPassed
-                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                    : 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                  activeVerdict.hasDrift
+                    ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                 }`}
               >
-                {neutralCalibrationPassed ? (
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                ) : (
+                {activeVerdict.hasDrift ? (
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
                 )}
                 <span>
-                  {neutralCalibrationPassed
-                    ? 'Sticks rested stably within the acceptable 12% neutral deadzone.'
-                    : 'Resting stick position drifted outside the 12% neutral deadzone.'}
+                  {activeVerdict.hasDrift
+                    ? `Resting stick position drifted outside this tool's ~${Math.round(DRIFT_THRESHOLD * 100)}% neutral deadzone — a warning, not a certification.`
+                    : `Sticks rested stably within this tool's ~${Math.round(DRIFT_THRESHOLD * 100)}% neutral deadzone.`}
                 </span>
               </div>
             )}
@@ -362,7 +429,7 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
                     className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition-colors ${
                       isPressed
                         ? 'bg-[#0F766E] text-white border-[#0D665F] font-bold shadow-sm'
-                        : 'bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border-[#DFE5EB] dark:border-[#223043]'
+                        : 'bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043]'
                     }`}
                   >
                     <span className="truncate">{label}</span>

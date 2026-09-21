@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Move3d, Play, Square, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Move3d, Play, Square, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { classifyAxes, hasFiniteReading, ReadingVerdict } from '@/lib/testing/sensorGates';
 
 interface TesterProps {
   t?: Translations;
@@ -16,48 +17,131 @@ interface Reading {
   z: number;
 }
 
+/** How long to wait for the first valid finite reading before an honest inconclusive. */
+const FIRST_READING_TIMEOUT_MS = 5000;
+
 export function AccelerometerTester({ onResultUpdate }: TesterProps) {
   const [listening, setListening] = useState<boolean>(false);
   const [reading, setReading] = useState<Reading | null>(null);
+  const [receivedValid, setReceivedValid] = useState<boolean>(false);
   const [peak, setPeak] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState<boolean>(false);
   const [iosPermissionPending, setIosPermissionPending] = useState<boolean>(false);
-  const lastReadingRef = useRef<Reading | null>(null);
 
-  useEffect(() => {
-    return () => {
-      window.ondevicemotion = null;
-    };
-  }, []);
+  // Immutable observation token: bumped on stop/restart/unmount so an event
+  // arriving from an attached-then-detached listener cannot mutate state.
+  const sessionTokenRef = useRef<number>(0);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peakRef = useRef<number>(0);
 
-  const reportResult = (ok: boolean) => {
+  const reportResult = useCallback((ok: boolean) => {
     if (!ok) {
       onResultUpdate?.('unsupported', 'DeviceMotionEvent not exposed or permission denied');
       return;
     }
-    onResultUpdate?.('passed', 'Accelerometer streaming live 3-axis acceleration');
-  };
+    onResultUpdate?.('inconclusive', 'Listening for the first finite accelerometer reading — attaching a listener alone is not proof the sensor works');
+  }, [onResultUpdate]);
 
-  const attachListener = () => {
+  const detachListener = useCallback(() => {
+    window.ondevicemotion = null;
+  }, []);
+
+  const stopListening = useCallback(() => {
+    sessionTokenRef.current += 1; // invalidate all in-flight callbacks
+    detachListener();
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setListening(false);
+  }, [detachListener]);
+
+  // Unmount: full cleanup with no setState after teardown begins.
+  useEffect(() => {
+    return () => {
+      sessionTokenRef.current += 1;
+      window.ondevicemotion = null;
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const attachAndListen = () => {
+    const token = sessionTokenRef.current; // captured at attach time
+
     window.ondevicemotion = (event: DeviceMotionEvent) => {
+      if (token !== sessionTokenRef.current) {
+        return; // obsolete callback after stop/restart/unmount: ignore
+      }
       const acc = event.accelerationIncludingGravity;
-      if (!acc) return;
+      const verdict: ReadingVerdict = classifyAxes({
+        x: acc?.x,
+        y: acc?.y,
+        z: acc?.z,
+      });
+
+      if (verdict === 'missing-data') {
+        // Nulls are MISSING data — never treated as zero or success.
+        return;
+      }
+      if (verdict === 'non-finite') {
+        return;
+      }
+
+      // verdict === 'valid': finite numbers (zero included — a device at
+      // rest legitimately reads 0/0/0 on some axes; zero IS data).
       const r: Reading = {
-        x: Math.round((acc.x ?? 0) * 100) / 100,
-        y: Math.round((acc.y ?? 0) * 100) / 100,
-        z: Math.round((acc.z ?? 0) * 100) / 100,
+        x: Math.round((acc!.x as number) * 100) / 100,
+        y: Math.round((acc!.y as number) * 100) / 100,
+        z: Math.round((acc!.z as number) * 100) / 100,
       };
-      lastReadingRef.current = r;
       const magnitude = Math.sqrt(r.x * r.x + r.y * r.y + r.z * r.z);
       setReading(r);
-      setPeak((p) => (magnitude > p ? Math.round(magnitude * 100) / 100 : p));
+      setReceivedValid(true);
+      if (magnitude > peakRef.current) {
+        peakRef.current = magnitude;
+        setPeak(Math.round(magnitude * 100) / 100);
+      }
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      onResultUpdate?.('passed', 'Finite 3-axis acceleration received (valid data, zero values included)');
     };
+
+    // Bounded wait for the first valid reading.
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null;
+      if (token !== sessionTokenRef.current) return;
+      if (!hasFiniteReadingRef.current) {
+        setTimedOut(true);
+        onResultUpdate?.(
+          'inconclusive',
+          'No finite accelerometer reading arrived within 5 s. The browser exposes DeviceMotionEvent but sent no usable data (common on desktops without an IMU or when the sensor is blocked).'
+        );
+      }
+    }, FIRST_READING_TIMEOUT_MS);
   };
+
+  // Ref mirror so the timeout callback reads live state without re-binding.
+  const hasFiniteReadingRef = useRef<boolean>(false);
+  useEffect(() => {
+    hasFiniteReadingRef.current = receivedValid;
+  }, [receivedValid]);
 
   const startListening = async () => {
     setError(null);
     setPeak(0);
     setReading(null);
+    setReceivedValid(false);
+    setTimedOut(false);
+    peakRef.current = 0;
+
+    stopListening(); // invalidate any previous session + detach
+    sessionTokenRef.current += 1;
 
     const DME = window.DeviceMotionEvent as (typeof DeviceMotionEvent) & {
       requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -65,7 +149,7 @@ export function AccelerometerTester({ onResultUpdate }: TesterProps) {
 
     if (!('DeviceMotionEvent' in window)) {
       setError('DeviceMotionEvent is not available on this device — desktops without an IMU cannot stream motion data.');
-      reportResult(false);
+      onResultUpdate?.('unsupported', 'DeviceMotionEvent unavailable');
       return;
     }
 
@@ -77,23 +161,18 @@ export function AccelerometerTester({ onResultUpdate }: TesterProps) {
         setIosPermissionPending(false);
         if (response !== 'granted') {
           setError('Motion sensor permission was denied. Enable it in Settings → Safari → Motion & Orientation Access.');
-          reportResult(false);
+          onResultUpdate?.('failed', 'Motion permission denied');
           return;
         }
       }
-      attachListener();
+      attachAndListen();
       setListening(true);
       reportResult(true);
     } catch (err) {
       setIosPermissionPending(false);
       setError((err as Error).message || 'Failed to start motion sensor');
-      reportResult(false);
+      onResultUpdate?.('failed', 'Accelerometer start failed');
     }
-  };
-
-  const stopListening = () => {
-    window.ondevicemotion = null;
-    setListening(false);
   };
 
   const axisBar = (value: number) => {
@@ -128,7 +207,9 @@ export function AccelerometerTester({ onResultUpdate }: TesterProps) {
         </div>
         {listening ? (
           <button
-            onClick={stopListening}
+            onClick={() => {
+              stopListening();
+            }}
             className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <Square className="w-3.5 h-3.5" /> Stop Sensors
@@ -187,7 +268,19 @@ export function AccelerometerTester({ onResultUpdate }: TesterProps) {
 
           <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400">
             <CheckCircle className="w-3.5 h-3.5" />
-            Accelerometer streaming — tilt or shake the device to see values react.
+            Finite sensor data received — tilt or shake the device to see values react. A steady 0.00 is still
+            valid data.
+          </div>
+        </div>
+      ) : timedOut ? (
+        <div className="mt-5 p-6 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+          <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">No sensor data received</p>
+            <p className="mt-1 opacity-80">
+              The API exists but no finite reading arrived within 5 seconds. This device/browser combination
+              appears not to deliver motion data — inconclusive, not a hardware failure verdict.
+            </p>
           </div>
         </div>
       ) : !error ? (
@@ -200,7 +293,8 @@ export function AccelerometerTester({ onResultUpdate }: TesterProps) {
       ) : null}
 
       <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-        Values include gravity (accelerationIncludingGravity). A phone resting face-up reads ≈ −9.8 on the Z axis. Desktops without an IMU report nothing.
+        Values include gravity (accelerationIncludingGravity). A phone resting face-up reads ≈ −9.8 on the Z axis.
+        Desktops without an IMU typically send nothing: that reports as inconclusive here, not as success.
       </div>
     </div>
   );

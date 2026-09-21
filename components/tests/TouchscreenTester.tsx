@@ -1,8 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, RotateCcw } from 'lucide-react';
+import { RotateCcw, Hand, MousePointer2, PenTool } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import {
+  pointerSourceOf,
+  countsAsTouchInput,
+  emptyTally,
+  tallySource,
+  TouchSourceTally,
+} from '@/lib/testing/sensorGates';
 
 interface ToolComponentProps {
   t: Translations;
@@ -14,6 +21,7 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [touchedTiles, setTouchedTiles] = useState<Set<string>>(new Set());
   const [totalPoints, setTotalPoints] = useState<number>(0);
+  const [sources, setSources] = useState<TouchSourceTally>(emptyTally());
   const rows = 10;
   const cols = 10;
 
@@ -30,7 +38,6 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Grid background
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const key = `${r}-${c}`;
@@ -55,7 +62,19 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
     redraw();
   }, [redraw]);
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const source = pointerSourceOf(e.pointerType);
+
+    // Track what input sources were actually used (shown honestly in the UI).
+    setSources((prev) => tallySource(prev, source));
+
+    // Mouse movement NEVER establishes a touchscreen result: it is not
+    // registered as coverage, only tallied. Pen is counted but visibly
+    // separated from finger-touch in the UI.
+    if (!countsAsTouchInput(source)) {
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -74,10 +93,12 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
         setTouchedTiles((prev) => {
           const next = new Set(prev);
           next.add(key);
-          if (onResultUpdate) {
-            const pct = Math.round((next.size / (rows * cols)) * 100);
-            onResultUpdate('passed', `Screen coverage: ${pct}% (${next.size}/${rows * cols} tiles)`);
-          }
+          const pct = Math.round((next.size / (rows * cols)) * 100);
+          const sourceNote = source === 'pen' ? ' (pen input — finger coverage may differ)' : '';
+          onResultUpdate?.(
+            'inconclusive',
+            `Observed touch coverage: ${pct}% (${next.size}/${rows * cols} tiles)${sourceNote}. Partial coverage does not certify the whole screen — cover all regions and judge dead zones visually.`
+          );
           return next;
         });
       }
@@ -88,9 +109,13 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
   const clearCanvas = () => {
     setTouchedTiles(new Set());
     setTotalPoints(0);
+    setSources(emptyTally());
   };
 
   const coveragePercent = Math.round((touchedTiles.size / (rows * cols)) * 100);
+  const hasTouchInput = sources.touch > 0;
+  const hasPenInput = sources.pen > 0;
+  const hasMouseInput = sources.mouse > 0;
 
   return (
     <div className="space-y-6">
@@ -99,7 +124,7 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
         <div className="flex items-center gap-6">
           <div>
             <span className="text-[11px] text-[#59677D] dark:text-[#9AA6B8] uppercase font-semibold">
-              Grid Coverage
+              Touch Coverage
             </span>
             <div className="text-xl font-mono font-bold text-[#0F766E] dark:text-[#14B8A6]">
               {coveragePercent}%
@@ -115,7 +140,7 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
           </div>
           <div>
             <span className="text-[11px] text-[#59677D] dark:text-[#9AA6B8] uppercase font-semibold">
-              Raw Sample Points
+              Touch/Pen Points
             </span>
             <div className="text-xl font-mono font-bold text-[#172033] dark:text-[#E9EEF4]">
               {totalPoints}
@@ -132,21 +157,44 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
         </button>
       </div>
 
+      {/* Input-source honesty panel */}
+      <div className="p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] flex flex-wrap items-center gap-4 text-xs">
+        <span className="flex items-center gap-1.5 font-semibold text-[#142033] dark:text-[#E9EEF4]">
+          <Hand className="w-4 h-4 text-[#0F766E]" />
+          Touch events: {sources.touch}
+        </span>
+        <span className="flex items-center gap-1.5 font-semibold text-[#142033] dark:text-[#E9EEF4]">
+          <PenTool className="w-4 h-4 text-[#7C3AED]" />
+          Pen events: {sources.pen}
+          {hasPenInput && !hasTouchInput && (
+            <em className="text-[10px] font-normal text-[#8996A6]">
+              (pen detected — not finger-touch verification)
+            </em>
+          )}
+        </span>
+        <span className="flex items-center gap-1.5 text-[#59677D] dark:text-[#9AA6B8]">
+          <MousePointer2 className="w-4 h-4" />
+          Mouse events (not counted): {sources.mouse}
+        </span>
+      </div>
+
       {/* Main Touch Canvas */}
       <div className="rounded-2xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden bg-white dark:bg-[#111D30] shadow-sm">
         <canvas
           ref={canvasRef}
-          onPointerDown={handlePointerMove}
-          onPointerMove={(e) => {
-            if (e.buttons > 0 || e.pointerType === 'touch') {
-              handlePointerMove(e);
-            }
-          }}
+          onPointerDown={handlePointer}
+          onPointerMove={handlePointer}
           className="w-full h-[400px] touch-none cursor-crosshair block"
         />
       </div>
       <p className="text-center text-xs text-[#59677D] dark:text-[#9AA6B8]">
-        Touch and drag across the screen surface to check capacitive digitizer continuity.
+        Touch and drag with a finger (or pen — counted separately) to check digitizer continuity. Mouse
+        movement is deliberately ignored: a working mouse never proves a working touchscreen.
+      </p>
+      <p className="text-center text-[11px] text-[#8996A6]">
+        {hasTouchInput || hasPenInput
+          ? `Observed coverage is shown above — it reflects only the regions you actually touched.`
+          : 'No touch or pen input observed yet.'}
       </p>
     </div>
   );

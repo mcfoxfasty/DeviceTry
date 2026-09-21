@@ -1,8 +1,14 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Binary, Play, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Binary, Play, Loader2, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import {
+  probeFeatures,
+  jsFib,
+  computeSpeedup,
+  MIN_RELIABLE_DURATION_MS,
+} from '@/lib/testing/wasmProbes';
 
 interface TesterProps {
   t?: Translations;
@@ -12,11 +18,12 @@ interface TesterProps {
 
 interface WasmFeatures {
   mvp: boolean;
-  simd: boolean;
+  /** null = cannot probe (WebAssembly.validate unavailable) — shown honestly. */
+  simd: boolean | null;
   threads: boolean;
   bigInt: boolean;
-  bulkMemory: boolean;
-  referenceTypes: boolean;
+  bulkMemory: boolean | null;
+  referenceTypes: boolean | null;
 }
 
 interface WasmResult {
@@ -24,6 +31,7 @@ interface WasmResult {
   wasmFibMs: number;
   jsFibMs: number;
   speedup: string;
+  parityVerified: boolean;
 }
 
 // Minimal valid Wasm module: (func (export "fib") (param i32) (result i32))
@@ -97,19 +105,17 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
     setResult(null);
 
     try {
+      // Feature probes: each is a minimal valid module exercising the
+      // feature's opcode. validate() rejection = feature unsupported.
+      // null = WebAssembly.validate itself is unavailable (cannot probe).
+      const probed = probeFeatures();
       const features: WasmFeatures = {
         mvp: true,
-        simd: typeof WebAssembly.validate === 'function' && WebAssembly.validate(
-          new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 11, 11])
-        ),
+        simd: probed.simd,
         threads: typeof SharedArrayBuffer !== 'undefined',
         bigInt: typeof BigInt !== 'undefined' && typeof BigInt64Array !== 'undefined',
-        bulkMemory: WebAssembly.validate(
-          new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 6, 1, 4, 0, 252, 11, 11, 11])
-        ),
-        referenceTypes: WebAssembly.validate(
-          new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 6, 1, 4, 0, 208, 208, 26, 11, 11])
-        ),
+        bulkMemory: probed.bulkMemory,
+        referenceTypes: probed.referenceTypes,
       };
 
       // Instantiate the fibonacci module
@@ -122,13 +128,26 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
       if (!exports.fib) throw new Error('fib export missing from module');
 
       // Sanity check: fib(30) must be 832040
-      const sanity = exports.fib(30);
+      const N = 30;
+      const sanity = exports.fib(N);
       if (sanity !== 832040) {
         throw new Error(`fib(30) returned ${sanity}, expected 832040`);
       }
 
-      const N = 30;
       const ITER = 20000;
+      const WARMUP = 3; // bounded warm-up: JIT only, not part of timing
+
+      // Verify the JS and Wasm implementations agree BEFORE comparing speed.
+      const jsSanity = jsFib(N);
+      if (jsSanity !== sanity) {
+        throw new Error(`Workload outputs differ: Wasm ${sanity} vs JS ${jsSanity}`);
+      }
+
+      // Bounded warm-up (same workload, untimed)
+      for (let i = 0; i < WARMUP; i++) {
+        exports.fib(N);
+        jsFib(N);
+      }
 
       // Wasm timing
       let t0 = performance.now();
@@ -136,26 +155,26 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
       for (let i = 0; i < ITER; i++) sink += exports.fib(N);
       const wasmFibMs = performance.now() - t0;
 
-      // Equivalent JS timing (iterative fib)
-      const jsFib = (n: number): number => {
-        let prev = 0, curr = 1;
-        for (let i = 0; i < n; i++) {
-          const next = prev + curr;
-          prev = curr;
-          curr = next;
-        }
-        return prev;
-      };
+      // Equivalent JS timing (same iterative algorithm)
       t0 = performance.now();
       for (let i = 0; i < ITER; i++) sink += jsFib(N);
       const jsFibMs = performance.now() - t0;
 
       if (sink < 0) console.log('unreachable', sink); // keep sink alive
 
-      const speedup = jsFibMs > 0 ? `${(wasmFibMs / jsFibMs).toFixed(2)}× vs JS` : 'n/a';
-      const res: WasmResult = { features, wasmFibMs: Math.round(wasmFibMs), jsFibMs: Math.round(jsFibMs), speedup };
+      // Speedup = JS duration / Wasm duration. Zero/near-zero durations
+      // (timer resolution) yield an honest "n/a", never Infinity.
+      const speed = computeSpeedup(jsFibMs, wasmFibMs);
+      const res: WasmResult = {
+        features,
+        wasmFibMs: Math.round(wasmFibMs * 100) / 100,
+        jsFibMs: Math.round(jsFibMs * 100) / 100,
+        speedup: speed.label,
+        parityVerified: true,
+      };
+      void MIN_RELIABLE_DURATION_MS; // documented floor used by computeSpeedup
       setResult(res);
-      onResultUpdate?.('passed', `Wasm module compiled & executed — fib(30) × ${ITER.toLocaleString()} in ${Math.round(wasmFibMs)} ms`);
+      onResultUpdate?.('passed', `Wasm module compiled & executed — fib(30) × ${ITER.toLocaleString()} in ${Math.round(wasmFibMs)} ms; outputs verified equal to JS before comparison`);
     } catch (err) {
       setError((err as Error).message || 'Wasm instantiation failed');
       onResultUpdate?.('failed', 'WebAssembly instantiation failed');
@@ -165,10 +184,10 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
 
   const featureRows = result
     ? [
-        { label: 'MVP (core)', ok: result.features.mvp },
+        { label: 'MVP (core)', ok: result.features.mvp as boolean | null },
         { label: 'SIMD (128-bit)', ok: result.features.simd },
-        { label: 'Threads (SAB)', ok: result.features.threads },
-        { label: 'BigInt64 / i64', ok: result.features.bigInt },
+        { label: 'Threads (SAB)', ok: result.features.threads as boolean | null },
+        { label: 'BigInt64 / i64', ok: result.features.bigInt as boolean | null },
         { label: 'Bulk Memory', ok: result.features.bulkMemory },
         { label: 'Reference Types', ok: result.features.referenceTypes },
       ]
@@ -208,12 +227,17 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {featureRows.map((f) => (
               <div key={f.label} className="flex items-center gap-2 p-3 rounded-lg bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] text-xs">
-                {f.ok ? (
+                {f.ok === true ? (
                   <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : f.ok === null ? (
+                  <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
                 ) : (
                   <XCircle className="w-4 h-4 text-slate-400 shrink-0" />
                 )}
-                <span className={f.ok ? 'font-semibold text-[#142033] dark:text-[#E9EEF4]' : 'text-[#5F6B7A] dark:text-[#9AA6B8]'}>{f.label}</span>
+                <span className={f.ok === true ? 'font-semibold text-[#142033] dark:text-[#E9EEF4]' : 'text-[#5F6B7A] dark:text-[#9AA6B8]'}>
+                  {f.label}
+                  {f.ok === null && ' (unprobeable)'}
+                </span>
               </div>
             ))}
           </div>
@@ -228,8 +252,9 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
               <p className="font-mono-num text-xl font-black text-[#142033] dark:text-[#E9EEF4] mt-1">{result.jsFibMs} ms</p>
             </div>
             <div className="p-4 rounded-xl bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] text-center">
-              <p className="text-[10px] uppercase tracking-wider font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">Relative speed</p>
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">Speedup (JS ÷ Wasm)</p>
               <p className="font-mono-num text-xl font-black text-[#142033] dark:text-[#E9EEF4] mt-1">{result.speedup}</p>
+              <p className="text-[10px] text-[#8996A6] mt-1">&gt;1× means Wasm finished faster</p>
             </div>
           </div>
         </div>
@@ -242,8 +267,17 @@ export function WebAssemblyTester({ onResultUpdate }: TesterProps) {
         </div>
       ) : null}
 
-      <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-        The module is instantiated entirely from a bundled byte array in browser memory — no network fetch. SIMD/Threads features depend on CPU vector extensions and cross-origin isolation headers.
+      <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] space-y-1">
+        <p>
+          The module is instantiated entirely from a bundled byte array in browser memory — no network fetch.
+          SIMD/Threads availability depends on CPU vector extensions and cross-origin isolation; a probe that cannot
+          run is reported as unknown, not as unsupported.
+        </p>
+        <p>
+          <strong>Scope:</strong> this benchmark compares ONE narrow workload (iterative Fibonacci) between the Wasm
+          and JS engines of this browser tab. It does not measure CPU/GPU health, temperature, SSD health, or overall
+          system performance.
+        </p>
       </div>
     </div>
   );

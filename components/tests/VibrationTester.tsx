@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Vibrate, Square, Play, CheckCircle, XCircle } from 'lucide-react';
+import { Vibrate, Square, Play, CheckCircle, XCircle, HelpCircle, Hand } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
 interface TesterProps {
@@ -30,8 +30,26 @@ export function VibrationTester({ onResultUpdate }: TesterProps) {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string>('');
-  const timeoutRef = useRef<number | null>(null);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState<string | null>(null);
+  const [userFelt, setUserFelt] = useState<boolean | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const stopVibration = () => {
+    const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
+    try {
+      nav.vibrate?.(0);
+    } catch {
+      /* ignore */
+    }
+    setActiveId(null);
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  // Departure: stop any ongoing pattern. navigator.vibrate(0) cancels the
+  // current vibration where supported.
   useEffect(() => {
     const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
     return () => {
@@ -44,36 +62,49 @@ export function VibrationTester({ onResultUpdate }: TesterProps) {
     };
   }, []);
 
-  const stopVibration = () => {
-    const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
-    nav.vibrate?.(0);
-    setActiveId(null);
-    setLastAction('Vibration stopped');
-    if (timeoutRef.current !== null) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
-
   const playPattern = (p: Pattern) => {
     const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
     if (typeof nav.vibrate !== 'function') return;
 
+    stopVibration(); // cancel any ongoing pattern first
+
     const accepted = nav.vibrate(p.pattern);
     setLastAction(
       accepted
-        ? `Browser accepted "${p.label}" pattern — do you feel it?`
-        : `Browser rejected the vibration call (silenced mode or policy)`
+        ? `Browser accepted "${p.label}" — waiting for your confirmation.`
+        : `Browser rejected the vibration call (silent mode or policy)`
     );
     setActiveId(accepted ? p.id : null);
+    setUserFelt(null);
 
     if (accepted) {
       const total = Array.isArray(p.pattern) ? p.pattern.reduce((a, b) => a + b, 0) : p.pattern;
-      if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
-      timeoutRef.current = window.setTimeout(() => setActiveId(null), total + 150);
-      onResultUpdate?.('passed', `Vibration pattern "${p.label}" dispatched (${total} ms)`);
+      setAwaitingConfirmation(p.label);
+      // API acceptance alone is NOT proof the user felt vibration: the
+      // verdict is issued from the user's observation below.
+      onResultUpdate?.(
+        'inconclusive',
+        `Vibration pattern "${p.label}" accepted by the API (${total} ms). The motor may still be silent (hardware, silent mode, or no motor) — confirm by touch below.`
+      );
+      timeoutRef.current = setTimeout(() => {
+        setActiveId(null);
+      }, total + 150);
     } else {
-      onResultUpdate?.('failed', 'navigator.vibrate() returned false');
+      setAwaitingConfirmation(null);
+      onResultUpdate?.('failed', 'navigator.vibrate() returned false — the API path is available but the call was rejected');
+    }
+  };
+
+  const recordFeel = (felt: boolean) => {
+    setUserFelt(felt);
+    setAwaitingConfirmation(null);
+    if (felt) {
+      onResultUpdate?.('passed', 'User confirmed feeling the vibration pattern — API accepted AND physically perceived.');
+    } else {
+      onResultUpdate?.(
+        'warning',
+        'API accepted the vibration call but the user did not feel it. Possible causes: device has no vibration motor, system silent/do-not-disturb mode, or hardware motor failure.'
+      );
     }
   };
 
@@ -126,6 +157,41 @@ export function VibrationTester({ onResultUpdate }: TesterProps) {
         ))}
       </div>
 
+      {/* User observation — the actual verdict gate */}
+      {awaitingConfirmation && (
+        <div className="mt-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <p className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+            <Hand className="w-4 h-4" />
+            Did you physically feel the &quot;{awaitingConfirmation}&quot; pattern?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => recordFeel(true)}
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+            >
+              Yes — felt it
+            </button>
+            <button
+              onClick={() => recordFeel(false)}
+              className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer"
+            >
+              No — didn&apos;t feel it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {userFelt !== null && !awaitingConfirmation && (
+        <div className={`mt-4 p-3 rounded-lg text-xs flex items-center gap-2 ${userFelt ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300'}`}>
+          {userFelt ? <CheckCircle className="w-4 h-4" /> : <HelpCircle className="w-4 h-4" />}
+          <span>
+            {userFelt
+              ? 'Vibration confirmed by touch: API accepted and pattern physically perceived.'
+              : 'Not felt: API accepted the call but no vibration was perceived. Silent mode, missing motor, or motor failure.'}
+          </span>
+        </div>
+      )}
+
       {activeId && (
         <button
           onClick={stopVibration}
@@ -143,7 +209,9 @@ export function VibrationTester({ onResultUpdate }: TesterProps) {
       )}
 
       <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-        The browser accepting a vibrate() call confirms the API path works, but physical perception depends on the hardware motor and system silent mode — always confirm by touch.
+        A successful vibrate() call confirms only that the API path works — physical perception depends on the
+        hardware motor and system silent mode, so the result becomes final only after your touch confirmation.
+        Leaving this tool stops any ongoing vibration where the browser supports cancellation.
       </div>
     </div>
   );

@@ -3,6 +3,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, AlertCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import {
+  autoCorrelate,
+  deriveChromaticReading,
+  frequencyFromMidiNote,
+  nearestMidiNote,
+  centsOffFromNote,
+  noteLabel,
+  PITCH_RANGE_MIN_HZ,
+  PITCH_RANGE_MAX_HZ,
+} from '@/lib/testing/pitchMath';
 
 interface ToolComponentProps {
   t: Translations;
@@ -10,7 +20,12 @@ interface ToolComponentProps {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
 }
 
-const INSTRUMENT_PRESETS = [
+interface TunerTarget {
+  name: string;
+  freq: number | null; // null = chromatic (derive from detected pitch)
+}
+
+const INSTRUMENT_PRESETS: { name: string; strings: TunerTarget[] }[] = [
   {
     name: 'Guitar (Standard EADGBE)',
     strings: [
@@ -51,7 +66,7 @@ const INSTRUMENT_PRESETS = [
   },
   {
     name: 'Chromatic (All Notes)',
-    strings: [],
+    strings: [{ name: 'Chromatic', freq: null }],
   },
 ];
 
@@ -63,102 +78,97 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
   const [targetFreq, setTargetFreq] = useState<number>(440);
   const [centsOffset, setCentsOffset] = useState<number>(0);
   const [inTune, setInTune] = useState<boolean>(false);
+  const [isChromatic, setIsChromatic] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [stale, setStale] = useState<boolean>(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
 
+  // Live settings mirrors: the rAF analysis loop reads these refs, so a
+  // preset/string/frequency change made DURING an active run takes effect on
+  // the very next analysis frame — no loop restart, no stale closure, and
+  // exactly one analysis loop for the component's lifetime.
+  const presetRef = useRef<number>(0);
+  const targetRef = useRef<TunerTarget>({ name: 'A4', freq: 440 });
+
+  const applyTarget = useCallback((target: TunerTarget) => {
+    targetRef.current = target;
+    setIsChromatic(target.freq === null);
+    setTargetString(target.name);
+    if (target.freq !== null) {
+      setTargetFreq(target.freq);
+    }
+  }, []);
+
   const stopListening = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
       audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
     }
+    analyserRef.current = null;
     setIsListening(false);
   }, []);
 
-  // Hoisted function declaration: the rAF loop must reference itself, and a
-  // declaration is initialized before any code runs (unlike a const useCallback
-  // self-reference, which accesses the variable before initialization).
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, [stopListening]);
+
+  // Hoisted function declaration: the rAF loop must reference itself.
+  // Settings come from refs (updated live); the loop is started ONCE per
+  // listening session and is never recreated for a settings change.
   function evaluatePitch() {
     if (!analyserRef.current || !audioCtxRef.current) return;
-    const buf = new Float32Array(analyserRef.current.fftSize);
-    analyserRef.current.getFloatTimeDomainData(buf);
+    const analyser = analyserRef.current;
+    const ctx = audioCtxRef.current;
+    const buf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buf);
 
-    // Simple robust autocorrelation
-    let rms = 0;
-    for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
-    rms = Math.sqrt(rms / buf.length);
+    const detected = autoCorrelate(buf, ctx.sampleRate);
+    const target = targetRef.current;
+    const preset = INSTRUMENT_PRESETS[presetRef.current];
 
-    if (rms > 0.02) {
-      let r1 = 0;
-      let r2 = buf.length - 1;
-      for (let i = 0; i < buf.length / 2; i++) {
-        if (Math.abs(buf[i]) < 0.2) {
-          r1 = i;
-          break;
-        }
-      }
-      for (let i = 1; i < buf.length / 2; i++) {
-        if (Math.abs(buf[buf.length - i]) < 0.2) {
-          r2 = buf.length - i;
-          break;
-        }
-      }
+    if (detected && detected.freq > PITCH_RANGE_MIN_HZ && detected.freq < PITCH_RANGE_MAX_HZ) {
+      setDetectedPitch(Math.round(detected.freq * 10) / 10);
+      setStale(false);
 
-      const trimmed = buf.slice(r1, r2);
-      const c = new Array(trimmed.length).fill(0);
-      for (let i = 0; i < trimmed.length; i++) {
-        for (let j = 0; j < trimmed.length - i; j++) {
-          c[i] = c[i] + trimmed[j] * trimmed[j + i];
-        }
-      }
-
-      let d = 0;
-      while (c[d] > c[d + 1]) d++;
-      let maxval = -1;
-      let maxpos = -1;
-      for (let i = d; i < trimmed.length; i++) {
-        if (c[i] > maxval) {
-          maxval = c[i];
-          maxpos = i;
-        }
-      }
-
-      const freq = audioCtxRef.current.sampleRate / maxpos;
-      if (freq > 30 && freq < 1200) {
-        setDetectedPitch(Math.round(freq * 10) / 10);
-
-        // Find nearest string or calculate relative cents
-        const activePreset = INSTRUMENT_PRESETS[selectedPresetIndex];
-        let target = targetFreq;
-        let noteName = targetString;
-
-        if (activePreset.strings.length > 0) {
-          let minDiff = Infinity;
-          for (const s of activePreset.strings) {
-            const diff = Math.abs(freq - s.freq);
-            if (diff < minDiff) {
-              minDiff = diff;
-              target = s.freq;
-              noteName = s.name;
-            }
-          }
-        }
-
-        setTargetString(noteName);
-        setTargetFreq(target);
-        const cents = Math.floor((1200 * Math.log(freq / target)) / Math.log(2));
+      if (target.freq === null) {
+        // GENUINE chromatic mode: derive the nearest equal-tempered note from
+        // the DETECTED pitch — never an instrument preset's target.
+        const reading = deriveChromaticReading(detected.freq);
+        setTargetString(`${reading.name}${reading.octave}`);
+        setTargetFreq(reading.targetHz);
+        const cents = reading.cents;
         setCentsOffset(Math.max(-50, Math.min(50, cents)));
         setInTune(Math.abs(cents) <= 4);
+      } else {
+        // Instrument mode: measure against the selected string's target.
+        setTargetFreq(target.freq);
+        const cents = centsOffFromNote(detected.freq, nearestMidiNote(target.freq));
+        setCentsOffset(Math.max(-50, Math.min(50, Math.round(cents))));
+        setInTune(Math.abs(cents) <= 4);
       }
+    } else {
+      // Silent, weak, or unreliable signal: clear the stale readings so old
+      // numbers are never displayed as if they were current.
+      setDetectedPitch(null);
+      setStale(true);
+      setInTune(false);
     }
+    void preset; // preset identity read via presetRef keeps this closure honest
+
     rafRef.current = requestAnimationFrame(evaluatePitch);
   }
 
@@ -184,25 +194,31 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
       streamRef.current = stream;
       setIsListening(true);
 
+      // Exactly one analysis loop per session.
       rafRef.current = requestAnimationFrame(evaluatePitch);
 
-      if (onResultUpdate) {
-        onResultUpdate('passed', 'Tuner engine listening');
-      }
+      onResultUpdate?.('inconclusive', 'Tuner engine listening — no pitch verdict until a confident note is detected');
     } catch (err: unknown) {
       const error = err as Error;
       setErrorMsg(error.message || 'Microphone access denied or unavailable');
-      if (onResultUpdate) {
-        onResultUpdate('failed', error.message);
-      }
+      onResultUpdate?.('failed', error.message);
     }
   };
 
-  useEffect(() => {
-    return () => {
-      stopListening();
-    };
-  }, [stopListening]);
+  const selectPreset = (idx: number) => {
+    setSelectedPresetIndex(idx);
+    presetRef.current = idx;
+    const preset = INSTRUMENT_PRESETS[idx];
+    if (preset.strings.length > 0) {
+      applyTarget(preset.strings[0]);
+    }
+  };
+
+  const selectString = (target: TunerTarget) => {
+    applyTarget(target);
+  };
+
+  const activePreset = INSTRUMENT_PRESETS[selectedPresetIndex];
 
   return (
     <div className="space-y-6">
@@ -218,23 +234,36 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
         {INSTRUMENT_PRESETS.map((p, idx) => (
           <button
             key={p.name}
-            onClick={() => {
-              setSelectedPresetIndex(idx);
-              if (p.strings.length > 0) {
-                setTargetString(p.strings[0].name);
-                setTargetFreq(p.strings[0].freq);
-              }
-            }}
+            onClick={() => selectPreset(idx)}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
               selectedPresetIndex === idx
                 ? 'bg-[#0F766E] text-white border-[#0D665F] shadow-xs'
-                : 'bg-white dark:bg-[#111D30] text-[#172033] dark:text-[#E9EEF4] border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]'
+                : 'bg-white dark:bg-[#111D30] text-[#172033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]'
             }`}
           >
             {p.name}
           </button>
         ))}
       </div>
+
+      {/* String target selector (hidden in chromatic mode) */}
+      {activePreset.strings.length > 1 && (
+        <div className="flex flex-wrap gap-2 justify-center">
+          {activePreset.strings.map((s) => (
+            <button
+              key={`${s.name}-${s.freq}`}
+              onClick={() => selectString(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                targetString === s.name && !isChromatic
+                  ? 'bg-[#0F766E] text-white border-[#0D665F]'
+                  : 'bg-white dark:bg-[#111D30] text-[#172033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]'
+              }`}
+            >
+              {s.name} · {s.freq} Hz
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Main Tuner Dial View */}
       <div className="p-8 rounded-2xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] flex flex-col items-center justify-center text-center space-y-6">
@@ -262,22 +291,26 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
             <div className="flex flex-col items-center">
               <div
                 className={`text-7xl font-black tracking-tighter transition-colors ${
-                  inTune ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#172033] dark:text-[#E9EEF4]'
+                  !stale && inTune ? 'text-emerald-600 dark:text-emerald-400' : stale ? 'text-[#8996A6] opacity-50' : 'text-[#172033] dark:text-[#E9EEF4]'
                 }`}
               >
                 {targetString}
               </div>
               <div className="flex items-center gap-2 mt-1">
-                {inTune ? (
+                {stale ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-xs font-bold">
+                    SIGNAL LOST — reading cleared
+                  </span>
+                ) : !stale && inTune ? (
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold">
                     IN TUNE
                   </span>
                 ) : (
                   <span className="text-xs text-[#59677D] dark:text-[#9AA6B8] font-mono">
-                    Target: {targetFreq} Hz
+                    {isChromatic ? 'Nearest note target' : 'Target'}: {targetFreq} Hz
                   </span>
                 )}
-                {detectedPitch && (
+                {detectedPitch && !stale && (
                   <span className="text-xs text-[#59677D] dark:text-[#9AA6B8] font-mono">
                     • Live: {detectedPitch} Hz
                   </span>
@@ -289,7 +322,7 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-mono font-semibold text-[#59677D] dark:text-[#9AA6B8]">
                 <span>Flat (Too Low)</span>
-                <span className={inTune ? 'text-emerald-600 font-bold' : ''}>
+                <span className={!stale && inTune ? 'text-emerald-600 font-bold' : ''}>
                   {centsOffset > 0 ? `+${centsOffset}` : centsOffset} cents
                 </span>
                 <span>Sharp (Too High)</span>
@@ -299,7 +332,7 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
                 <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-emerald-600 z-10 -translate-x-1/2" />
                 <div
                   className={`absolute top-0 bottom-0 w-3 rounded-full transition-all duration-75 ${
-                    inTune ? 'bg-emerald-500 shadow-sm' : centsOffset < 0 ? 'bg-blue-500' : 'bg-amber-500'
+                    stale ? 'bg-slate-400 opacity-40' : inTune ? 'bg-emerald-500 shadow-sm' : centsOffset < 0 ? 'bg-blue-500' : 'bg-amber-500'
                   }`}
                   style={{
                     left: `${Math.max(5, Math.min(95, 50 + centsOffset))}%`,
@@ -319,6 +352,13 @@ export function InstrumentTunerTester({ onResultUpdate }: ToolComponentProps) {
           </div>
         )}
       </div>
+
+      <p className="text-center text-[11px] text-[#8996A6]">
+        Analysis range: ≈{PITCH_RANGE_MIN_HZ}–{PITCH_RANGE_MAX_HZ} Hz (limited by the {`2048`}-sample autocorrelation window at your device&apos;s sample rate). Chromatic mode derives the nearest equal-tempered note from the detected pitch — it does not read a preset string. All analysis is local to your browser.
+      </p>
     </div>
   );
 }
+
+// Re-exported for consumers/tests that need the shared math.
+export { frequencyFromMidiNote, noteLabel };

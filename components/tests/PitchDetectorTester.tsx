@@ -3,87 +3,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, AlertCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import {
+  autoCorrelate,
+  deriveChromaticReading,
+  PITCH_RANGE_MIN_HZ,
+  PITCH_RANGE_MAX_HZ,
+} from '@/lib/testing/pitchMath';
 
 interface ToolComponentProps {
   t: Translations;
   locale?: string;
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
-}
-
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
-function autoCorrelate(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } {
-  let rms = 0;
-  for (let i = 0; i < buffer.length; i++) {
-    rms += buffer[i] * buffer[i];
-  }
-  rms = Math.sqrt(rms / buffer.length);
-  if (rms < 0.015) {
-    return { freq: -1, confidence: 0 }; // Not enough signal volume
-  }
-
-  let r1 = 0;
-  let r2 = buffer.length - 1;
-  const threshold = 0.2;
-  for (let i = 0; i < buffer.length / 2; i++) {
-    if (Math.abs(buffer[i]) < threshold) {
-      r1 = i;
-      break;
-    }
-  }
-  for (let i = 1; i < buffer.length / 2; i++) {
-    if (Math.abs(buffer[buffer.length - i]) < threshold) {
-      r2 = buffer.length - i;
-      break;
-    }
-  }
-
-  const trimmed = buffer.slice(r1, r2);
-  const c = new Array(trimmed.length).fill(0);
-  for (let i = 0; i < trimmed.length; i++) {
-    for (let j = 0; j < trimmed.length - i; j++) {
-      c[i] = c[i] + trimmed[j] * trimmed[j + i];
-    }
-  }
-
-  let d = 0;
-  while (c[d] > c[d + 1]) d++;
-  let maxval = -1;
-  let maxpos = -1;
-  for (let i = d; i < trimmed.length; i++) {
-    if (c[i] > maxval) {
-      maxval = c[i];
-      maxpos = i;
-    }
-  }
-
-  let T0 = maxpos;
-  // Parabolic interpolation around peak
-  const x1 = c[T0 - 1];
-  const x2 = c[T0];
-  const x3 = c[T0 + 1];
-  const a = (x1 + x3 - 2 * x2) / 2;
-  const b = (x3 - x1) / 2;
-  if (a) {
-    T0 = T0 - b / (2 * a);
-  }
-
-  const freq = sampleRate / T0;
-  const confidence = maxval / c[0];
-  return { freq, confidence };
-}
-
-function noteFromPitch(frequency: number) {
-  const noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
-  return Math.round(noteNum) + 69;
-}
-
-function frequencyFromNoteNumber(note: number) {
-  return 440 * Math.pow(2, (note - 69) / 12);
-}
-
-function centsOffFromPitch(frequency: number, note: number) {
-  return Math.floor((1200 * Math.log(frequency / frequencyFromNoteNumber(note))) / Math.log(2));
 }
 
 export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
@@ -92,6 +22,7 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
   const [noteName, setNoteName] = useState<string>('--');
   const [octave, setOctave] = useState<number | null>(null);
   const [cents, setCents] = useState<number>(0);
+  const [stale, setStale] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -100,7 +31,10 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
   const rafRef = useRef<number | null>(null);
 
   const stopListening = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -109,6 +43,7 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
       audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
     }
+    analyserRef.current = null;
     setIsListening(false);
   }, []);
 
@@ -120,16 +55,28 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
     const buf = new Float32Array(analyserRef.current.fftSize);
     analyserRef.current.getFloatTimeDomainData(buf);
 
-    const { freq, confidence } = autoCorrelate(buf, audioCtxRef.current.sampleRate);
-    if (freq > 40 && freq < 2500 && confidence > 0.85) {
-      setPitch(Math.round(freq * 10) / 10);
-      const note = noteFromPitch(freq);
-      const name = NOTE_NAMES[note % 12];
-      const oct = Math.floor(note / 12) - 1;
-      const off = centsOffFromPitch(freq, note);
-      setNoteName(name);
-      setOctave(oct);
-      setCents(off);
+    const detected = autoCorrelate(buf, audioCtxRef.current.sampleRate);
+    if (
+      detected &&
+      detected.freq > PITCH_RANGE_MIN_HZ &&
+      detected.freq < PITCH_RANGE_MAX_HZ &&
+      detected.confidence > 0.85
+    ) {
+      // Confident reading: derive the note from the DETECTED pitch.
+      const reading = deriveChromaticReading(detected.freq);
+      setPitch(Math.round(detected.freq * 10) / 10);
+      setNoteName(reading.name);
+      setOctave(reading.octave);
+      setCents(Math.max(-50, Math.min(50, Math.round(reading.cents))));
+      setStale(false);
+    } else {
+      // Silent, weak, or low-confidence input: CLEAR stale readings instead
+      // of leaving old numbers displayed as if they were current.
+      setPitch(null);
+      setNoteName('--');
+      setOctave(null);
+      setCents(0);
+      setStale(true);
     }
     rafRef.current = requestAnimationFrame(updatePitch);
   }
@@ -159,7 +106,7 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
       rafRef.current = requestAnimationFrame(updatePitch);
 
       if (onResultUpdate) {
-        onResultUpdate('passed', 'Pitch detector engine running');
+        onResultUpdate('inconclusive', 'Pitch detector running — verdict only after a confident, sustained note is detected');
       }
     } catch (err: unknown) {
       const error = err as Error;
@@ -210,11 +157,11 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
             {/* Note Display */}
             <div className="flex flex-col items-center">
               <div className="flex items-baseline justify-center gap-1 font-extrabold text-[#172033] dark:text-[#E9EEF4]">
-                <span className="text-7xl tracking-tighter">{noteName}</span>
+                <span className={`text-7xl tracking-tighter ${stale ? 'opacity-50' : ''}`}>{noteName}</span>
                 {octave !== null && <span className="text-3xl text-[#0F766E]">{octave}</span>}
               </div>
               <div className="font-mono text-sm text-[#59677D] dark:text-[#9AA6B8] mt-1">
-                {pitch ? `${pitch.toFixed(1)} Hz` : 'Listening for audio signal...'}
+                {pitch && !stale ? `${pitch.toFixed(1)} Hz` : stale ? 'Signal lost — awaiting reliable audio…' : 'Listening for audio signal...'}
               </div>
             </div>
 
@@ -233,7 +180,9 @@ export function PitchDetectorTester({ onResultUpdate }: ToolComponentProps) {
                 {/* Indicator needle */}
                 <div
                   className={`absolute top-0 bottom-0 w-2 rounded-full transition-all duration-75 ${
-                    Math.abs(cents) <= 5
+                    stale
+                      ? 'bg-slate-400 opacity-40'
+                      : Math.abs(cents) <= 5
                       ? 'bg-emerald-500 shadow-xs'
                       : cents < 0
                       ? 'bg-blue-500'

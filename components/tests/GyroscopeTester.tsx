@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Compass, Play, Square, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Compass, Play, Square, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { classifyOrientation } from '@/lib/testing/sensorGates';
 
 interface TesterProps {
   t?: Translations;
@@ -16,20 +17,50 @@ interface Orientation {
   gamma: number; // left/right tilt -90..90
 }
 
+/** How long to wait for the first valid finite orientation before inconclusive. */
+const FIRST_READING_TIMEOUT_MS = 5000;
+
 export function GyroscopeTester({ onResultUpdate }: TesterProps) {
   const [listening, setListening] = useState<boolean>(false);
   const [orientation, setOrientation] = useState<Orientation | null>(null);
+  const [receivedValid, setReceivedValid] = useState<boolean>(false);
+  const [timedOut, setTimedOut] = useState<boolean>(false);
   const [absolute, setAbsolute] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const sessionTokenRef = useRef<number>(0);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopListening = () => {
+    sessionTokenRef.current += 1; // invalidate in-flight callbacks
+    window.ondeviceorientation = null;
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setListening(false);
+  };
+
+  // Unmount cleanup: no setState after teardown.
   useEffect(() => {
     return () => {
+      sessionTokenRef.current += 1;
       window.ondeviceorientation = null;
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
   }, []);
 
   const startListening = async () => {
     setError(null);
+    setTimedOut(false);
+    setReceivedValid(false);
+    setOrientation(null);
+
+    stopListening();
+    sessionTokenRef.current += 1;
 
     const DOE = window.DeviceOrientationEvent as (typeof DeviceOrientationEvent) & {
       requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -50,27 +81,64 @@ export function GyroscopeTester({ onResultUpdate }: TesterProps) {
           return;
         }
       }
+
+      const token = sessionTokenRef.current;
+
       window.ondeviceorientation = (event: DeviceOrientationEvent) => {
-        if (event.alpha === null && event.beta === null && event.gamma === null) return;
+        if (token !== sessionTokenRef.current) {
+          return; // obsolete callback after stop/restart/unmount
+        }
+        const verdict = classifyOrientation({
+          alpha: event.alpha,
+          beta: event.beta,
+          gamma: event.gamma,
+        });
+        if (verdict !== 'valid') {
+          // Nulls are missing data; non-finite is broken data. Neither is a
+          // valid reading and neither may mark the sensor as working.
+          return;
+        }
+        // Finite values received — zero included, since 0° is a legitimate
+        // physical orientation.
         setOrientation({
-          alpha: Math.round((event.alpha ?? 0) * 10) / 10,
-          beta: Math.round((event.beta ?? 0) * 10) / 10,
-          gamma: Math.round((event.gamma ?? 0) * 10) / 10,
+          alpha: Math.round((event.alpha as number) * 10) / 10,
+          beta: Math.round((event.beta as number) * 10) / 10,
+          gamma: Math.round((event.gamma as number) * 10) / 10,
         });
         setAbsolute(event.absolute === true);
+        setReceivedValid(true);
+        if (timeoutRef.current !== null) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        onResultUpdate?.('passed', 'Finite alpha/beta/gamma orientation data received (0° values included as valid)');
       };
+
       setListening(true);
-      onResultUpdate?.('passed', 'Gyroscope streaming alpha/beta/gamma orientation');
+
+      // Bounded wait for the first VALID (finite) reading.
+      timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = null;
+        if (token !== sessionTokenRef.current) return;
+        if (!receivedValidRef.current) {
+          setTimedOut(true);
+          onResultUpdate?.(
+            'inconclusive',
+            'No finite orientation reading arrived within 5 s. The API is exposed but sent no usable data — inconclusive, not a hardware verdict.'
+          );
+        }
+      }, FIRST_READING_TIMEOUT_MS);
     } catch (err) {
       setError((err as Error).message || 'Failed to start orientation sensor');
       onResultUpdate?.('failed', 'Gyroscope start failed');
     }
   };
 
-  const stopListening = () => {
-    window.ondeviceorientation = null;
-    setListening(false);
-  };
+  // Live mirror for the timeout callback.
+  const receivedValidRef = useRef<boolean>(false);
+  useEffect(() => {
+    receivedValidRef.current = receivedValid;
+  }, [receivedValid]);
 
   const angleRow = (label: string, description: string, value: number) => (
     <div className="flex items-center justify-between p-3 rounded-lg bg-[#F6F7F9] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]">
@@ -152,6 +220,17 @@ export function GyroscopeTester({ onResultUpdate }: TesterProps) {
                 {absolute ? 'Absolute (magnetometer-anchored) orientation reported' : 'Relative orientation (no compass anchor)'}
               </p>
             </>
+          ) : timedOut ? (
+            <div className="p-6 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+              <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">No orientation data received</p>
+                <p className="mt-1 opacity-80">
+                  No finite alpha/beta/gamma arrived within 5 s — inconclusive. Some desktops expose the API
+                  without ever delivering events.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="p-8 border border-dashed border-[#DFE5EB] dark:border-[#223043] rounded-lg text-center h-full flex flex-col items-center justify-center">
               <Compass className="w-8 h-8 mx-auto opacity-40 text-[#5F6B7A] mb-2" />
@@ -164,7 +243,9 @@ export function GyroscopeTester({ onResultUpdate }: TesterProps) {
       </div>
 
       <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-        Calibrate a drifting compass by moving the phone in a figure-8. Absolute (true-north) heading requires a magnetometer and can be disturbed indoors by magnets or electronics.
+        Calibrate a drifting compass by moving the phone in a figure-8. Absolute (true-north) heading requires a
+        magnetometer and can be disturbed indoors. Events with null angles are treated as missing data — the tool
+        waits for finite values (0° included) before reporting success.
       </div>
     </div>
   );

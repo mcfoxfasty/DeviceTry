@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Layers, RotateCcw, Smartphone, CheckCircle } from 'lucide-react';
+import { RotateCcw, Smartphone, Info } from 'lucide-react';
 import { ToolComponentProps } from '@/lib/tools/types';
+import { ObservedTouchCounter } from '@/lib/testing/sensorGates';
 
 interface TouchPoint {
   id: number;
@@ -29,6 +30,8 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [maxObserved, setMaxObserved] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Central bookkeeping for observed simultaneous touches (extracted + tested).
+  const counterRef = useRef<ObservedTouchCounter>(new ObservedTouchCounter());
 
   const handleTouch = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
@@ -37,7 +40,6 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
 
     for (let i = 0; i < e.touches.length; i++) {
       const t = e.touches[i];
-      // Type-safe extraction for browser variations
       const rawTouch = t as unknown as { radiusX?: number; radiusY?: number; clientX: number; clientY: number; identifier: number };
       points.push({
         id: rawTouch.identifier,
@@ -48,16 +50,21 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
       });
     }
 
+    counterRef.current.observe(points.length);
     setActiveTouches(points);
-    if (points.length > maxObserved) {
-      setMaxObserved(points.length);
-      if (onResultUpdate) {
-        onResultUpdate('passed', `Max observed: ${points.length} simultaneous touches`);
-      }
+
+    const observed = counterRef.current.maxSimultaneousObserved;
+    if (observed > maxObserved) {
+      setMaxObserved(observed);
+      onResultUpdate?.(
+        'inconclusive',
+        `Observed ${observed} simultaneous touch point${observed === 1 ? '' : 's'} in this session. This is what was observed here — not the device's maximum supported touch count.`
+      );
     }
   };
 
   const resetMax = () => {
+    counterRef.current.reset();
     setMaxObserved(0);
     setActiveTouches([]);
   };
@@ -68,13 +75,13 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043]">
         <div className="flex items-center gap-4">
           <div>
-            <span className="text-xs text-[#59677D] dark:text-[#9AA6B8]">Active Fingers</span>
+            <span className="text-xs text-[#59677D] dark:text-[#9AA6B8]">Active Touches</span>
             <p className="text-xl font-mono font-bold text-[#0F766E] dark:text-[#14B8A6]">
               {activeTouches.length}
             </p>
           </div>
           <div className="border-l border-[#DFE5EB] dark:border-[#223043] pl-4">
-            <span className="text-xs text-[#59677D] dark:text-[#9AA6B8]">Max Simultaneous</span>
+            <span className="text-xs text-[#59677D] dark:text-[#9AA6B8]">Max Observed (this session)</span>
             <p className="text-xl font-mono font-bold text-[#172033] dark:text-[#E9EEF4]">
               {maxObserved}
             </p>
@@ -103,10 +110,10 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
           <div className="text-center p-6 pointer-events-none">
             <Smartphone className="w-10 h-10 mx-auto text-[#64748B] mb-2 animate-bounce" />
             <p className="text-sm font-bold text-[#E2E8F0]">
-              Place 2 to 10 Fingers on Screen
+              Place multiple fingers on the screen
             </p>
             <p className="text-xs text-[#94A3B8] mt-1">
-              Supports 10-point multitouch gesture testing
+              The counter reports how many simultaneous touches were OBSERVED — the display may register fewer or more than this session shows.
             </p>
           </div>
         ) : null}
@@ -135,6 +142,15 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
             </div>
           );
         })}
+      </div>
+
+      {/* Honesty note */}
+      <div className="p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] flex items-start gap-1.5">
+        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+        <span>
+          &quot;Max observed&quot; is the highest simultaneous touch count seen in THIS session. Browsers do not
+          expose a device&apos;s hardware touch-point limit, so no maximum is claimed or inferred.
+        </span>
       </div>
     </div>
   );

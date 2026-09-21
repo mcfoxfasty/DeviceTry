@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { ListChecks, Search, CheckCircle, XCircle, MinusCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
@@ -26,9 +26,9 @@ const FEATURES: FeatureEntry[] = [
   { name: 'AudioWorklet', category: 'Audio', check: () => 'AudioWorklet' in window },
   { name: 'Speech Synthesis', category: 'Audio', check: () => 'speechSynthesis' in window },
   { name: 'Speech Recognition', category: 'Audio', check: () => 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window },
-  { name: 'WebGL 1.0', category: 'Graphics', check: () => !!document.createElement('canvas').getContext('webgl') },
-  { name: 'WebGL 2.0', category: 'Graphics', check: () => !!document.createElement('canvas').getContext('webgl2') },
-  { name: 'Canvas 2D', category: 'Graphics', check: () => !!document.createElement('canvas').getContext('2d') },
+  { name: 'WebGL 1.0', category: 'Graphics', check: () => probeGpuContexts().webgl1 },
+  { name: 'WebGL 2.0', category: 'Graphics', check: () => probeGpuContexts().webgl2 },
+  { name: 'Canvas 2D', category: 'Graphics', check: () => probeGpuContexts().canvas2d },
   { name: 'OffscreenCanvas', category: 'Graphics', check: () => 'OffscreenCanvas' in window },
   { name: 'WebGPU', category: 'Graphics', check: () => 'gpu' in navigator },
   { name: 'WebAssembly', category: 'Runtime', check: () => 'WebAssembly' in window },
@@ -60,6 +60,35 @@ const FEATURES: FeatureEntry[] = [
 ];
 
 /**
+ * Cached GPU/2D context probe. Each probe canvas can host exactly one
+ * context type, so three canvases are created ONCE per page load; hardware
+ * contexts are released immediately via WEBGL_lose_context and the boolean
+ * results are cached, so re-renders and re-runs never allocate again.
+ */
+interface GpuProbeResult {
+  webgl1: boolean;
+  webgl2: boolean;
+  canvas2d: boolean;
+}
+
+let gpuProbeCache: GpuProbeResult | null = null;
+
+function probeGpuContexts(): GpuProbeResult {
+  if (gpuProbeCache) return gpuProbeCache;
+  const gl1 = document.createElement('canvas').getContext('webgl');
+  const gl2 = document.createElement('canvas').getContext('webgl2');
+  const ctx2d = document.createElement('canvas').getContext('2d');
+  // Release the temporary hardware contexts right after probing.
+  const release = (gl: WebGLRenderingContext | null) => {
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  };
+  release(gl1 as WebGLRenderingContext | null);
+  release(gl2 as WebGLRenderingContext | null);
+  gpuProbeCache = { webgl1: !!gl1, webgl2: !!gl2, canvas2d: !!ctx2d };
+  return gpuProbeCache;
+}
+
+/**
  * SSR-safe feature probe: never runs browser-only checks during server
  * rendering (window/document/navigator do not exist on the server).
  */
@@ -72,17 +101,63 @@ function checkSafe(check: () => boolean): boolean {
   }
 }
 
+/**
+ * One-shot capability store used via useSyncExternalStore.
+ *
+ * Hydration contract: getServerSnapshot returns null, so the server HTML and
+ * the first client render both show the stable "Checking…" state. Detection
+ * starts only from `subscribe` (after hydration, via queueMicrotask), computes
+ * every probe EXACTLY ONCE, caches the result object, and notifies
+ * subscribers once. Re-renders from search/filter typing never re-run probes,
+ * and no probe result is state set inside an effect body.
+ */
+type CapabilityMap = Record<string, boolean>;
+
+let detectedCache: CapabilityMap | null = null;
+let detectionStarted = false;
+const detectListeners = new Set<() => void>();
+
+function startDetectionOnce(): void {
+  if (detectionStarted) return;
+  detectionStarted = true;
+  const computed: CapabilityMap = {};
+  for (const f of FEATURES) {
+    computed[f.name] = checkSafe(f.check);
+  }
+  detectedCache = computed; // single identity change → exactly one notification
+  for (const notify of detectListeners) notify();
+}
+
+function subscribeCapabilities(onStoreChange: () => void): () => void {
+  detectListeners.add(onStoreChange);
+  // Runs after mount/hydration — never during render, never in an effect body.
+  queueMicrotask(startDetectionOnce);
+  return () => {
+    detectListeners.delete(onStoreChange);
+  };
+}
+
+function getDetectedSnapshot(): CapabilityMap | null {
+  return detectedCache;
+}
+
+function getServerSnapshot(): null {
+  return null; // stable pre-detection value on the server and during hydration
+}
+
 const CATEGORIES = ['All', 'Media', 'Audio', 'Graphics', 'Runtime', 'Input', 'Sensors', 'Storage', 'System', 'Network'];
 
 export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
   const [filter, setFilter] = useState<string>('All');
   const [query, setQuery] = useState<string>('');
 
-  const results = FEATURES.map((f) => ({ ...f, supported: checkSafe(f.check) }));
+  const supportedByName = useSyncExternalStore(subscribeCapabilities, getDetectedSnapshot, getServerSnapshot);
+
+  const results = FEATURES.map((f) => ({ ...f, supported: supportedByName ? supportedByName[f.name] === true : false }));
   const visible = results.filter(
     (r) => (filter === 'All' || r.category === filter) && r.name.toLowerCase().includes(query.toLowerCase())
   );
-  const supportedCount = results.filter((r) => r.supported).length;
+  const supportedCount = supportedByName ? results.filter((r) => r.supported).length : 0;
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -97,7 +172,13 @@ export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
           </div>
         </div>
         <div className="text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">
-          <span className="text-emerald-600 dark:text-emerald-400">{supportedCount}</span> / {results.length} APIs supported
+          {supportedByName ? (
+            <>
+              <span className="text-emerald-600 dark:text-emerald-400">{supportedCount}</span> / {results.length} APIs supported
+            </>
+          ) : (
+            <span>Detecting…</span>
+          )}
         </div>
       </div>
 
@@ -144,7 +225,11 @@ export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
                 <td className="py-2 px-4 text-[#142033] dark:text-[#E9EEF4] font-medium">{r.name}</td>
                 <td className="py-2 px-4 text-[#5F6B7A] dark:text-[#9AA6B8]">{r.category}</td>
                 <td className="py-2 px-4">
-                  {r.supported ? (
+                  {!supportedByName ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-[#192332] text-slate-500 dark:text-[#9AA6B8] text-[10px] font-bold uppercase">
+                      <MinusCircle className="w-3 h-3" /> Checking
+                    </span>
+                  ) : r.supported ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">
                       <CheckCircle className="w-3 h-3" /> Supported
                     </span>
