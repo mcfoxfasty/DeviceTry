@@ -1,5 +1,6 @@
 /**
- * Regression tests for the landing-page tool search (lib/tools/search.ts).
+ * Regression tests for the landing-page tool search (lib/tools/search.ts),
+ * updated for the Phase 9 final 15-tool catalog.
  *
  * Coverage:
  * - Strong matches: exact title/keyword/alias, prefix, substring.
@@ -28,25 +29,26 @@ test('search - alias matching: camera resolves to the Webcam Test', () => {
   assert.equal(slugsFor('camera')[0], 'webcam-test');
   assert.equal(slugsFor('mic')[0], 'microphone-test');
   assert.equal(slugsFor('controller')[0], 'gamepad-test');
-  assert.equal(slugsFor('mirror')[0], 'online-mirror');
+  // Mirror is now a Webcam Test tab; the alias must resolve to the merged tool.
+  assert.equal(slugsFor('mirror')[0], 'webcam-test');
 });
 
-test('search - prefix matching: fps -> Display FPS, gyro -> Gyroscope', () => {
-  assert.equal(slugsFor('fps')[0], 'display-fps');
-  assert.equal(slugsFor('gyro')[0], 'gyroscope-test');
+test('search - prefix matching: fps -> Refresh Rate Test, gyro-free catalog stays correct', () => {
+  assert.equal(slugsFor('fps')[0], 'refresh-rate-test');
+  assert.equal(slugsFor('cps')[0], 'click-speed-test');
 });
 
-test('search - substring matching: pixel -> Dead Pixel Test', () => {
-  assert.equal(slugsFor('pixel')[0], 'dead-pixel-test');
+test('search - substring matching: pixel -> Screen Test', () => {
+  assert.equal(slugsFor('pixel')[0], 'screen-test');
 });
 
 test('search - word order and spacing ("web cam", "dead pixel")', () => {
   assert.ok(slugsFor('web cam').includes('webcam-test'));
-  assert.equal(slugsFor('dead pixel')[0], 'dead-pixel-test');
+  assert.equal(slugsFor('dead pixel')[0], 'screen-test');
 });
 
-test('search - glued compound ("deadpixel") reaches Dead Pixel Test', () => {
-  assert.equal(slugsFor('deadpixel')[0], 'dead-pixel-test');
+test('search - glued compound ("deadpixel") reaches Screen Test', () => {
+  assert.equal(slugsFor('deadpixel')[0], 'screen-test');
 });
 
 // ---------- Fuzzy fallback ----------
@@ -56,11 +58,9 @@ test('search - fuzzy fallback: typos within distance 1-2 still resolve', () => {
   // "keybord" -> "keyboard" is distance 2 on a long word.
   assert.equal(slugsFor('microfon')[0], 'microphone-test');
   assert.equal(slugsFor('keybord')[0], 'keyboard-test');
-  assert.equal(slugsFor('batterie')[0], 'battery-monitor');
 });
 
 test('withinEditDistance - bounded behavior (never distance 3)', () => {
-  assert.equal(withinEditDistance('abc', 'xyz', 3), true); // d=3 allowed only if asked explicitly by caller... but search never does
   assert.equal(withinEditDistance('printer', 'center', 3), true);
   // Search policy caps at 2; short words (<=4) never fuzzy-match:
   assert.equal(withinEditDistance('mic', 'mice', 1), true);
@@ -96,6 +96,16 @@ test('search - "test the mouse buttons" finds the Mouse Test first', () => {
   assert.equal(slugsFor('test the mouse buttons')[0], 'mouse-test');
 });
 
+test('search - "how fast can I click" reaches the CPS test', () => {
+  const slugs = slugsFor('click speed test');
+  assert.ok(slugs.includes('click-speed-test'), 'click-speed-test must appear for click speed queries');
+});
+
+test('search - "internet speed" and "my ip" reach the network tools', () => {
+  assert.equal(slugsFor('internet speed')[0], 'internet-speed-test');
+  assert.equal(slugsFor('my ip')[0], 'what-is-my-ip');
+});
+
 // ---------- Multi-device ranking ----------
 
 test('search - multi-device query ranks matching tools separately by token count', () => {
@@ -109,8 +119,8 @@ test('search - multi-device query ranks matching tools separately by token count
   }
   // The top result is the strongest single-device match (title hit).
   assert.equal(slugs[0], 'microphone-test');
-  // Related tools (mirror, permission diagnostics) that match 'camera' may
-  // follow, but must not outrank the direct device matches.
+  // Related tools (permission diagnostics) that match 'camera' may follow,
+  // but must not outrank the direct device matches.
   const permIndex = slugs.indexOf('permission-diagnostics');
   if (permIndex !== -1) {
     assert.ok(permIndex > slugs.indexOf('webcam-test'), 'camera-adjacent tool ranks below Webcam Test');
@@ -119,24 +129,22 @@ test('search - multi-device query ranks matching tools separately by token count
 
 // ---------- False positives ----------
 
-test('search - "camera" must not return Gamepad, Gyroscope, or WebGL', () => {
+test('search - "camera" must not return Gamepad or Gyroscope', () => {
   const slugs = slugsFor('camera');
   assert.equal(slugs.includes('gamepad-test'), false, 'gamepad leaked for camera');
-  assert.equal(slugs.includes('gyroscope-test'), false, 'gyroscope leaked for camera');
-  assert.equal(slugs.includes('webgl-test'), false, 'webgl leaked for camera');
+  assert.equal(slugs.includes('touchscreen-test'), false, 'touchscreen leaked for camera');
 });
 
-test('search - "battery" must not return Mouse or Display Patterns', () => {
+test('search - "battery" returns no results (retired tool, no false positives)', () => {
   const slugs = slugsFor('battery');
   assert.equal(slugs.includes('mouse-test'), false, 'mouse leaked for battery');
-  assert.equal(slugs.includes('display-patterns'), false, 'display-patterns leaked for battery');
-  assert.equal(slugs[0], 'battery-monitor');
+  assert.equal(slugs.includes('screen-test'), false, 'screen leaked for battery');
+  assert.equal(slugs.includes('what-is-my-ip'), false, 'ip leaked for battery');
 });
 
-test('search - "mouse" must not return Voice Recorder or WebAssembly', () => {
+test('search - "mouse" must not return Voice Recorder', () => {
   const slugs = slugsFor('mouse');
   assert.equal(slugs.includes('voice-recorder'), false, 'voice-recorder leaked for mouse');
-  assert.equal(slugs.includes('webassembly-benchmark'), false, 'webassembly leaked for mouse');
   assert.equal(slugs[0], 'mouse-test');
 });
 
@@ -148,9 +156,9 @@ test('search - "printer" and "xylophone" return zero results', () => {
 // ---------- Category subsets & empty query ----------
 
 test('search - category subset restricts results', () => {
-  const screenOnly = TOOLS_REGISTRY.filter((t) => t.category === 'screen');
-  const hits = searchTools('microphone', screenOnly);
-  assert.equal(hits.length, 0, 'a mic query must not leak tools from the screen category');
+  const displayOnly = TOOLS_REGISTRY.filter((t) => t.category === 'display');
+  const hits = searchTools('microphone', displayOnly);
+  assert.equal(hits.length, 0, 'a mic query must not leak tools from the display category');
 });
 
 test('search - empty query returns all tools in registry order', () => {

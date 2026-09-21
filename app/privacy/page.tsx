@@ -9,7 +9,7 @@ import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
  * Fixed, human-controlled revision date. Do not compute from build time —
  * the text must only change when the policy itself is actually revised.
  */
-const POLICY_REVISED = 'September 18, 2026';
+const POLICY_REVISED = 'September 21, 2026';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -62,22 +62,58 @@ export default function PrivacyPage() {
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-[#0F766E]" />
-              2. Inspection History Is Stored in This Browser
+              2. Inspection History and Settings Stay in This Browser
             </h2>
             <p>
               Completed guided inspections are saved in your browser&rsquo;s local storage on this device, so you
-              can review or print past reports without an account. This history is stored only in this browser:
-              it is not synchronized anywhere and DeviceTry cannot see it. You can erase it at any time with the
-              &ldquo;Clear All&rdquo; control in the inspection history, or by clearing your browser&rsquo;s site
-              data. Note that clearing browser data also removes saved inspections — keep a printed copy or a
-              downloaded report if you need a durable record.
+              can review or print past reports without an account. Optional tool settings are also kept locally.
+              This data is stored only in this browser: it is not synchronized anywhere and DeviceTry cannot see
+              it. You can erase it at any time with the &ldquo;Clear All&rdquo; control in the inspection history,
+              with the storage inspector in the site settings, or by clearing your browser&rsquo;s site data. Note
+              that clearing browser data also removes saved inspections — keep a printed copy or a downloaded
+              report if you need a durable record.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
+              <Globe className="w-4 h-4 text-[#0F766E]" />
+              3. What Does Leave Your Device
+            </h2>
+            <p>
+              Most tools run entirely in your browser, but two features deliberately communicate over the
+              Internet, and we describe them plainly rather than claiming &ldquo;nothing ever leaves your
+              device&rdquo;:
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong className="text-[#142033] dark:text-[#E9EEF4]">What&rsquo;s My IP</strong> asks our own
+                endpoint which public address your connection uses. The reply is shown to you only; DeviceTry does
+                not store it in application storage or logs. Like any Internet request, the network operators and
+                hosting infrastructure involved (including Cloudflare) process standard request metadata — such as
+                the requesting IP and timestamp — under their own policies and retention rules, which are outside
+                DeviceTry&rsquo;s control. The tool can also be used with a VPN or proxy, in which case the address
+                shown is the VPN/proxy address.
+              </li>
+              <li>
+                <strong className="text-[#142033] dark:text-[#E9EEF4]">Internet Speed Test</strong> transfers
+                real test data to and from Cloudflare&rsquo;s public measurement network
+                (speed.cloudflare.com) through the official Cloudflare speed test engine, only after you press
+                Start. Cloudflare operates that service and collects measurement results for aggregated insights
+                under its own terms and privacy policy; DeviceTry does not receive or store your measurements. The
+                test can consume a substantial amount of mobile data.
+              </li>
+            </ul>
+            <p>
+              Feedback submissions never include recordings, images, clipboard contents, pressed-key content, or
+              unnecessary identifiers.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <EyeOff className="w-4 h-4 text-[#0F766E]" />
-              3. No Tracking or Invasive Telemetry
+              4. No Tracking or Invasive Telemetry
             </h2>
             <p>
               We do not sell personal data, inject third-party ad trackers, or perform biometric surveillance.
@@ -89,10 +125,10 @@ export default function PrivacyPage() {
           <section className="space-y-3">
             <h2 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2">
               <Globe className="w-4 h-4 text-[#0F766E]" />
-              4. Contact
+              5. Contact
             </h2>
             <p>
-              DeviceTry is a fully client-side website and does not operate a message inbox. The{' '}
+              DeviceTry does not operate a message inbox. The{' '}
               <a href="/contact" className="text-[#0F766E] dark:text-[#14B8A6] hover:underline font-semibold">
                 contact page
               </a>{' '}

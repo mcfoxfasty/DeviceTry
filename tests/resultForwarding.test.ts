@@ -5,7 +5,7 @@ import {
   forwardRichResult,
 } from '../lib/testing/resultPolicy';
 import { calculateReportStatus } from '../lib/testing/reportStatus';
-import { TOOLS_REGISTRY } from '../lib/tools/registry.js';
+import { TOOLS_REGISTRY, ALL_TOOL_PAGES } from '../lib/tools/registry.js';
 import { TESTER_COMPONENTS } from '../components/ToolRenderer';
 
 test('forwarding policy - generic results forward everything except skipped', () => {
@@ -38,7 +38,8 @@ test('forwarding policy - dropped skipped results still yield inconclusive repor
 });
 
 test('every registry componentName resolves to a real tester component', () => {
-  const missing = TOOLS_REGISTRY.filter((tool) => !TESTER_COMPONENTS[tool.componentName]);
+  // ALL_TOOL_PAGES covers primary + supporting: every routable page must render.
+  const missing = ALL_TOOL_PAGES.filter((tool) => !TESTER_COMPONENTS[tool.componentName]);
   assert.deepEqual(
     missing.map((tool) => `${tool.id}:${tool.componentName}`),
     [],
@@ -47,10 +48,13 @@ test('every registry componentName resolves to a real tester component', () => {
 });
 
 test('renderer covers flagship testers and no duplicate registrations', () => {
-  for (const name of ['MicrophoneTester', 'WebcamTester', 'SpeakersTester', 'KeyboardTester', 'MouseTester', 'GamepadTester', 'BatteryTester']) {
+  // BatteryTester is intentionally absent: battery-monitor was retired from
+  // the public catalog in Phase 9; the component remains for guided
+  // inspection only and is mounted directly, not via ToolRenderer.
+  for (const name of ['MicrophoneTester', 'WebcamTester', 'SpeakersTester', 'KeyboardTester', 'MouseTester', 'GamepadTester']) {
     assert.ok(TESTER_COMPONENTS[name], `${name} must be registered`);
   }
   const registered = Object.keys(TESTER_COMPONENTS);
   assert.equal(new Set(registered).size, registered.length, 'duplicate tester registrations');
-  assert.equal(registered.length, TOOLS_REGISTRY.length, 'registry size and renderer map size must match');
+  assert.equal(registered.length, ALL_TOOL_PAGES.length, 'renderer map must cover exactly the routable tool pages');
 });

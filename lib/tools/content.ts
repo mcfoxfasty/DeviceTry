@@ -558,12 +558,11 @@ delete FLAGSHIP.webcam;
 /* ============================ Resolution ============================ */
 
 const TEMPLATE_BY_CATEGORY: Record<ToolDefinition['category'], (tool: ToolDefinition) => ToolContent> = {
-  'audio-camera': audioCameraContent,
-  'keyboard-mouse': keyboardMouseContent,
-  screen: screenContent,
-  'mobile-controllers': sensorsControllersContent,
-  music: musicContent,
-  'browser-performance': browserPerfContent,
+  'audio-video': audioCameraContent,
+  'input-devices': keyboardMouseContent,
+  display: screenContent,
+  network: browserPerfContent,
+  supporting: sensorsControllersContent,
 };
 
 export function getToolContent(tool: ToolDefinition): ToolContent {

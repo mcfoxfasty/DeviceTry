@@ -1,0 +1,203 @@
+/**
+ * Speed-test provider adapter (Phase 9, item H).
+ *
+ * Provider: Cloudflare's official measurement engine (@cloudflare/speedtest,
+ * MIT license) running against the public speed.cloudflare.com endpoints.
+ * Source of record:
+ *   - https://github.com/cloudflare/speedtest (README: API, defaults, config)
+ *   - https://www.npmjs.com/package/@cloudflare/speedtest
+ * Known conditions (documented honestly):
+ *   - "Measurement results are collected by Cloudflare on completion for the
+ *     purpose of calculating aggregated insights regarding Internet
+ *     connection quality." (engine README)
+ *   - No published per-user usage limits or pricing for the public endpoints
+ *     were found at implementation time; if that changes, this adapter is the
+ *     single file to replace.
+ *   - Latency here is HTTP round-trip TTFB timing, NOT ICMP ping.
+ *   - Packet loss requires a TURN server and is NOT measured (excluded below).
+ *
+ * The rest of the app depends only on the SpeedTestController interface, so
+ * the provider can be replaced without touching UI code.
+ */
+
+export interface SpeedSummary {
+  downloadMbps: number | null;
+  uploadMbps: number | null;
+  latencyMs: number | null;
+  jitterMs: number | null;
+  downLoadedLatencyMs: number | null;
+  upLoadedLatencyMs: number | null;
+}
+
+export type SpeedPhase = 'idle' | 'running' | 'finished' | 'error' | 'aborted';
+
+export interface SpeedTestEvents {
+  onPhase(phase: SpeedPhase, error?: string): void;
+  onProgress(summary: SpeedSummary): void;
+}
+
+/**
+ * Bounded, provider-supported measurement set: latency + a stepped
+ * download/upload ramp that stops early once a set reaches the engine's
+ * bandwidthFinishRequestDuration. Excludes packetLoss (needs a TURN server).
+ * Total transfer stays well under the default engine suite.
+ */
+const MEASUREMENTS = [
+  { type: 'latency', numPackets: 1 },
+  { type: 'download', bytes: 1e5, count: 1, bypassMinDuration: true },
+  { type: 'latency', numPackets: 12 },
+  { type: 'download', bytes: 1e6, count: 6 },
+  { type: 'upload', bytes: 1e5, count: 6 },
+  { type: 'download', bytes: 1e7, count: 5 },
+  { type: 'upload', bytes: 1e6, count: 5 },
+  { type: 'download', bytes: 2.5e7, count: 3 },
+  { type: 'upload', bytes: 1e7, count: 3 },
+] as const;
+
+type EngineCtor = new (config: Record<string, unknown>) => CloudflareSpeedTestEngineLike;
+
+interface CloudflareSpeedTestEngineLike {
+  results: {
+    getSummary(): Record<string, number | boolean | undefined>;
+    s2cDownload?: { bps: number }[];
+    c2sUpload?: { bps: number }[];
+    getUnloadedLatency(): number | null;
+    getUnloadedJitter(): number | null;
+    getDownLoadedLatency(): number | null;
+    getUpLoadedLatency(): number | null;
+  };
+  play(): void;
+  pause(): void;
+  restart(): void;
+  onRunningChange: ((running: boolean) => void) | null;
+  onResultsChange: ((info: { type: string }) => void) | null;
+  onFinish: ((results: unknown) => void) | null;
+  onError: ((error: string) => void) | null;
+}
+
+let enginePromise: Promise<EngineCtor> | null = null;
+
+/** Lazily import the provider so it never loads until a test starts. */
+async function loadEngine(): Promise<EngineCtor> {
+  if (!enginePromise) {
+    enginePromise = import('@cloudflare/speedtest').then((mod) => {
+      return (mod.default ?? mod) as unknown as EngineCtor;
+    });
+  }
+  return enginePromise;
+}
+
+const BPS_PER_MBPS = 1_000_000;
+
+/**
+ * bps → Mbps with one decimal. Zero, negative, non-finite, or absurdly
+ * sub-resolution values map to null rather than a fabricated number.
+ * Exported for focused regression tests.
+ */
+export function bpsToMbps(bps: number | undefined): number | null {
+  if (typeof bps !== 'number' || !Number.isFinite(bps) || bps < 0) return null;
+  return Math.round((bps / BPS_PER_MBPS) * 10) / 10;
+}
+
+/** Non-finite/negative ms values map to null, never fabricated. Exported for tests. */
+export function msOrNull(v: number | undefined | null): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+  return Math.round(v * 10) / 10;
+}
+
+export class CloudflareSpeedTestController {
+  private engine: CloudflareSpeedTestEngineLike | null = null;
+  private events: SpeedTestEvents;
+  private phase: SpeedPhase = 'idle';
+  private generation = 0; // obsolete-run guard
+
+  constructor(events: SpeedTestEvents) {
+    this.events = events;
+  }
+
+  get currentPhase(): SpeedPhase {
+    return this.phase;
+  }
+
+  async start(): Promise<void> {
+    if (this.phase === 'running') return;
+    const gen = ++this.generation;
+    this.setPhase('running');
+    try {
+      const Engine = await loadEngine();
+      if (gen !== this.generation) return; // superseded while loading
+      const engine = new Engine({
+        autoStart: false,
+        measurements: MEASUREMENTS,
+        measureDownloadLoadedLatency: true,
+        measureUploadLoadedLatency: true,
+      });
+      this.engine = engine;
+
+      engine.onRunningChange = (running) => {
+        if (gen !== this.generation) return;
+        if (!running && this.phase === 'running') {
+          // Engine finished naturally.
+        }
+      };
+      engine.onResultsChange = () => {
+        if (gen !== this.generation) return;
+        this.events.onProgress(this.readSummary(engine));
+      };
+      engine.onError = (error) => {
+        if (gen !== this.generation) return;
+        this.setPhase('error', error);
+      };
+      engine.onFinish = () => {
+        if (gen !== this.generation) return;
+        this.events.onProgress(this.readSummary(engine));
+        this.setPhase('finished');
+      };
+
+      engine.play();
+    } catch (err) {
+      if (gen !== this.generation) return;
+      this.setPhase('error', err instanceof Error ? err.message : 'The speed-test engine failed to load.');
+    }
+  }
+
+  /** Best-effort cancel: pause now and invalidate all future callbacks. */
+  cancel(): void {
+    this.generation += 1;
+    try {
+      this.engine?.pause();
+    } catch {
+      // engine may be mid-flight; generation guard discards its callbacks
+    }
+    this.engine = null;
+    if (this.phase === 'running') this.setPhase('aborted');
+  }
+
+  /** Departure: same as cancel, plus silence event handlers. */
+  dispose(): void {
+    this.cancel();
+    if (this.engine) {
+      this.engine.onRunningChange = null;
+      this.engine.onResultsChange = null;
+      this.engine.onFinish = null;
+      this.engine.onError = null;
+    }
+  }
+
+  private readSummary(engine: CloudflareSpeedTestEngineLike): SpeedSummary {
+    const s = engine.results.getSummary();
+    return {
+      downloadMbps: bpsToMbps(s.download as number | undefined),
+      uploadMbps: bpsToMbps(s.upload as number | undefined),
+      latencyMs: msOrNull(s.latency as number | undefined),
+      jitterMs: msOrNull(s.jitter as number | undefined),
+      downLoadedLatencyMs: msOrNull(s.downLoadedLatency as number | undefined),
+      upLoadedLatencyMs: msOrNull(s.upLoadedLatency as number | undefined),
+    };
+  }
+
+  private setPhase(phase: SpeedPhase, error?: string): void {
+    this.phase = phase;
+    this.events.onPhase(phase, error);
+  }
+}

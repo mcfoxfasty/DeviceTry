@@ -72,9 +72,9 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/test/keyboard-test" className={linkClass}>{t.keyboardTest.title}</Link></li>
               <li><Link href="/test/mouse-test" className={linkClass}>{t.mouseTest.title}</Link></li>
               <li><Link href="/test/speakers-test" className={linkClass}>{t.speakersTest.title}</Link></li>
-              <li><Link href="/test/dead-pixel-test" className={linkClass}>Dead Pixel Test</Link></li>
+              <li><Link href="/test/screen-test" className={linkClass}>Screen Test</Link></li>
               <li><Link href="/test/gamepad-test" className={linkClass}>{t.gamepadTest.title}</Link></li>
-              <li><Link href="/test/battery-monitor" className={linkClass}>{t.batteryTest.title}</Link></li>
+              <li><Link href="/test/internet-speed-test" className={linkClass}>Internet Speed Test</Link></li>
             </ul>
           </div>
 

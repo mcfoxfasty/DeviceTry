@@ -11,6 +11,7 @@
     "clean": "next clean"
   },
   "dependencies": {
+    "@cloudflare/speedtest": "^1.14.0",
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
     "lucide-react": "^0.553.0",

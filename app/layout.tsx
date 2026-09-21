@@ -1,18 +1,25 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
+import { SITE_URL } from '@/lib/site';
 
 export const metadata: Metadata = {
-  title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
-  description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
+  metadataBase: new URL(SITE_URL),
+  title: 'DeviceTry — Free Online Mic, Webcam, Keyboard & Screen Tests',
+  description: 'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup. Tools run in your browser; nothing is uploaded unless a test says otherwise.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
-    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
+    title: 'DeviceTry — Free Online Mic, Webcam, Keyboard & Screen Tests',
+    description: 'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup. Tools run in your browser; nothing is uploaded unless a test says otherwise.',
     type: 'website',
+    url: SITE_URL,
+    siteName: 'DeviceTry',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'DeviceTry - Browser-Based Hardware Diagnostic Tools',
-    description: 'Professional browser-based device testing for microphone, webcam, keyboard, mouse, audio, display, and gamepad. 100% client-side, nothing uploaded.',
+    title: 'DeviceTry — Free Online Mic, Webcam, Keyboard & Screen Tests',
+    description: 'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup.',
   },
 };
 

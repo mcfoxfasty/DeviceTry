@@ -6,9 +6,18 @@ import { Footer } from '@/components/layout/Footer';
 import { LandingClient } from '@/components/LandingClient';
 
 export const metadata: Metadata = {
-  title: 'DeviceTry — Free Online Mic, Webcam & Keyboard Tests',
+  title: 'DeviceTry — Free Online Mic, Webcam, Keyboard & Screen Tests',
   description:
-    'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, and gamepad. 100% private, runs entirely in your browser.',
+    'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup. Tools run in your browser; nothing is uploaded unless a test says otherwise.',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'DeviceTry — Free Online Mic, Webcam, Keyboard & Screen Tests',
+    description:
+      'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup.',
+    type: 'website',
+  },
 };
 
 export default function HomePage() {

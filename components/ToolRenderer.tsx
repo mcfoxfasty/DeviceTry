@@ -5,44 +5,43 @@ import { Translations } from '@/lib/i18n/types';
 import { ToolDefinition } from '@/lib/tools/types';
 import { TesterWithBanner } from '@/components/TestResultBanner';
 
-import { MicrophoneTester } from './tests/MicrophoneTester';
-import { WebcamTester } from './tests/WebcamTester';
+import { MicrophoneTestHub } from './tests/MicrophoneTestHub';
+import { WebcamTestHub } from './tests/WebcamTestHub';
 import { SpeakersTester } from './tests/SpeakersTester';
 import { VoiceRecorderTester } from './tests/VoiceRecorderTester';
-import { OnlineMirrorTester } from './tests/OnlineMirrorTester';
 import { ToneGeneratorTester } from './tests/ToneGeneratorTester';
-import { ClickCounterTester } from './tests/ClickCounterTester';
 import { KeyboardTester } from './tests/KeyboardTester';
 import { MouseTester } from './tests/MouseTester';
-import { TouchscreenTester } from './tests/TouchscreenTester';
-import { MultitouchTester } from './tests/MultitouchTester';
+import { TouchscreenTestHub } from './tests/TouchscreenTestHub';
 import { GamepadTester } from './tests/GamepadTester';
-import { DeadPixelTester } from './tests/DeadPixelTester';
-import { DisplayPatternsTester } from './tests/DisplayPatternsTester';
-import { ScreenInfoTester } from './tests/ScreenInfoTester';
-import { DisplayFpsTester } from './tests/DisplayFpsTester';
-import { BatteryTester } from './tests/BatteryTester';
-import { AccelerometerTester } from './tests/AccelerometerTester';
-import { GyroscopeTester } from './tests/GyroscopeTester';
-import { VibrationTester } from './tests/VibrationTester';
-import { PitchDetectorTester } from './tests/PitchDetectorTester';
-import { InstrumentTunerTester } from './tests/InstrumentTunerTester';
-import { MetronomeTester } from './tests/MetronomeTester';
+import { ClickSpeedTester } from './tests/ClickSpeedTester';
+import { ReactionTimeTester } from './tests/ReactionTimeTester';
+import { ScreenTestHub } from './tests/ScreenTestHub';
+import { RefreshRateTester } from './tests/RefreshRateTester';
+import { WhatsMyIpTester } from './tests/WhatsMyIpTester';
+
 import { BrowserSystemInfoTester } from './tests/BrowserSystemInfoTester';
 import { BrowserCompatibilityTester } from './tests/BrowserCompatibilityTester';
 import { PermissionDiagnosticsTester } from './tests/PermissionDiagnosticsTester';
-import { ClipboardTester } from './tests/ClipboardTester';
-import { BrowserStorageTester } from './tests/BrowserStorageTester';
 import { PrivacyStorageInspectorTester } from './tests/PrivacyStorageInspectorTester';
-import { FontRenderingTester } from './tests/FontRenderingTester';
 import { CodecSupportTester } from './tests/CodecSupportTester';
-import { CanvasBenchmarkTester } from './tests/CanvasBenchmarkTester';
-import { WebGLTester } from './tests/WebGLTester';
-import { JavascriptBenchmarkTester } from './tests/JavascriptBenchmarkTester';
-import { WebAssemblyTester } from './tests/WebAssemblyTester';
 import { WebRTCTester } from './tests/WebRTCTester';
-import { OfflineCheckTester } from './tests/OfflineCheckTester';
-import { ClockTimezoneTester } from './tests/ClockTimezoneTester';
+
+import dynamic from 'next/dynamic';
+
+/**
+ * Heavy provider-backed tester is code-split: its chunk (including the
+ * @cloudflare/speedtest engine) loads only when the tool page requests it,
+ * never on initial site load (Phase 9, item M).
+ */
+const LazyInternetSpeedTester = dynamic(() => import('./tests/InternetSpeedTester').then((m) => m.InternetSpeedTester), {
+  ssr: false,
+  loading: () => (
+    <div className="p-8 rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#111D30] text-center">
+      <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">Loading speed test…</p>
+    </div>
+  ),
+});
 
 export type ToolResultStatus = 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
 
@@ -55,10 +54,13 @@ export interface ToolResultPayload {
 interface ToolRendererProps {
   tool: ToolDefinition;
   t: Translations;
-  /** Generic result hook for the 30 testers that report (status, details). */
-  onResultUpdate?: (status: ToolResultStatus, details?: string) => void;
-  /** Rich result hook for the 8 flagship testers that report a full payload. */
+  /** Generic result hook for testers that report (status, details). */
+  onResultUpdate?: (status: ToolResultStatus, details?: string) => void;  /** Rich result hook for flagship testers that report a full payload. */
   onRecordResult?: (result: ToolResultPayload) => void;
+  /** Host hook notified when a tester clears/resets its result. */
+  onResultClear?: () => void;
+  /** Initial tab for merged-tab tools (migration deep links, ?tab=...). */
+  initialTab?: string;
 }
 
 /**
@@ -68,63 +70,45 @@ interface ToolRendererProps {
  * below applies the correct callbacks per tester.
  */
 export const TESTER_COMPONENTS: Record<string, React.ComponentType<any>> = {
-  MicrophoneTester,
-  WebcamTester,
+  // Primary catalog (15)
+  MicrophoneTester: MicrophoneTestHub,
+  WebcamTester: WebcamTestHub,
   SpeakersTester,
   VoiceRecorderTester,
-  OnlineMirrorTester,
   ToneGeneratorTester,
-  ClickCounterTester,
   KeyboardTester,
   MouseTester,
-  TouchscreenTester,
-  MultitouchTester,
+  TouchscreenTester: TouchscreenTestHub,
   GamepadTester,
-  DeadPixelTester,
-  DisplayPatternsTester,
-  ScreenInfoTester,
-  DisplayFpsTester,
-  BatteryTester,
-  AccelerometerTester,
-  GyroscopeTester,
-  VibrationTester,
-  PitchDetectorTester,
-  InstrumentTunerTester,
-  MetronomeTester,
+  ClickSpeedTester,
+  ReactionTimeTester,
+  ScreenTestHub,
+  RefreshRateTester,
+  InternetSpeedTester: LazyInternetSpeedTester,
+  WhatsMyIpTester,
+  // Supporting diagnostics (6)
   BrowserSystemInfoTester,
   BrowserCompatibilityTester,
   PermissionDiagnosticsTester,
-  ClipboardTester,
-  BrowserStorageTester,
   PrivacyStorageInspectorTester,
-  FontRenderingTester,
   CodecSupportTester,
-  CanvasBenchmarkTester,
-  WebGLTester,
-  JavascriptBenchmarkTester,
-  WebAssemblyTester,
   WebRTCTester,
-  OfflineCheckTester,
-  ClockTimezoneTester,
 };
 
 /** Flagship testers receive the rich payload callback directly. */
 const RICH_FLAGSHIP: ReadonlySet<string> = new Set([
-  'MicrophoneTester',
-  'WebcamTester',
-  'SpeakersTester',
+  'GamepadTester',
   'KeyboardTester',
   'MouseTester',
-  'GamepadTester',
-  'BatteryTester',
+  'SpeakersTester',
+  'WebcamTester',
+  'MicrophoneTester',
 ]);
 
 /**
  * Renders the correct tester component for a registry tool definition.
  * Unknown componentName throws (loud) instead of rendering nothing (silent).
- * Result telemetry is wired through so host pages can display outcomes.
- */
-export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult }: ToolRendererProps) {
+ */export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult, onResultClear, initialTab }: ToolRendererProps) {
   const Tester = TESTER_COMPONENTS[tool.componentName];
 
   if (!Tester) {
@@ -132,10 +116,23 @@ export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult }: ToolRe
   }
 
   if (RICH_FLAGSHIP.has(tool.componentName)) {
-    return <Tester t={t} onRecordResult={onRecordResult} />;
+    return (
+      <Tester
+        t={t}
+        onRecordResult={onRecordResult}
+        onResultUpdate={onResultUpdate}
+        onResultClear={onResultClear}
+        initialTab={initialTab}
+      />
+    );
   }
   return (
-    <TesterWithBanner tester={Tester} testerProps={{ t }} onResultUpdate={onResultUpdate} />
+    <TesterWithBanner
+      tester={Tester}
+      testerProps={{ t, onResultUpdate, initialTab }}
+      onResultUpdate={onResultUpdate}
+      onResultClear={onResultClear}
+    />
   );
 }
 

@@ -1,6 +1,19 @@
 import type {NextConfig} from 'next';
+import {nextRedirects} from './next.config.redirects';
+
+/**
+ * Single source of truth for the production site URL. Used by metadataBase,
+ * canonicals, Open Graph, sitemap, and robots. Change it here and everywhere
+ * follows. Do NOT put localhost or an unrelated domain here for releases.
+ */
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://devicetry.com';
 
 const nextConfig: NextConfig = {
+  // Phase 9 route migrations: permanent 308s from old tool routes to their
+  // merged/reorganized destinations (deep-linking tabs via ?tab=...).
+  async redirects() {
+    return nextRedirects();
+  },
   reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,

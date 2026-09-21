@@ -5,7 +5,7 @@ import { Info, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { ToolDefinition } from '@/lib/tools/types';
 import { DeviceIllustration } from '@/components/ui/DeviceIllustration';
-import { ToolRenderer } from '@/components/ToolRenderer';
+import { ToolRendererDeepLink } from '@/components/ToolRendererDeepLink';
 import { PermissionPromptCard } from '@/components/PermissionPromptCard';
 
 interface ToolDetailViewProps {
@@ -54,8 +54,9 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
       {/* Permission encouragement card */}
       <PermissionPromptCard t={t} />
 
-      {/* Live tester — result banner is rendered INSIDE each tester card */}
-      <ToolRenderer tool={tool} t={t} onResultUpdate={onResultUpdate} />
+      {/* Live tester — result banner is rendered INSIDE each tester card.
+          DeepLink wrapper reads ?tab= for migrated route deep links. */}
+      <ToolRendererDeepLink tool={tool} t={t} onResultUpdate={onResultUpdate} />
 
       {/* Instructions & troubleshooting */}
       <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${compact ? '' : 'pt-2'}`}>
