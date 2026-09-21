@@ -2,11 +2,10 @@ import type {NextConfig} from 'next';
 import {nextRedirects} from './next.config.redirects';
 
 /**
- * Single source of truth for the production site URL. Used by metadataBase,
- * canonicals, Open Graph, sitemap, and robots. Change it here and everywhere
- * follows. Do NOT put localhost or an unrelated domain here for releases.
+ * The production site URL is defined ONCE in lib/site.ts (validated
+ * NEXT_PUBLIC_SITE_URL; no assumed domain fallback). Sitemap, robots, layout
+ * metadata, and guide pages import it from there — not from this file.
  */
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://devicetry.com';
 
 const nextConfig: NextConfig = {
   // Phase 9 route migrations: permanent 308s from old tool routes to their
@@ -15,6 +14,13 @@ const nextConfig: NextConfig = {
     return nextRedirects();
   },
   reactStrictMode: true,
+  // LINT ENFORCEMENT (2026-09-21): this 2 GiB container OOM-killed two
+  // production builds when Next's in-build lint worker ran alongside the
+  // resident compile worker (evidence: "Cannot find module for page" ENOENT
+  // storms after a successful compile + memory.events max 611 / oom 15 /
+  // oom_kill 1). Lint is therefore enforced as a hard gate in the project's
+  // `verify` script — `bun run verify` runs lint, tests, typecheck, and the
+  // build; the build does not pass verification without lint exiting 0.
   eslint: {
     ignoreDuringBuilds: true,
   },

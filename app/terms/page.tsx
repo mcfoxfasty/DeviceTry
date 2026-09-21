@@ -45,7 +45,7 @@ export default function TermsPage() {
               1. Acceptance of Terms
             </h2>
             <p>
-              By accessing and using DeviceTry (devicetry.com), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the application.
+              By accessing and using DeviceTry (this website), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the application.
             </p>
           </section>
 

@@ -1,17 +1,77 @@
 /**
- * Central site URL configuration (Phase 9, item K).
+ * Central site URL configuration (Phase 9 corrections).
  *
- * Single source of truth: next.config.ts exports SITE_URL derived from the
- * NEXT_PUBLIC_SITE_URL environment variable, defaulting to the release
- * domain. Sitemap, robots, and JSON-LD consumers import from here so every
- * generated surface uses one validated value.
+ * SINGLE SOURCE OF TRUTH: sitemap, robots, layout metadata, and guide pages
+ * all import SITE_URL from here. next.config.ts no longer defines or exports
+ * a site URL of its own.
  *
- * The production domain is a release-configuration decision: if the final
- * public URL changes or is unavailable, set NEXT_PUBLIC_SITE_URL at deploy
- * time — do not hardcode a different domain in page code.
+ * Rules (no assumed production domain):
+ * - NEXT_PUBLIC_SITE_URL is validated whenever it is set: it must be an
+ *   absolute http(s) URL pointing at a site root (no path, query, or hash).
+ * - Local development without the variable falls back to the honest local
+ *   default http://localhost:3000 — localhost is NEVER accepted in a
+ *   production build.
+ * - A production build without the variable emits a loud build-time error and
+ *   an RFC 2606 `.invalid` placeholder instead of silently claiming an
+ *   unowned domain. Deployments MUST set NEXT_PUBLIC_SITE_URL to the
+ *   confirmed public URL (see docs/phase9-migration.md).
  */
 
-export const SITE_URL: string = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://devicetry.com';
+export function resolveSiteUrl(raw: string | undefined, nodeEnv: string | undefined): string {
+  const isProduction = nodeEnv === 'production';
+  const trimmed = raw?.trim().replace(/\/+$/, '');
+
+  if (trimmed) {
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      throw new Error(
+        `[site] NEXT_PUBLIC_SITE_URL is not a valid absolute URL: "${raw}". ` +
+          'Set it to the confirmed public site root, e.g. https://example.com'
+      );
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`[site] NEXT_PUBLIC_SITE_URL must use http(s), got "${parsed.protocol}"`);
+    }
+    if (!parsed.hostname) {
+      throw new Error('[site] NEXT_PUBLIC_SITE_URL has no hostname');
+    }
+    if ((parsed.pathname && parsed.pathname !== '/') || parsed.search || parsed.hash) {
+      throw new Error(
+        `[site] NEXT_PUBLIC_SITE_URL must be a site root without a path, query, or hash: "${raw}"`
+      );
+    }
+    const isLoopback =
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]' ||
+      parsed.hostname.endsWith('.localhost');
+    if (isProduction && isLoopback) {
+      throw new Error(
+        '[site] NEXT_PUBLIC_SITE_URL must not be localhost in a production build. ' +
+          'Set the confirmed public URL (see docs/phase9-migration.md).'
+      );
+    }
+    return parsed.origin;
+  }
+
+  if (!isProduction) {
+    // Honest local-development default; never used in production builds.
+    return 'http://localhost:3000';
+  }
+
+  console.error(
+    '[site] NEXT_PUBLIC_SITE_URL is NOT set for this production build. ' +
+      'Canonical, Open Graph, sitemap, and robots URLs point at the ' +
+      '"site-url-unset.invalid" placeholder and will not resolve. ' +
+      'Set NEXT_PUBLIC_SITE_URL to the confirmed public URL before release ' +
+      '(see docs/phase9-migration.md).'
+  );
+  return 'https://site-url-unset.invalid';
+}
+
+export const SITE_URL: string = resolveSiteUrl(process.env.NEXT_PUBLIC_SITE_URL, process.env.NODE_ENV);
 
 /**
  * Truthful last-modified dates for content surfaces (Phase 9, item K):

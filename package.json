@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "npx tsx --test tests/**/*.test.ts",
+    "verify": "bun run lint && bun test && tsc --noEmit && next build",
     "clean": "next clean"
   },
   "dependencies": {

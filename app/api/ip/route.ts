@@ -1,62 +1,50 @@
 import { NextResponse } from 'next/server';
+import { resolveClientIp } from '@/lib/testing/ipTrust';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Public-IP endpoint (Phase 9, item G).
+ * Public-IP endpoint (Phase 9, item G — corrected).
  *
- * Production: served behind Cloudflare, the ONLY trusted source is the
- * CF-Connecting-IP header set by Cloudflare itself — arbitrary client-supplied
- * parameters are never trusted. Local dev (no proxy): falls back to the
- * socket address from the request (x-forwarded-for is only read when it was
- * set by the local dev proxy), otherwise an honest 501.
+ * The trust model and validation live in lib/testing/ipTrust.ts so every
+ * branch is unit-testable. Summary:
+ * - `cf-connecting-ip` is trusted only when IP_TRUSTED_PROXY=cloudflare is
+ *   configured (and the operator has locked the origin to Cloudflare).
+ * - `x-forwarded-for` is read only for local development.
+ * - `PORT` never enables dev fallbacks — production containers set PORT.
+ * - Returned IPs pass a strict validator; malformed header values cannot be
+ *   emitted as an "IP address".
  *
  * - Cache-Control: no-store — one visitor's answer is never cached for another.
- * - No IP is persisted, logged by this handler, or returned to any third party.
+ * - No IP is persisted or logged here, and no third party is called.
  * - No location/ISP enrichment: the response is exactly { ip }.
+ * - Live Cloudflare deployment is NOT verified; see docs/phase9-migration.md.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const cfIp = request.headers.get('cf-connecting-ip');
-  let ip: string | null = cfIp;
+  const noStore = { 'Cache-Control': 'no-store, private', Vary: '*' };
+  const resolution = resolveClientIp(request.headers, {
+    trustedProxy: process.env.IP_TRUSTED_PROXY,
+    isProduction: process.env.NODE_ENV === 'production',
+  });
 
-  if (!ip) {
-    // Local development: Next's dev server is reached through a local proxy
-    // that may append x-forwarded-for. In production behind Cloudflare this
-    // branch is unreachable because cf-connecting-ip is present.
-    const isLocalDev =
-      process.env.NODE_ENV === 'development' || process.env.PORT !== undefined;
-    if (isLocalDev) {
-      const xff = request.headers.get('x-forwarded-for');
-      if (xff) {
-        ip = xff.split(',')[0]?.trim() ?? null;
-      } else {
-        // Hypercorn/Node runtime: attempt the socket address when exposed.
-        const anyReq = request as unknown as { socket?: { remoteAddress?: string } };
-        ip = anyReq.socket?.remoteAddress ?? null;
-        if (ip && (ip === '::1' || ip === '127.0.0.1')) ip = ip;
-      }
-    }
-  }
-
-  if (!ip) {
+  if (resolution.outcome === 'unconfigured') {
+    const declared = (process.env.IP_TRUSTED_PROXY ?? '').trim().toLowerCase() === 'cloudflare';
     return NextResponse.json(
-      { error: 'IP lookup is not available on this deployment.' },
-      { status: 501, headers: { 'Cache-Control': 'no-store' } }
+      {
+        error: declared
+          ? 'The proxy did not provide a valid client IP address.'
+          : 'IP lookup is not available on this deployment. Set IP_TRUSTED_PROXY=cloudflare when the site is served behind Cloudflare.',
+      },
+      { status: declared ? 502 : 501, headers: noStore }
     );
   }
 
-  // Normalize IPv4-mapped IPv6 loopback forms for display honesty.
-  if (ip.startsWith('::ffff:') && ip.includes('.')) {
-    ip = ip.slice('::ffff:'.length);
+  if (resolution.outcome === 'invalid') {
+    return NextResponse.json(
+      { error: 'The proxy did not provide a valid client IP address.' },
+      { status: 502, headers: noStore }
+    );
   }
 
-  return NextResponse.json(
-    { ip },
-    {
-      headers: {
-        'Cache-Control': 'no-store, private',
-        Vary: '*',
-      },
-    }
-  );
+  return NextResponse.json({ ip: resolution.ip }, { headers: noStore });
 }

@@ -77,8 +77,20 @@ interface CloudflareSpeedTestEngineLike {
 
 let enginePromise: Promise<EngineCtor> | null = null;
 
+/**
+ * Test seam: tests may replace this to inject a fake engine constructor so
+ * controller lifecycle behavior (callback detachment, stale-callback guards)
+ * is verified without the real network engine. Production code never touches
+ * this variable. When unset, loadEngine falls back to the real provider.
+ */
+let engineFactoryOverride: (() => Promise<EngineCtor>) | undefined = undefined;
+
 /** Lazily import the provider so it never loads until a test starts. */
 async function loadEngine(): Promise<EngineCtor> {
+  const override = engineFactoryOverride;
+  if (override) {
+    return override();
+  }
   if (!enginePromise) {
     enginePromise = import('@cloudflare/speedtest').then((mod) => {
       return (mod.default ?? mod) as unknown as EngineCtor;
@@ -173,15 +185,21 @@ export class CloudflareSpeedTestController {
     if (this.phase === 'running') this.setPhase('aborted');
   }
 
-  /** Departure: same as cancel, plus silence event handlers. */
+  /**
+   * Departure: detach engine callbacks BEFORE cancel() clears the engine
+   * reference. The previous order (cancel first) nulled this.engine and made
+   * the detach block dead code — the engine could then fire a callback into
+   * an already-disposed controller between pause() and teardown.
+   */
   dispose(): void {
-    this.cancel();
-    if (this.engine) {
-      this.engine.onRunningChange = null;
-      this.engine.onResultsChange = null;
-      this.engine.onFinish = null;
-      this.engine.onError = null;
+    const engine = this.engine;
+    if (engine) {
+      engine.onRunningChange = null;
+      engine.onResultsChange = null;
+      engine.onFinish = null;
+      engine.onError = null;
     }
+    this.cancel();
   }
 
   private readSummary(engine: CloudflareSpeedTestEngineLike): SpeedSummary {
@@ -200,4 +218,18 @@ export class CloudflareSpeedTestController {
     this.phase = phase;
     this.events.onPhase(phase, error);
   }
+}
+
+/**
+ * Install a fake engine factory for regression tests. Returns a restore
+ * function. NOT used by production code paths.
+ */
+export function __setEngineFactoryForTests(
+  factory: (() => Promise<EngineCtor>) | null
+): () => void {
+  const previous = engineFactoryOverride;
+  engineFactoryOverride = factory ?? undefined;
+  return () => {
+    engineFactoryOverride = previous;
+  };
 }

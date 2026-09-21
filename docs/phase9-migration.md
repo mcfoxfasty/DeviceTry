@@ -60,7 +60,51 @@ pages use `generateStaticParams` + `notFound()`, requests render the app's real
 
 ## Site URL configuration
 
-`next.config.ts` exports `SITE_URL` (from `NEXT_PUBLIC_SITE_URL`, defaulting to the
-release domain). `lib/site.ts`, sitemap, robots, and layout metadata all consume it,
-so metadataBase, canonicals, Open Graph URLs, and the sitemap always agree. If the
-release domain changes, set `NEXT_PUBLIC_SITE_URL` — no code edits needed.
+`lib/site.ts` is the SINGLE source of truth: it validates `NEXT_PUBLIC_SITE_URL`
+(absolute http(s), site root only) and every generated surface — metadataBase,
+canonicals, Open Graph, sitemap, robots — imports it from there.
+
+- **Required deployment variable:** `NEXT_PUBLIC_SITE_URL` must be set to the
+  confirmed public URL (e.g. `https://example.com`) at deploy time. There is NO
+  assumed production-domain fallback in code.
+- Local development without the variable uses `http://localhost:3000`.
+- A production build without the variable emits a build-time console error and
+  uses the RFC 2606 placeholder `https://site-url-unset.invalid` — canonicals
+  and OG URLs will not resolve. Treat that placeholder in built output as a
+  release blocker.
+- Production env vars are set separately from the sandbox: `freebuff-deploy env
+  set '{"NEXT_PUBLIC_SITE_URL":"https://…"}'` (applied on the next deploy).
+
+## Build lint enforcement on the 2 GiB container (2026-09-21 record)
+
+Next's in-build lint worker OOM-killed two verification builds in this
+container: compile succeeded, then "Cannot find module for page" ENOENT storms
+during page-data collection, with `memory.events` showing `max 611 / oom 15 /
+oom_kill 1` and identical failure signatures across two clean rebuilds.
+Keeping `eslint.ignoreDuringBuilds: true` (as the code comment in
+`next.config.ts` records) was therefore necessary **for this container's build
+step only**; lint is enforced as a hard gate in `bun run verify`
+(`lint && test && tsc && build`) — the build does not pass verification unless
+lint exits 0. On a container with more memory, removing the option restores
+in-build lint at zero behavioral risk. Historical note: an earlier
+lint-skipping option also existed and was removed on 2026-09-21 because it
+suppressed real regressions; the current state keeps lint fully enforced via
+the verify gate while keeping the container's build memory-safe.
+
+## What's My IP — endpoint trust requirements
+
+`/api/ip` returns the visitor IP from `cf-connecting-ip` **only** when the
+origin declares `IP_TRUSTED_PROXY=cloudflare`. Under that configuration the
+operator must ensure the origin is reachable only via Cloudflare (lock the
+origin to Cloudflare IP ranges or enable Authenticated Origin Pulls) — the
+header is forgeable on a directly reachable origin.
+
+- Without the variable the endpoint returns an honest 501 — it never falls
+  back to `x-forwarded-for` in production, and `PORT` no longer influences
+  behavior (production containers routinely set PORT).
+- The IP is validated against a strict IPv4/IPv6 validator before it is
+  returned; a malformed or spoofed header value can never be emitted as an IP.
+- `Cache-Control: no-store` prevents one visitor's answer being served to
+  another. The handler persists or logs no IP.
+- Live Cloudflare deployment has NOT been verified — that remains a release
+  step (first deploy, then confirm `/api/ip` returns the real client IP).

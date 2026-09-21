@@ -179,7 +179,7 @@ export function PermissionDeniedModal({ open, kind, onRetry, onClose }: Permissi
           {/* Browser prompt visual */}
           <div className="mt-5 mx-auto max-w-[280px] rounded-2xl bg-[#F1F4F7] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] px-4 py-3.5 shadow-sm">
             <p className="text-[13px] font-semibold text-[#142033] dark:text-[#E9EEF4] leading-snug">
-              Allow “devicetry.com” to use your {meta.device}?
+              Allow “this website” to use your {meta.device}?
             </p>
             <div className="mt-2.5 flex justify-end gap-2">
               <span className="px-3 py-1 rounded-lg text-[11px] font-semibold bg-[#E4E9EF] dark:bg-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8]">

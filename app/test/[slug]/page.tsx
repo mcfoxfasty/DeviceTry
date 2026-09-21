@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { getDictionary } from '@/lib/i18n';
-import { TOOLS_REGISTRY } from '@/lib/tools/registry';
+import { ALL_TOOL_PAGES, TOOLS_REGISTRY, findToolBySlug } from '@/lib/tools/registry';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ToolDetailView } from '@/components/ToolDetailView';
@@ -15,12 +15,12 @@ interface PageProps {
 }
 
 export function generateStaticParams() {
-  return TOOLS_REGISTRY.map((tool) => ({ slug: tool.slug }));
+  return ALL_TOOL_PAGES.map((tool) => ({ slug: tool.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const tool = TOOLS_REGISTRY.find((item) => item.slug === slug);
+  const tool = findToolBySlug(slug);
 
   if (!tool) {
     return { title: 'Test Not Found — DeviceTry' };
@@ -53,11 +53,14 @@ export default async function ToolPage({ params }: PageProps) {
   const { slug } = await params;
   const t = getDictionary();
 
-  const tool = TOOLS_REGISTRY.find((item) => item.slug === slug);
+  const tool = findToolBySlug(slug);
   if (!tool) {
     notFound();
   }
 
+  // Catalog-card semantics stay limited to the 15 primary tools: related
+  // tool links are only drawn from the primary registry, so supporting
+  // diagnostics never cross-link themselves into the public catalog.
   const relatedTools = tool.relatedToolIds
     .map((id) => TOOLS_REGISTRY.find((item) => item.id === id || item.slug === id))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
