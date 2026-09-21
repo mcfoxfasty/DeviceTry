@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, RefreshCw, FlipHorizontal, ZoomIn, ZoomOut, Download, AlertCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { CameraSession } from '@/lib/testing/cameraSession';
 
 interface ToolComponentProps {
   t: Translations;
@@ -15,53 +16,86 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
   const [isMirrored, setIsMirrored] = useState<boolean>(true);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isRequesting, setIsRequesting] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Session state lives in refs so stopStream stays a stable callback and the
+  // unmount cleanup cannot race a pending getUserMedia resolution.
+  const sessionRef = useRef<CameraSession<MediaStream>>(new CameraSession<MediaStream>());
+  const runTokenRef = useRef(0);
+  const mountedRef = useRef(true);
+
   const stopStream = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
+    // Stop-as-cleanup: release hardware without invalidating lifecycle state.
+    sessionRef.current.releaseAll();
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setIsActive(false);
-  }, [stream]);
+  }, []);
 
   const startMirror = async () => {
+    if (isRequesting) return; // prevent concurrent pending requests
     setErrorMsg(null);
+    setIsRequesting(true);
+    // New observation: invalidate pending work from any previous attempt,
+    // then mint the immutable token for THIS attempt (captured at begin —
+    // never re-read inside the later promise resolution).
+    sessionRef.current.invalidate();
+    const token = ++runTokenRef.current;
+    if (!sessionRef.current.begin(token)) {
+      setIsRequesting(false);
+      return;
+    }
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' },
         audio: false,
       });
-
-      setStream(mediaStream);
+      const result = sessionRef.current.resolve(token, mediaStream);
+      if (!result.live) {
+        // Superseded (Turn Off / restart / unmount won): the session already
+        // stopped every returned track. Update nothing.
+        setIsRequesting(false);
+        return;
+      }
       setIsActive(true);
-
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+        videoRef.current.srcObject = result.stream;
         videoRef.current.play().catch(() => {});
       }
-
-      if (onResultUpdate) {
-        onResultUpdate('passed', 'Mirror camera feed active');
-      }
+      setIsRequesting(false);
+      onResultUpdate?.(
+        'passed',
+        'Mirror preview showing live video from the selected camera. Preview confirms delivery only — not a full camera certification.'
+      );
     } catch (err: unknown) {
       const error = err as Error;
+      const stale = !sessionRef.current.reject(token);
+      setIsRequesting(false);
+      if (stale || !mountedRef.current) return;
       setErrorMsg(error.message || 'Camera access denied or unavailable');
-      if (onResultUpdate) {
-        onResultUpdate('failed', error.message);
-      }
+      onResultUpdate?.('failed', error.message);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
+    // Capture the refs up front: the cleanup runs after unmount and must not
+    // read ref fields that React may have detached.
+    const session = sessionRef.current;
+    const videoEl = videoRef.current;
     return () => {
-      stopStream();
+      mountedRef.current = false;
+      // Unmount: invalidate pending work and release hardware. No setState —
+      // this must be safe after React has torn the component down.
+      session.invalidate();
+      session.releaseAll();
+      if (videoEl) {
+        videoEl.srcObject = null;
+      }
     };
-  }, [stopStream]);
+  }, []);
 
   const takeSnapshot = () => {
     if (!videoRef.current) return;
@@ -122,9 +156,10 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
             </div>
             <button
               onClick={startMirror}
-              className="px-6 py-3 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-xl text-sm font-bold transition-all cursor-pointer shadow-sm"
+              disabled={isRequesting}
+              className="px-6 py-3 bg-[#0F766E] hover:bg-[#0D665F] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all cursor-pointer shadow-sm"
             >
-              Enable Mirror
+              {isRequesting ? 'Requesting…' : 'Enable Mirror'}
             </button>
           </div>
         )}

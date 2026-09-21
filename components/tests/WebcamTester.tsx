@@ -6,6 +6,10 @@ import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 import { CameraSession } from '@/lib/testing/cameraSession';
+import {
+  createFrameGate,
+  supportsRequestVideoFrameCallback,
+} from '@/lib/testing/videoFrameGate';
 
 interface WebcamTesterProps {
   t: Translations;
@@ -41,6 +45,10 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
   const fpsFrameCountRef = useRef<number>(0);
   const fpsLastTimeRef = useRef<number>(0);
   const snapshotUrlRef = useRef<string | null>(null);
+  /** Frame-delivery gate for the CURRENT stream observation. */
+  const frameGateRef = useRef<ReturnType<typeof createFrameGate> | null>(null);
+  /** Fallback readyState poll handle (browsers without rVFC). */
+  const fallbackPollRef = useRef<number | null>(null);
   // Set on unmount only: in-flight getUserMedia must never touch state after it.
   const unmountedRef = useRef<boolean>(false);
 
@@ -119,52 +127,34 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
     setPermissionState('idle');
   }, [session, releaseCameraResources]);
 
-  /** FPS measurement via requestVideoFrameCallback, guarded by streamRef identity. */
-  const measureFpsWithVideoFrameCallback = useCallback((videoEl: HTMLVideoElement) => {
-    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
-      setFpsSupported(false);
-      setObservedFps(null);
-      return;
-    }
-
-    setFpsSupported(true);
-    fpsFrameCountRef.current = 0;
-    fpsLastTimeRef.current = performance.now();
-
-    const callback = (
-      now: DOMHighResTimeStamp,
-      _metadata: Record<string, unknown>
-    ) => {
-      if (!streamRef.current || !videoRef.current) return;
-
-      fpsFrameCountRef.current++;
+  /** Schedule the next rVFC frame, integrating FPS counting (single loop). */
+  const scheduleNextFrame = useCallback((cb: () => void) => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !('requestVideoFrameCallback' in videoEl)) return;
+    const id = (
+      videoEl as unknown as {
+        requestVideoFrameCallback: (cb: () => void) => number;
+      }
+    ).requestVideoFrameCallback(() => {
+      // FPS accounting per delivered frame.
+      fpsFrameCountRef.current += 1;
+      const now = performance.now();
+      if (fpsLastTimeRef.current === 0) {
+        fpsLastTimeRef.current = now;
+      }
       const elapsed = now - fpsLastTimeRef.current;
-
       if (elapsed >= 1000) {
-        const fps = Math.round((fpsFrameCountRef.current * 1000) / elapsed);
-        setObservedFps(fps);
+        setObservedFps(Math.round((fpsFrameCountRef.current * 1000) / elapsed));
         fpsFrameCountRef.current = 0;
         fpsLastTimeRef.current = now;
       }
-
-      if (
-        videoRef.current &&
-        'requestVideoFrameCallback' in videoRef.current
-      ) {
-        videoFrameCallbackIdRef.current = (
-          videoRef.current as unknown as {
-            requestVideoFrameCallback: (cb: typeof callback) => number;
-          }
-        ).requestVideoFrameCallback(callback);
-      }
-    };
-
-    videoFrameCallbackIdRef.current = (
-      videoEl as unknown as {
-        requestVideoFrameCallback: (cb: typeof callback) => number;
-      }
-    ).requestVideoFrameCallback(callback);
+      cb();
+    });
+    videoFrameCallbackIdRef.current = id;
   }, []);
+
+  // (FPS counting is integrated into scheduleNextFrame — one unified loop
+  // serves frame delivery, FPS measurement, and the resolution readout.)
 
   const startCamera = useCallback(
     async (deviceId?: string) => {
@@ -207,29 +197,76 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
 
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-          videoRef.current.onloadedmetadata = () => {
-            if (
-              videoRef.current &&
+          // Frame-delivery gate: passed requires an ACTUALLY delivered frame.
+          // Metadata/dimensions alone (onloadedmetadata) are not evidence.
+          const gate = createFrameGate({
+            runToken,
+            streamIdentity: mediaStream,
+            isCurrent: () =>
               !unmountedRef.current &&
               runToken === currentRun() &&
-              streamRef.current === mediaStream
-            ) {
-              const w = videoRef.current.videoWidth;
-              const h = videoRef.current.videoHeight;
-              setResolution({ width: w, height: h });
-              measureFpsWithVideoFrameCallback(videoRef.current);
+              streamRef.current === mediaStream,
+          });
+          frameGateRef.current = gate;
 
-              emitRunRich(runToken, {
-                status: 'passed',
-                details: `Camera operational at ${w}x${h}. Video frame arrival confirmed.`,
-                metrics: {
-                  width: w,
-                  height: h,
-                  deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
-                },
-              });
-            }
-          };
+          if (supportsRequestVideoFrameCallback(videoRef.current)) {
+            // Report once per observation: a delivered frame is one verdict;
+            // the loop keeps running for FPS accounting, but identical verdict
+            // re-emissions are deduped by the ResultController anyway.
+            let reported = false;
+            const onFrame = () => {
+              if (!gate.isLive()) return;
+              const w = videoRef.current?.videoWidth ?? 0;
+              const h = videoRef.current?.videoHeight ?? 0;
+              const decision = gate.onFrame(runToken, mediaStream);
+              if (decision.delivered && !reported && w > 0 && h > 0) {
+                reported = true;
+                setResolution({ width: w, height: h });
+                emitRunRich(runToken, {
+                  status: 'passed',
+                  details: `Video frames actually delivered at ${w}x${h} (confirmed via requestVideoFrameCallback).`,
+                  metrics: {
+                    width: w,
+                    height: h,
+                    deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
+                    frameEvidence: 'requestVideoFrameCallback',
+                  },
+                });
+              }
+              scheduleNextFrame(onFrame);
+            };
+            scheduleNextFrame(onFrame);
+          } else {
+            // Documented fallback (no rVFC, e.g. older Firefox/Safari): poll
+            // readyState; HAVE_CURRENT_DATA + non-zero dimensions is the best
+            // available evidence that a frame was decoded for display.
+            setFpsSupported(false);
+            setObservedFps(null);
+            let pollReported = false;
+            const poll = () => {
+              if (!gate.isLive()) return;
+              const decision = gate.checkFallbackReady(videoRef.current);
+              if (decision.delivered && !pollReported) {
+                pollReported = true;
+                const w = videoRef.current?.videoWidth ?? 0;
+                const h = videoRef.current?.videoHeight ?? 0;
+                setResolution({ width: w, height: h });
+                emitRunRich(runToken, {
+                  status: 'passed',
+                  details: `Video frames delivered at ${w}x${h} (readyState fallback — this browser does not expose requestVideoFrameCallback).`,
+                  metrics: {
+                    width: w,
+                    height: h,
+                    deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
+                    frameEvidence: 'readyState-fallback',
+                  },
+                });
+                return;
+              }
+              fallbackPollRef.current = window.setTimeout(poll, 100);
+            };
+            fallbackPollRef.current = window.setTimeout(poll, 100);
+          }
         }
       } catch (err: unknown) {
         const error = err as Error;
@@ -255,7 +292,7 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
         });
       }
     },
-    [startRun, session, releaseCameraResources, loadCameras, currentRun, emitRunRich, measureFpsWithVideoFrameCallback, t.common.permissionDenied, t.common.deviceUnavailable, t.common.error]
+    [startRun, session, releaseCameraResources, loadCameras, currentRun, emitRunRich, scheduleNextFrame, t.common.permissionDenied, t.common.deviceUnavailable, t.common.error]
   );
 
   const takeSnapshot = () => {
@@ -290,6 +327,11 @@ export function WebcamTester({ t, onRecordResult, onResultClear }: WebcamTesterP
       unmountedRef.current = true;
       invalidate();
       session.invalidate();
+      frameGateRef.current = null;
+      if (fallbackPollRef.current !== null) {
+        clearTimeout(fallbackPollRef.current);
+        fallbackPollRef.current = null;
+      }
       releaseCameraResources();
       if (snapshotUrlRef.current) {
         URL.revokeObjectURL(snapshotUrlRef.current);

@@ -4,6 +4,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, CheckCircle, AlertCircle, Play, Square } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import {
+  createSpeakerObservation,
+  markPlayed,
+  confirmChannel,
+  aggregateSpeakerVerdict,
+  SpeakerChannel,
+} from '@/lib/testing/speakerObservation';
 
 interface SpeakersTesterProps {
   t: Translations;
@@ -20,9 +27,58 @@ export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTes
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const pannerRef = useRef<StereoPannerNode | null>(null);
-  const toneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const toneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Channels actually requested and played in this session — the only ones a
+  // user confirmation can ever be valid for.
+  const observationRef = useRef(createSpeakerObservation());
+  const [hint, setHint] = useState<string | null>(null);
+
+  const stopTone = () => {
+    // Cancel any pending tone-stop timer: manual stop or a NEW tone starting
+    // must never leave an old timer firing against the replacement tone.
+    if (toneTimeoutRef.current !== null) {
+      clearTimeout(toneTimeoutRef.current);
+      toneTimeoutRef.current = null;
+    }
+    if (oscillatorRef.current) {
+      try {
+        oscillatorRef.current.stop();
+      } catch {
+        // ignore
+      }
+      try {
+        oscillatorRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+      oscillatorRef.current = null;
+    }
+    if (gainNodeRef.current) {
+      try {
+        gainNodeRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+      gainNodeRef.current = null;
+    }
+    if (pannerRef.current) {
+      try {
+        pannerRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+      pannerRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    setPlayingChannel(null);
+  };
 
   const playTone = (channel: 'left' | 'right' | 'both') => {
+    // Stop the previous active tone AND its pending stop timer first, so the
+    // old 3s timer can never kill the new tone early.
     stopTone();
 
     try {
@@ -57,6 +113,9 @@ export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTes
       gainNodeRef.current = gain;
       pannerRef.current = panner;
       setPlayingChannel(channel);
+      // Only a tone that ACTUALLY started makes later confirmations valid.
+      markPlayed(observationRef.current, channel);
+      setHint(null);
 
       // Automatically stop tone after 3 seconds for comfort
       toneTimeoutRef.current = setTimeout(() => {
@@ -68,40 +127,74 @@ export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTes
     }
   };
 
-  const stopTone = () => {
-    if (oscillatorRef.current) {
-      try {
-        oscillatorRef.current.stop();
-        oscillatorRef.current.disconnect();
-      } catch {
-        // ignore
-      }
-      oscillatorRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    setPlayingChannel(null);
-  };
-
   const recordObservation = (obs: 'left' | 'right' | 'both' | 'none') => {
+    if (obs === 'none') {
+      // An explicit "heard nothing" on played channels is an observed failure
+      // of those channels — never silently positive.
+      const played = observationRef.current.played;
+      setUserObservation('none');
+      emitRich({
+        status: played.length > 0 ? 'failed' : 'warning',
+        details:
+          played.length > 0
+            ? `User reported no audible tone on the tested channel(s): ${played.join(', ')}.`
+            : 'No audible-output confirmation recorded — no tone was played in this session yet.',
+        metrics: { observation: 'none', channelsPlayed: played.join(',') },
+      });
+      return;
+    }
+    // A confirmation is only valid for a channel that was actually played.
+    if (!confirmChannel(observationRef.current, obs as SpeakerChannel)) {
+      setHint(`Play the ${obs === 'both' ? 'center/stereo' : obs} tone first, then confirm what you heard.`);
+      return;
+    }
+    setHint(null);
     setUserObservation(obs);
-    const passed = obs === 'both' || obs === 'left' || obs === 'right';
-    emitRich({
-      status: passed ? 'passed' : 'warning',
-      details: `User observation recorded: ${obs}`,
-      metrics: { observation: obs },
-    });
+    const verdict = aggregateSpeakerVerdict(observationRef.current);
+    emitRich(verdict);
   };
 
   useEffect(() => {
     return () => {
+      // Pure teardown: cancel timer, stop nodes, close context. No setState —
+      // a completed guided result is preserved on unmount (departure only).
       if (toneTimeoutRef.current !== null) {
         clearTimeout(toneTimeoutRef.current);
         toneTimeoutRef.current = null;
       }
-      stopTone();
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+        } catch {
+          // ignore
+        }
+        try {
+          oscillatorRef.current.disconnect();
+        } catch {
+          // ignore
+        }
+        oscillatorRef.current = null;
+      }
+      if (gainNodeRef.current) {
+        try {
+          gainNodeRef.current.disconnect();
+        } catch {
+          // ignore
+        }
+        gainNodeRef.current = null;
+      }
+      if (pannerRef.current) {
+        try {
+          pannerRef.current.disconnect();
+        } catch {
+          // ignore
+        }
+        pannerRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
     };
   }, []);
 
@@ -198,6 +291,10 @@ export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTes
         <p className="text-xs font-semibold text-[#142033] dark:text-[#E9EEF4] mb-3">
           {t.speakersTest.confirmPrompt}
         </p>
+
+        {hint && (
+          <p className="mb-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">{hint}</p>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <button

@@ -5,6 +5,14 @@ import { Mic, MicOff, Play, Square, Download, AlertTriangle, RefreshCw } from 'l
 import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import { MicSignalObserver } from '@/lib/testing/micSignal';
+import {
+  isMediaRecorderAvailable,
+  selectRecordingMimeType,
+  actualBlobMimeType,
+  extensionForMimeType,
+  FALLBACK_MIME,
+} from '@/lib/testing/recordingFormat';
 
 interface MicrophoneTesterProps {
   t: Translations;
@@ -33,6 +41,8 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordTimeLeft, setRecordTimeLeft] = useState<number>(5);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  /** Actual recorded MIME of the last finished sample (for accurate extension). */
+  const [sampleBlobType, setSampleBlobType] = useState<string | null>(null);
 
   // Stable references for deterministic cleanup without stale closures
   const streamRef = useRef<MediaStream | null>(null);
@@ -49,6 +59,26 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
   const pendingStreamRef = useRef<MediaStream | null>(null);
   // Set on unmount only: in-flight getUserMedia must never touch state after it.
   const unmountedRef = useRef<boolean>(false);
+  // Requires a SUSTAINED non-trivial level before "usable signal" is credited:
+  // permission granted or a connected stream alone is NOT a passed observation.
+  const signalObserverRef = useRef<MicSignalObserver>(new MicSignalObserver());
+  const sampleMimeRef = useRef<string | null>(null);
+
+  // Probe the supported recording MIME once (deferred set, no effect-body setState).
+  useEffect(() => {
+    let cancelled = false;
+    const probe = () => {
+      if (cancelled) return;
+      sampleMimeRef.current = isMediaRecorderAvailable(MediaRecorder)
+        ? selectRecordingMimeType(MediaRecorder)
+        : null;
+    };
+    const raf = requestAnimationFrame(probe);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Load audio input devices list
   const loadDevices = async () => {
@@ -173,13 +203,12 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
       // NOTE: Intentionally DO NOT connect to ctx.destination to prevent acoustic screech / loop feedback
       analyserRef.current = analyser;
 
+      signalObserverRef.current.reset();
       drawWaveform();
 
-      emitRunRich(runToken, {
-        status: 'passed',
-        details: 'Browser audio input stream active. Signal level and waveform measured.',
-        metrics: { deviceLabel: mediaStream.getAudioTracks()[0]?.label || 'Microphone' },
-      });
+      // Access is NOT a verdict: the stream merely connects. The verdict is
+      // emitted from the analysis loop once a sustained usable signal is
+      // observed (or remains honestly inconclusive if the input stays silent).
     } catch (err: unknown) {
       const error = err as Error;
       if (unmountedRef.current || runToken !== currentRun()) {
@@ -205,13 +234,16 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
     }
   };
 
-  // Draw waveform and measure RMS level
+  // Draw waveform and measure RMS level. The analysis loop owns the verdict:
+  // sustained signal → passed; silence stays inconclusive (never failed —
+  // digital silence alone is not proof of hardware failure).
   const drawWaveform = () => {
     if (!analyserRef.current) return;
     const analyser = analyserRef.current;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     let currentPeak = 0;
+    const runTokenAtStart = currentRun();
 
     const render = () => {
       if (!analyserRef.current) return;
@@ -231,6 +263,22 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
       if (levelPercent > currentPeak) {
         currentPeak = levelPercent;
         setPeakLevel(currentPeak);
+      }
+
+      // Feed the sustained-signal observer and settle the verdict once.
+      const observer = signalObserverRef.current;
+      observer.observe(levelPercent);
+      if (observer.hasUsableSignal && !observer.observedReported) {
+        observer.observedReported = true;
+        emitRunRich(runTokenAtStart, {
+          status: 'passed',
+          details: `Usable input signal observed (sustained relative level, peak ${observer.peakLevelPercent}% of meter). Waveform rendered from the live stream.`,
+          metrics: {
+            deviceLabel: streamRef.current?.getAudioTracks()[0]?.label || 'Microphone',
+            peakLevelPercent: observer.peakLevelPercent,
+            measurement: 'relative input level (RMS, not calibrated SPL)',
+          },
+        });
       }
 
       // Render Oscillogram
@@ -269,19 +317,32 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
     render();
   };
 
-  // 5-second sample recording for user self-monitoring
+  // 5-second sample recording for user self-monitoring. The recorder uses
+  // the browser's supported MIME (never forced audio/webm) and the download
+  // extension is derived from the ACTUAL recorded MIME type.
   const startRecordingSample = () => {
     if (!streamRef.current) return;
+    if (!isMediaRecorderAvailable(MediaRecorder)) {
+      emitRunRich(currentRun(), {
+        status: 'inconclusive',
+        details: 'MediaRecorder is not available in this browser, so a local sample clip cannot be captured. Live level metering still works.',
+      });
+      return;
+    }
 
     if (recordedAudioUrlRef.current) {
       URL.revokeObjectURL(recordedAudioUrlRef.current);
       recordedAudioUrlRef.current = null;
       setRecordedAudioUrl(null);
+      setSampleBlobType(null);
     }
 
     try {
       audioChunksRef.current = [];
-      const recorder = new MediaRecorder(streamRef.current);
+      const mimeType = sampleMimeRef.current && MediaRecorder.isTypeSupported(sampleMimeRef.current)
+        ? sampleMimeRef.current
+        : undefined;
+      const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -292,7 +353,9 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
 
       recorder.onstop = () => {
         if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const blobType = actualBlobMimeType(recorder.mimeType, sampleMimeRef.current ?? FALLBACK_MIME);
+          setSampleBlobType(blobType);
+          const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
           const url = URL.createObjectURL(audioBlob);
           recordedAudioUrlRef.current = url;
           setRecordedAudioUrl(url);
@@ -389,6 +452,11 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only cleanup for refs and stable controller functions
   }, []);
+
+  // Download extension derived from the ACTUAL recorded blob MIME type —
+  // never hardcoded .webm (fixes Ogg/mp4 Safari mismatch). State, not a ref:
+  // the value is captured when the recorder finishes, not read during render.
+  const sampleExtension = extensionForMimeType(recordedAudioUrl ? sampleBlobType : null) ?? 'webm';
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -538,7 +606,7 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
                 <audio controls src={recordedAudioUrl} className="h-8 max-w-xs" />
                 <a
                   href={recordedAudioUrl}
-                  download="devicetry-mic-sample.webm"
+                  download={`devicetry-mic-sample.${sampleExtension}`}
                   className="inline-flex items-center gap-1.5 text-xs text-[#0F766E] dark:text-[#14B8A6] hover:underline"
                 >
                   <Download className="w-3.5 h-3.5" />

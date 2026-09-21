@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   transpilePackages: ['motion'],
+  experimental: {
+    // 2 GiB cgroup: the default pool of 4 static-generation workers (each
+    // inheriting NODE_OPTIONS heap) can exceed the container limit during
+    // prerender. Two workers keep the aggregate peak inside the limit.
+    cpus: 2,
+  },
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

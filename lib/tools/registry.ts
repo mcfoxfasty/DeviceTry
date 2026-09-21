@@ -18,7 +18,7 @@ export const TOOLS_REGISTRY: ToolDefinition[] = [
     relatedToolIds: ["voice-recorder","speakers-test","pitch-detector","online-mirror"],
     instructions: [
       "Click Start Test to grant microphone permission.",
-      "Speak into your microphone and observe the live decibel level and waveform.",
+      "Speak into your microphone and observe the live relative input level and waveform.",
       "Optionally record a 5-second sample to verify clarity and background noise."
     ],
     limitations: [
@@ -104,7 +104,7 @@ export const TOOLS_REGISTRY: ToolDefinition[] = [
     ],
     limitations: [
       "Recordings are stored purely in browser memory and capped at 5 minutes.",
-      "Format options depend on your browser supported codecs (WebM or WAV)."
+      "The download container depends on your browser's supported codecs (typically WebM, or Ogg in Firefox); the file extension always matches the actual recording."
     ],
     troubleshooting: [
       "If the audio is silent, verify the correct microphone is selected.",
