@@ -8,6 +8,15 @@ import {nextRedirects} from './next.config.redirects';
  */
 
 const nextConfig: NextConfig = {
+  // ISOLATED PRODUCTION BUILDS (2026-09-22): the managed preview session can
+  // restart `next dev` mid-`next build`, and dev compilation of the SAME
+  // distDir deletes the per-route page.js.nft.json files the build's trace
+  // collector then reads (evidence: ENOENT .../_not-found/page.js.nft.json;
+  // dev-only artifacts under .next/static/development with mtimes inside the
+  // build window). Pointing build runs at a separate distDir via NEXT_DIST_DIR
+  // makes verification builds immune to preview interference; normal
+  // dev/preview (NEXT_DIST_DIR unset) keeps using .next unchanged.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Phase 9 route migrations: permanent 308s from old tool routes to their
   // merged/reorganized destinations (deep-linking tabs via ?tab=...).
   async redirects() {
