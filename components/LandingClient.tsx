@@ -288,7 +288,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
       e.preventDefault();
       const chosen = activeIndex >= 0 ? suggestions[activeIndex] : suggestions[0];
       if (chosen) {
-        openSuggestion(chosen.tool);
+        openSuggestion(chosen);
       } else {
         setSuggestionsOpen(false);
         scrollToTools();
