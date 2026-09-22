@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -79,8 +79,25 @@ function DrawerOverlay({
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Focus management: into the panel on open, back to the trigger on close.
+  // The effect runs ONLY on the closed -> open transition (and on unmount):
+  // `open` is the sole dependency, so typing in the tools-drawer search input
+  // never re-runs focus logic or steals focus back to the first focusable —
+  // the iOS keyboard used to dismiss after every character for exactly this
+  // reason. `onClose` is read through a ref so it is never a dependency.
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    if (!open) return;
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    // Edge-to-edge transitions (e.g. switching which drawer is open) must not
+    // re-run initial focus — only a genuine closed -> open transition does.
+    if (!open || wasOpenRef.current) {
+      wasOpenRef.current = open;
+      return;
+    }
+    wasOpenRef.current = true;
     const panel = panelRef.current;
     if (!panel) return;
 
@@ -97,7 +114,7 @@ function DrawerOverlay({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -118,16 +135,22 @@ function DrawerOverlay({
     return () => {
       cancelAnimationFrame(raf);
       panel.removeEventListener('keydown', onKey);
-      // Restore focus to whichever trigger opened this drawer.
+      // Restore focus to whichever trigger opened this drawer. The drawer
+      // stays open while the user types, so this runs once per open session —
+      // not after every keystroke.
       previousActive?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <div
       id={id}
       className={`no-print fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}
-      aria-hidden={!open}
+      // Keep the closed drawer out of the accessibility tree. `inert` already
+      // implies hiding for supporting browsers; explicit `aria-hidden` covers
+      // AT that queries aria-hidden directly. It must never be set on the OPEN
+      // drawer (that would hide the open dialog from assistive technology).
+      aria-hidden={!open || undefined}
     >
       {/* Shared backdrop */}
       <div
@@ -142,6 +165,9 @@ function DrawerOverlay({
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        // `inert` blocks focus, pointer events, and AT exposure while closed.
+        // (React types this as boolean; browsers that predate inert ignore it,
+        // where aria-hidden above plus `invisible` below cover the gap.)
         inert={!open}
         className={`glass-overlay no-print absolute top-0 ${side}-0 h-full w-[86%] max-w-sm border-${
           side === 'left' ? 'r' : 'l'
@@ -155,35 +181,51 @@ function DrawerOverlay({
   );
 }
 
-/** Theme control block used inside the left drawer. */
-function ThemeControl({ t }: { t: Translations }) {
+/**
+ * Light/Dark theme control backed by the shared theme system.
+ *  - drawer variant: labelled segmented control inside the left navigation
+ *    drawer (mobile primary control),
+ *  - desktop variant: compact icon-only radiogroup in the sticky header, so
+ *    theme switching is never mobile-only.
+ */
+function ThemeControl({ t, variant = 'drawer' }: { t: Translations; variant?: 'drawer' | 'desktop' }) {
   const { theme, setTheme } = useTheme();
   const options: Array<{ value: 'light' | 'dark'; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: 'light', label: t.nav.themeLight, icon: Sun },
     { value: 'dark', label: t.nav.themeDark, icon: Moon },
   ];
+  const compact = variant === 'desktop';
   return (
     <div
       role="radiogroup"
       aria-label={t.nav.themeToggle}
-      className="flex items-center gap-1 p-1 rounded-xl bg-[#F4F2FA] dark:bg-[#192332]"
+      className={`flex items-center gap-1 p-1 rounded-xl bg-[#F4F2FA] dark:bg-[#192332] ${
+        compact ? '' : 'w-full'
+      }`}
     >
       {options.map(({ value, label, icon: Icon }) => {
         const active = theme === value;
         return (
           <button
             key={value}
+            type="button"
             role="radio"
             aria-checked={active}
+            title={label}
             onClick={() => setTheme(value)}
-            className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+            className={`inline-flex items-center justify-center rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              compact
+                ? `w-8 h-8 ${active ? '' : 'hover:bg-white/60 dark:hover:bg-white/10'}`
+                : 'flex-1 gap-1.5 px-3 py-2'
+            } ${
               active
                 ? 'bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#14B8A6] shadow-sm'
                 : 'text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4]'
             }`}
           >
-            <Icon className="w-3.5 h-3.5" />
-            {label}
+            <Icon className={compact ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+            {!compact && label}
+            {compact && <span className="sr-only">{label}</span>}
           </button>
         );
       })}
@@ -200,10 +242,13 @@ function NavbarInner({ t }: NavbarProps) {
   const navTriggerRef = useRef<HTMLButtonElement>(null);
   const toolsTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const closeDrawers = () => {
+  // Stable identity across renders: passed as DrawerOverlay's `onClose`, it
+  // must not change when the user types (a new callback identity used to
+  // re-trigger the overlay's focus effect and blur the search input).
+  const closeDrawers = useCallback(() => {
     setOpenDrawer(null);
     setOpenCategory(null);
-  };
+  }, []);
 
   // Body scroll lock while any drawer is open.
   useEffect(() => {
@@ -222,7 +267,7 @@ function NavbarInner({ t }: NavbarProps) {
     };
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, [openDrawer]);
+  }, [openDrawer, closeDrawers]);
 
   const navigate = (href: string) => {
     closeDrawers();
@@ -311,6 +356,13 @@ function NavbarInner({ t }: NavbarProps) {
                 {t.nav.guidedInspection}
               </Link>
             </nav>
+
+            {/* Compact desktop Light/Dark control — theme switching is not
+                mobile-only. Mobile keeps the labelled control in the left
+                drawer; this icon pair shares the same theme system. */}
+            <div className="hidden md:flex items-center ml-3 pl-3 border-l border-[#E8E3F2] dark:border-[#223043]">
+              <ThemeControl t={t} variant="desktop" />
+            </div>
           </div>
         </div>
       </header>

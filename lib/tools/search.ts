@@ -153,24 +153,32 @@ const FUZZY_SCORE = 0.5; // weaker than any strong match (min strong = 1)
  * Score one query token against a tool. 0 = no match.
  * Strong surfaces: title (weight 4), keywords (2), aliases (2).
  * Descriptions are intentionally NOT matched — they caused false positives.
+ *
+ * Progressive-refinement rule (type-ahead): PREFIX matching on keywords and
+ * aliases requires a token of at least 3 characters. Titles still match a
+ * 2-character prefix ("we" -> Webcam). Otherwise short prefixes fan out
+ * across every 2-letter prefix in the alias list ("mi" used to pull in
+ * Webcam Test through the unrelated alias "mirror"). A 2-letter token can
+ * still hit keywords/aliases via exact or substring equality.
  */
 function scoreToken(token: string, tool: IndexedTool): { score: number; strong: boolean } {
-  const sets: Array<{ words: string[]; weight: number }> = [
-    { words: tool.titleWords, weight: 4 },
-    { words: tool.keywordWords, weight: 2 },
-    { words: tool.aliasWords, weight: 2 },
+  const sets: Array<{ words: string[]; weight: number; minPrefixLen: number }> = [
+    { words: tool.titleWords, weight: 4, minPrefixLen: 2 },
+    { words: tool.keywordWords, weight: 2, minPrefixLen: 3 },
+    { words: tool.aliasWords, weight: 2, minPrefixLen: 3 },
   ];
 
   let bestStrong = 0;
   let bestFuzzy = 0;
 
-  for (const { words, weight } of sets) {
+  for (const { words, weight, minPrefixLen } of sets) {
     for (const word of words) {
       // ---- strong matches ----
       if (word === token) {
         bestStrong = Math.max(bestStrong, weight * 3);
-      } else if (word.startsWith(token) && token.length >= 2) {
-        // Prefix: "mic" -> microphone, "web" -> webcam
+      } else if (word.startsWith(token) && token.length >= minPrefixLen) {
+        // Prefix: "mic" -> microphone, "web" -> webcam. For 2-letter tokens
+        // only title words qualify (see minPrefixLen above).
         bestStrong = Math.max(bestStrong, weight * 2);
       } else if (token.length >= 3 && word.includes(token)) {
         // Substring: "pixel" inside "pixels", "cam" inside "camera"
