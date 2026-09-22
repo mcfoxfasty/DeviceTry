@@ -38,7 +38,8 @@ export const enTranslations: Translations = {
   },
   nav: {
     home: 'Home',
-    tools: 'All Tests',
+    tools: 'Tests',
+    guides: 'Guides',
     mic: 'Microphone',
     webcam: 'Webcam',
     keyboard: 'Keyboard',
@@ -56,8 +57,8 @@ export const enTranslations: Translations = {
   },
   hero: {
     badge: 'Privacy-First Browser Diagnostics',
-    title: 'Test your devices.\nRight in your browser.',
-    subtitle: 'Verify your microphone, webcam, keyboard, speakers, display, and gamepad before meetings, interviews, or buying used hardware. Completely free, no registration required.',
+    title: 'Test your devices online in one place',
+    subtitle: 'DeviceTry checks your microphone, webcam, speakers, keyboard, mouse, screen, and internet connection — free, right in your browser. Nothing is uploaded unless a test says otherwise, and no registration is required.',
     ctaPrimary: 'Start Guided Inspection',
     ctaSecondary: 'Browse All Tools',
     featureLocal: 'Zero Data Upload',

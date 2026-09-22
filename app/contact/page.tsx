@@ -57,7 +57,7 @@ export default function ContactPage() {
   const labelClass = 'block font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
+    <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
       <Navbar t={t} />
 
       <main className="flex-1 max-w-xl w-full mx-auto px-4 py-12">

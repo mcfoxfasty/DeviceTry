@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 
 :root {
-  --bg-app: #F6F7F9;
+  /* Phase 10: subtle cool-gray/lavender page tint behind white cards. */
+  --bg-app: #F7F6FB;
   --surface-app: #FFFFFF;
   --surface-subtle: #F1F4F7;
   --text-main: #142033;
@@ -54,6 +55,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== Phase 10: iLovePDF-style dense tool cards ===== */
+.tool-card:hover {
+  transform: translateY(-1px);
+}
+.tool-card:focus-visible {
+  border-color: #0F766E;
+}
+
 /* ===== Landing page motion & effects ===== */
 @keyframes floatY {
   0%, 100% { transform: translateY(0); }
@@ -96,6 +105,9 @@ body {
   .fade-up,
   .animate-pulse-dot {
     animation: none;
+  }
+  .tool-card:hover {
+    transform: none;
   }
 }
 

@@ -7,7 +7,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
-import { DeviceIllustration } from '@/components/ui/DeviceIllustration';
+import { ToolIcon } from '@/components/ui/ToolIcon';
 
 export const metadata: Metadata = {
   title: 'All Tools — Free Online Device Tests | DeviceTry',
@@ -20,7 +20,7 @@ export default function TestsHub() {
   const t = getDictionary();
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
+    <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="max-w-2xl">
@@ -52,18 +52,18 @@ export default function TestsHub() {
                 </h2>
                 <span className="hidden sm:block text-xs text-[#8996A6]">{cat.description}</span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                 {tools.map((tool) => (
                   <Link
                     key={tool.id}
                     href={`/test/${tool.slug}`}
-                    className="group p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:shadow-md transition-all flex items-start gap-3"
+                    className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md transition-all flex items-start gap-3"
                   >
-                    <div className="shrink-0 group-hover:scale-110 transition-transform">
-                      <DeviceIllustration type={tool.iconType} size={40} />
+                    <div className="shrink-0 group-hover:scale-105 transition-transform">
+                      <ToolIcon name={tool.iconType as never} size={40} className="w-10 h-10" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] truncate">
+                      <p className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
                         {tool.title}
                       </p>
                       <p className="text-[11px] text-[#59677D] dark:text-[#9AA6B8] mt-0.5 line-clamp-2">

@@ -66,6 +66,7 @@ export interface Translations {
   nav: {
     home: string;
     tools: string;
+    guides: string;
     mic: string;
     webcam: string;
     keyboard: string;

@@ -4,7 +4,7 @@ import { ShieldCheck, ArrowLeft } from 'lucide-react';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] px-4">
       <div className="max-w-md w-full text-center space-y-6">
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] mx-auto">
           <ShieldCheck className="w-8 h-8" />

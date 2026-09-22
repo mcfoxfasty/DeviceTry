@@ -2,7 +2,6 @@ import React from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { getDictionary } from '@/lib/i18n';
 import { ALL_TOOL_PAGES, TOOLS_REGISTRY, findToolBySlug } from '@/lib/tools/registry';
 import { Navbar } from '@/components/layout/Navbar';
@@ -66,20 +65,10 @@ export default async function ToolPage({ params }: PageProps) {
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F6F7F9] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
+    <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div>
-          <Link
-            href="/#tools"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-            {t.nav.tools}
-          </Link>
-        </div>
-
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
         <ToolDetailView tool={tool} t={t} titleHeading="h1" />
 
         {/* Long-form content: about, tips, problems, OS guides, FAQ */}
@@ -96,7 +85,7 @@ export default async function ToolPage({ params }: PageProps) {
                 <Link
                   key={rel.id}
                   href={`/test/${rel.slug}`}
-                  className="group p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] transition-colors"
+                  className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-sm transition-all"
                 >
                   <p className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
                     {rel.title}
