@@ -26,9 +26,10 @@ export type ToolIconName =
   | 'click'
   | 'reaction'
   | 'monitor'
-  | 'gauge'
+  | 'refresh'
   | 'speed'
   | 'network'
+  | 'gauge'
   | 'shield';
 
 /** DeviceTry Phase 10 icon palette (light and dark equivalents). */
@@ -199,6 +200,19 @@ export function ToolIcon({ name, size = 44, className = '', title }: ToolIconPro
         </svg>
       );
 
+    case 'refresh':
+      // Refresh rate: screen outline with a motion arc — distinct from the
+      // plain monitor (screen test) and dial (system info) ideas.
+      return (
+        <svg {...shared}>
+          <rect x="3" y="4" width="18" height="12" rx="2" fill={P.teal} />
+          <rect x="5" y="6" width="14" height="8" rx="1" fill={P.tealSoft} />
+          <path d="M12 7.4a3.4 3.4 0 1 1-3.2 4.5" stroke={P.blue} strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M8.2 9.6 8.8 12l2.3-.9" stroke={P.blue} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9 20h6M12 17v3" stroke={P.slate} strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+
     case 'gauge':
       return (
         <svg {...shared}>
@@ -271,6 +285,65 @@ export function toolIconTypeToName(iconType: string): ToolIconName {
       return 'gauge';
     case 'shield':
       return 'shield';
+    default:
+      return 'shield';
+  }
+}
+
+/**
+ * Slug-based icon mapping — the primary way to resolve a tool's artwork.
+ *
+ * The registry's `iconType` strings are shared across tools (the voice
+ * recorder registers as a microphone, click-speed as a mouse, refresh rate
+ * as a gauge), which would repeat symbols for unrelated tools. Mapping by
+ * slug gives all 15 primary tools a distinct icon; supporting diagnostics
+ * get sensible fallbacks.
+ */
+export function toolSlugToIconName(slug: string): ToolIconName {
+  switch (slug) {
+    // ---- primary catalog (each unique)
+    case 'microphone-test':
+      return 'microphone';
+    case 'webcam-test':
+      return 'webcam';
+    case 'speakers-test':
+      return 'headphones';
+    case 'voice-recorder':
+      return 'recorder';
+    case 'tone-generator':
+      return 'tone';
+    case 'keyboard-test':
+      return 'keyboard';
+    case 'mouse-test':
+      return 'mouse';
+    case 'gamepad-test':
+      return 'gamepad';
+    case 'touchscreen-test':
+      return 'touch';
+    case 'click-speed-test':
+      return 'click';
+    case 'reaction-time-test':
+      return 'reaction';
+    case 'screen-test':
+      return 'monitor';
+    case 'refresh-rate-test':
+      return 'refresh';
+    case 'internet-speed-test':
+      return 'speed';
+    case 'what-is-my-ip':
+      return 'network';
+    // ---- supporting diagnostics
+    case 'permission-diagnostics':
+      return 'shield';
+    case 'browser-compatibility':
+    case 'browser-system-info':
+      return 'gauge';
+    case 'codec-support':
+      return 'tone';
+    case 'webrtc-test':
+      return 'network';
+    case 'devicetry-storage-inspector':
+      return 'monitor';
     default:
       return 'shield';
   }

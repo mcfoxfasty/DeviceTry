@@ -3,15 +3,37 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, ChevronDown, SearchX, X, Lock, CloudOff, UserX } from 'lucide-react';
+import {
+  Search,
+  ChevronDown,
+  ChevronRight,
+  SearchX,
+  X,
+  Lock,
+  CloudOff,
+  UserX,
+  MousePointerClick,
+  Zap,
+  BarChart3,
+  ShieldCheck,
+} from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
-import { ToolIcon } from '@/components/ui/ToolIcon';
+import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { searchTools } from '@/lib/tools/search';
 
+/** Lightweight guide pick resolved server-side (keeps article content out of the client bundle). */
+export interface HomeGuidePick {
+  slug: string;
+  title: string;
+  description: string;
+  type: 'troubleshooting' | 'buying' | 'how-to';
+}
+
 interface LandingClientProps {
   t: Translations;
+  guides: HomeGuidePick[];
 }
 
 /**
@@ -103,7 +125,45 @@ const faqs = [
 
 const VALID_CATEGORIES = new Set<string>(CATEGORY_META.map((c) => c.key));
 
-export function LandingClient({ t }: LandingClientProps) {
+/** "How it works" — three factual steps, no fabricated claims. */
+const HOW_IT_WORKS = [
+  {
+    icon: MousePointerClick,
+    title: 'Pick a tool',
+    body: 'Choose what you want to check — microphone, webcam, keyboard, screen, connection — from the grid above.',
+  },
+  {
+    icon: Zap,
+    title: 'Interact and allow',
+    body: 'Follow the on-screen steps. Media tools ask for browser permission first; the signal is processed locally.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Understand the result',
+    body: 'Get a plain-language verdict — passed, warning, failed, or inconclusive — with what the browser actually observed.',
+  },
+] as const;
+
+/** Privacy benefits — local processing plus the honest network exceptions. */
+const PRIVACY_POINTS = [
+  {
+    icon: CloudOff,
+    title: 'Local media processing',
+    body: 'Microphone, camera, audio, and keystroke signals are analyzed in your browser memory — never streamed to our servers.',
+  },
+  {
+    icon: Lock,
+    title: 'User-controlled permissions',
+    body: 'Access happens only when you start a test and click “Allow” in your browser. You can revoke it any time in the address bar.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Clear network exceptions',
+    body: null,
+  },
+] as const;
+
+export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -298,61 +358,67 @@ export function LandingClient({ t }: LandingClientProps) {
                 </button>
               )}
 
-              {/* Autocomplete suggestions (top 5) */}
+              {/* Autocomplete suggestions (top 5). Opaque panel on its own
+                  stacking layer so it never shows underlying content through
+                  translucent rows; rows are normal-flow flex with automatic
+                  height; the footer is a separate row; long lists scroll. */}
               {suggestionsOpen && suggestions.length > 0 && (
-                <ul
+                <div
                   id="tool-search-suggestions"
                   role="listbox"
                   aria-label="Search suggestions"
-                  className="absolute z-30 left-0 right-0 top-full mt-2 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] shadow-xl shadow-slate-900/10 overflow-hidden text-left"
+                  className="absolute z-[70] left-0 right-0 top-full mt-2 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] shadow-xl shadow-slate-900/15 overflow-hidden text-left"
                 >
-                  {suggestions.map((hit, idx) => {
-                    const meta = CATEGORY_META.find((c) => c.key === hit.tool.category);
-                    return (
-                      <li
-                        key={hit.tool.id}
-                        id={`tool-search-option-${idx}`}
-                        role="option"
-                        aria-selected={idx === activeIndex}
-                      >
-                        <Link
-                          href={`/test/${hit.tool.slug}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            openSuggestion(hit.tool);
-                          }}
-                          onMouseEnter={() => setActiveIndex(idx)}
-                          className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
-                            idx === activeIndex
-                              ? 'bg-[#EEF7F5] dark:bg-[#133230]'
-                              : 'bg-white dark:bg-[#131B27]'
-                          }`}
+                  <ul className="max-h-[min(15rem,40vh)] overflow-y-auto overscroll-contain">
+                    {suggestions.map((hit, idx) => {
+                      const meta = CATEGORY_META.find((c) => c.key === hit.tool.category);
+                      return (
+                        <li
+                          key={hit.tool.id}
+                          id={`tool-search-option-${idx}`}
+                          role="option"
+                          aria-selected={idx === activeIndex}
                         >
-                          <ToolIcon name={hit.tool.iconType as never} size={28} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
-                              {hit.tool.title}
+                          <Link
+                            href={`/test/${hit.tool.slug}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openSuggestion(hit.tool);
+                            }}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
+                              idx === activeIndex
+                                ? 'bg-[#EEF7F5] dark:bg-[#133230]'
+                                : 'bg-white dark:bg-[#131B27]'
+                            }`}
+                          >
+                            <span className="shrink-0">
+                              <ToolIcon name={toolSlugToIconName(hit.tool.slug)} size={28} />
                             </span>
-                            <span className="block text-[11px] text-[#8996A6] truncate">
-                              {meta?.label ?? hit.tool.categoryLabel}
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
+                                {hit.tool.title}
+                              </span>
+                              <span className="block text-[11px] text-[#8996A6] truncate">
+                                {meta?.label ?? hit.tool.categoryLabel}
+                              </span>
                             </span>
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                  <li role="presentation">
-                    <button
-                      onClick={() => {
-                        setSuggestionsOpen(false);
-                        scrollToTools();
-                      }}
-                      className="w-full px-4 py-2.5 text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#EEF7F5] dark:hover:bg-[#133230] transition-colors cursor-pointer text-left"
-                    >
-                      View all {filteredTools.length} result{filteredTools.length === 1 ? '' : 's'}
-                    </button>
-                  </li>
-                </ul>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {/* Separate footer row — “View all results”. */}
+                  <button
+                    onClick={() => {
+                      setSuggestionsOpen(false);
+                      scrollToTools();
+                    }}
+                    className="w-full px-4 py-2.5 text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#EEF7F5] dark:hover:bg-[#133230] transition-colors cursor-pointer text-left border-t border-[#DFE5EB] dark:border-[#223043]"
+                  >
+                    View all {filteredTools.length} result{filteredTools.length === 1 ? '' : 's'}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -378,8 +444,8 @@ export function LandingClient({ t }: LandingClientProps) {
           {/* Trust line */}
           <div className="fade-up mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2" style={{ animationDelay: '0.24s' }}>
             {[
-              { icon: CloudOff, label: t.hero.featureLocal },
-              { icon: Lock, label: t.hero.featurePrivacy },
+              { icon: CloudOff, label: 'Media processed locally' },
+              { icon: Lock, label: 'You control permissions' },
               { icon: UserX, label: t.hero.featureNoSignup },
             ].map(({ icon: Icon, label }) => (
               <span key={label} className="inline-flex items-center gap-1.5 text-xs font-medium text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -456,7 +522,7 @@ export function LandingClient({ t }: LandingClientProps) {
         )}
 
         {filteredTools.length > 0 ? (
-          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
             {filteredTools.map((tool, idx) => {
               const popular = POPULAR_SET.has(tool.slug);
               const note = TOOL_NOTES[tool.slug];
@@ -472,13 +538,20 @@ export function LandingClient({ t }: LandingClientProps) {
                       Popular
                     </span>
                   )}
-                  <div className="mb-3 group-hover:scale-105 transition-transform duration-200">
-                    <ToolIcon name={tool.iconType as never} size={44} className="w-11 h-11 sm:w-10 sm:h-10" />
+                  {/* Icon beside its title; description in the text column below. */}
+                  <div className="flex items-center gap-3">
+                    <span className="shrink-0 group-hover:scale-105 transition-transform duration-200">
+                      <ToolIcon name={toolSlugToIconName(tool.slug)} size={40} className="w-10 h-10" />
+                    </span>
+                    <h2
+                      className={`text-[13px] font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors ${
+                        popular ? 'pr-14' : 'pr-2'
+                      }`}
+                    >
+                      {tool.title}
+                    </h2>
                   </div>
-                  <h2 className="text-[13px] font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors">
-                    {tool.title}
-                  </h2>
-                  <p className="text-xs mt-1 text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
+                  <p className="text-xs mt-2 text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
                     {tool.shortDesc}
                   </p>
                   {note && (
@@ -499,23 +572,130 @@ export function LandingClient({ t }: LandingClientProps) {
         )}
       </section>
 
-      {/* ================= Guided Inspection strip ================= */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-        <div className="p-6 sm:p-8 rounded-2xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="text-left">
-            <h2 className="text-lg sm:text-xl font-bold text-[#142033] dark:text-[#E9EEF4]">
-              {t.landing.inspectionTitle}
-            </h2>
-            <p className="text-sm mt-1.5 text-[#5F6B7A] dark:text-[#9AA6B8] max-w-2xl leading-relaxed">
-              {t.landing.inspectionSubtitle}
-            </p>
+      {/* ================= Guides & troubleshooting (pale teal band) ================= */}
+      {homeGuides.length > 0 && (
+        <section aria-labelledby="home-guides-title" className="bg-[#EAF4F2] dark:bg-[#0E1B1A] py-12 mt-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+              <div className="max-w-2xl">
+                <h2 id="home-guides-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+                  {t.landing.guidesTitle}
+                </h2>
+                <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+                  {t.landing.guidesSubtitle}
+                </p>
+              </div>
+              <Link
+                href="/guides"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors min-h-[44px]"
+              >
+                {t.landing.viewAllGuides}
+                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="grid gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3">
+              {homeGuides.map((guide) => (
+                <Link
+                  key={guide.slug}
+                  href={`/guides/${guide.slug}`}
+                  className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
+                    {guide.type === 'troubleshooting'
+                      ? t.landing.guideTypeTroubleshooting
+                      : guide.type === 'buying'
+                        ? t.landing.guideTypeBuying
+                        : t.landing.guideTypeHowTo}
+                  </span>
+                  <span className="mt-1.5 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors">
+                    {guide.title}
+                  </span>
+                  <span className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
+                    {guide.description}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
-          <Link
-            href="/inspection"
-            className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] text-sm font-bold transition-colors"
-          >
-            {t.landing.inspectionCta}
-          </Link>
+        </section>
+      )}
+
+      {/* ================= How it works (white surface) ================= */}
+      <section aria-labelledby="how-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center max-w-2xl mx-auto">
+          <h2 id="how-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+            {t.landing.howItWorksTitle}
+          </h2>
+          <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">{t.landing.howItWorksSubtitle}</p>
+        </div>
+        <ol className="mt-8 grid gap-3 md:grid-cols-3">
+          {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
+            <li
+              key={title}
+              className="p-5 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043]"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#EEF7F5] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] shrink-0">
+                  <Icon className="w-4.5 h-4.5" aria-hidden="true" />
+                </span>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#8996A6]">
+                  Step {i + 1}
+                </p>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+              <p className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* ================= Privacy & benefits (peach/cream feature cards) ================= */}
+      <section aria-labelledby="privacy-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <div className="text-center max-w-2xl mx-auto">
+          <h2 id="privacy-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+            {t.landing.privacyTitle}
+          </h2>
+          <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{t.landing.privacySubtitle}</p>
+        </div>
+        <div className="mt-8 grid gap-3 md:grid-cols-3">
+          {PRIVACY_POINTS.map(({ icon: Icon, title, body }) => (
+            <div
+              key={title}
+              className="p-5 rounded-xl bg-[#FFF6EC] dark:bg-[#1D1710] border border-[#F5E3CC] dark:border-[#3A2E1F]"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-white dark:bg-[#26201A] text-[#D97706] shrink-0">
+                  <Icon className="w-4.5 h-4.5" aria-hidden="true" />
+                </span>
+                <h3 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+              </div>
+              <p className="mt-2.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+                {body ?? t.landing.privacyNetworkException}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= Guided Checkup (lavender band) ================= */}
+      <section aria-labelledby="checkup-title" className="bg-[#EFEAFB] dark:bg-[#141221] py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-6 sm:p-8 rounded-2xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <div className="text-left">
+              <h2 id="checkup-title" className="text-lg sm:text-xl font-bold text-[#142033] dark:text-[#E9EEF4]">
+                {t.landing.inspectionTitle}
+              </h2>
+              <p className="text-sm mt-1.5 text-[#5F6B7A] dark:text-[#9AA6B8] max-w-2xl leading-relaxed">
+                {t.landing.inspectionSubtitle}
+              </p>
+            </div>
+            <Link
+              href="/inspection"
+              className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] text-sm font-bold transition-colors min-h-[44px]"
+            >
+              {t.landing.inspectionCta}
+            </Link>
+          </div>
         </div>
       </section>
 

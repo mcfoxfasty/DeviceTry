@@ -42,8 +42,9 @@ export function Footer({ t }: FooterProps) {
             <DeviceTryLogo size={30} variant="light" />
             <p className="mt-4 text-xs leading-relaxed max-w-sm">
               Professional browser-native device testing and guided hardware inspection for video
-              meetings, used-computer verification, and hardware troubleshooting — always 100%
-              client-side.
+              meetings, used-computer verification, and hardware troubleshooting. Media tests run
+              locally; the network tools connect to their measurement services only when you start
+              them.
             </p>
 
             <ul className="mt-6 space-y-3.5">
@@ -76,6 +77,14 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/test/gamepad-test" className={linkClass}>{t.gamepadTest.title}</Link></li>
               <li><Link href="/test/internet-speed-test" className={linkClass}>Internet Speed Test</Link></li>
             </ul>
+            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#E9F2F4] mt-6 mb-3">
+              <Link href="/guides" className={linkClass}>Guides &amp; Troubleshooting</Link>
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li><Link href="/guides/microphone-not-working" className={linkClass}>Microphone not working</Link></li>
+              <li><Link href="/guides/webcam-not-working" className={linkClass}>Webcam not working</Link></li>
+              <li><Link href="/guides/controller-stick-drift" className={linkClass}>Controller stick drift</Link></li>
+            </ul>
           </div>
 
           {/* Legal & info */}
@@ -102,7 +111,7 @@ export function Footer({ t }: FooterProps) {
           </p>
           <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#7E96A1]">
             <ShieldCheck className="w-3.5 h-3.5 text-[#2DD4BF]" />
-            100% client-side · no sign-up · no uploads
+            Free · no sign-up · media stays on your device
           </p>
         </div>
       </div>

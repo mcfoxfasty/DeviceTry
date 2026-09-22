@@ -50,12 +50,12 @@ export default function GuidesHub() {
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#172033] dark:text-[#E9EEF4] mb-4">
                 {cat.label}
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {catGuides.map((g) => (
                   <Link
                     key={g.slug}
                     href={`/guides/${g.slug}`}
-                    className="group p-5 rounded-2xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:shadow-lg transition-all flex flex-col"
+                    className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                   >
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
                       {g.type === 'buying' ? 'Buying guide' : g.type === 'how-to' ? 'How-to' : 'Troubleshooting'}

@@ -101,6 +101,17 @@ export interface Translations {
     inspectionSubtitle: string;
     inspectionCta: string;
     popularTitle: string;
+    guidesTitle: string;
+    guidesSubtitle: string;
+    viewAllGuides: string;
+    guideTypeTroubleshooting: string;
+    guideTypeBuying: string;
+    guideTypeHowTo: string;
+    howItWorksTitle: string;
+    howItWorksSubtitle: string;
+    privacyTitle: string;
+    privacySubtitle: string;
+    privacyNetworkException: string;
   };
   permissionPrompt: {
     title: string;

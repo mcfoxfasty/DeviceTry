@@ -74,6 +74,20 @@ export const enTranslations: Translations = {
     inspectionSubtitle: 'A structured checklist that walks you through several testers in sequence and builds one printable report.',
     inspectionCta: 'Start Guided Inspection',
     popularTitle: 'Most popular testers',
+    guidesTitle: 'Guides & troubleshooting',
+    guidesSubtitle:
+      'Step-by-step fixes written around the free test that verifies the result — plus specification-based buying guides with no invented ratings.',
+    viewAllGuides: 'View all guides',
+    guideTypeTroubleshooting: 'Troubleshooting',
+    guideTypeBuying: 'Buying guide',
+    guideTypeHowTo: 'How-to',
+    howItWorksTitle: 'How it works',
+    howItWorksSubtitle: 'Three steps — no account, no installation.',
+    privacyTitle: 'Private by design',
+    privacySubtitle:
+      'Permissions are user-controlled. Media, keystrokes, and audio are processed locally in your browser and never uploaded — with two narrow, clearly labeled exceptions for the network tools.',
+    privacyNetworkException:
+      'The internet speed test and IP lookup connect to their measurement services when you start them. Everything else stays on your device.',
   },
   permissionPrompt: {
     title: 'This tester needs your permission',

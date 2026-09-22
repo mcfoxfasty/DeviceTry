@@ -136,7 +136,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
           <h2 className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] mb-4">Frequently asked questions</h2>
           <div className="space-y-3">
             {guide.faqs.map((faq, i) => (
-              <div key={i} className="p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043]">
+              <div key={i} className="p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043]">
                 <p className="text-sm font-semibold text-[#142033] dark:text-[#E9EEF4]">{faq.q}</p>
                 <p className="mt-1.5 text-sm text-[#59677D] dark:text-[#9AA6B8] leading-relaxed">{faq.a}</p>
               </div>
@@ -156,7 +156,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
               <Link
                 key={tool.id}
                 href={`/test/${tool.slug}`}
-                className="group p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors"
+                className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors"
               >
                 <p className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] flex items-center gap-1.5">
                   {tool.title}
@@ -169,7 +169,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
               <Link
                 key={g.slug}
                 href={`/guides/${g.slug}`}
-                className="group p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors"
+                className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors"
               >
                 <p className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] flex items-center gap-1.5">
                   Guide: {g.title}

@@ -41,10 +41,15 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   transpilePackages: ['motion'],
   experimental: {
-    // 2 GiB cgroup: the default pool of 4 static-generation workers (each
-    // inheriting NODE_OPTIONS heap) can exceed the container limit during
-    // prerender. Two workers keep the aggregate peak inside the limit.
-    cpus: 2,
+    // 2 GiB cgroup: static-generation workers inherit the NODE_OPTIONS heap
+    // cap and run alongside the resident compile process. Two concurrent
+    // workers (cpus: 2) OOM-killed the build at page-data collection after
+    // the 2026-09-22 workspace restore (memory.peak = exactly 2147483648,
+    // memory.events oom_kill 1, "Cannot find module for page" ENOENT storm).
+    // Serializing to ONE worker keeps the aggregate peak inside the limit.
+    // Documented deviation from the earlier cpus: 2 setting in
+    // docs/phase9-migration.md — lint, types, and tests remain fully enforced.
+    cpus: 1,
   },
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
