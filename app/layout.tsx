@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 import { SITE_URL } from '@/lib/site';
+import { ThemeInitScript } from '@/lib/theme';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -26,6 +27,11 @@ export const metadata: Metadata = {
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
+      <head>
+        {/* Apply the stored Light/Dark choice before first paint.
+            Light is the default; device dark preference never forces dark. */}
+        <ThemeInitScript />
+      </head>
       <body>{children}</body>
     </html>
   );

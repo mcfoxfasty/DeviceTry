@@ -55,7 +55,7 @@ export default function GuidesHub() {
                   <Link
                     key={g.slug}
                     href={`/guides/${g.slug}`}
-                    className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
+                    className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                   >
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
                       {g.type === 'buying' ? 'Buying guide' : g.type === 'how-to' ? 'How-to' : 'Troubleshooting'}

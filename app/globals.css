@@ -1,6 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/*
+ * Phase 10 UI corrections: explicit class-driven dark mode.
+ *
+ * Tailwind v4 defaults `dark:` to `prefers-color-scheme`, which forced the
+ * site dark for visitors whose OS is in dark mode. The site now ships a
+ * complete Light default and honors a user-chosen theme stored locally.
+ * A tiny inline script in app/layout.tsx applies the stored choice to
+ * <html class="dark"> before first paint (no hydration mismatch, and no
+ * global suppressHydrationWarning anywhere).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Phase 10: subtle cool-gray/lavender page tint behind white cards. */
   --bg-app: #F7F6FB;
@@ -22,6 +34,9 @@
   --status-danger-bg: #FEE2E2;
   --status-info: #0284C7;
   --status-info-bg: #E0F2FE;
+
+  /* Browser form controls / scrollbars follow the active theme. */
+  color-scheme: light;
 }
 
 .dark {
@@ -44,6 +59,107 @@
   --status-danger-bg: #450A0A;
   --status-info: #38BDF8;
   --status-info-bg: #082F49;
+
+  color-scheme: dark;
+}
+
+/* =====================================================================
+ * Phase 10: restrained iOS-style frosted-glass surfaces.
+ *
+ * The stationary decorative background shows subtly through selected
+ * surfaces (tool cards, search, guide/feature cards, header, dialogs).
+ * Light glass = translucent white + blur/saturation + hairline border.
+ * Dark glass  = translucent charcoal/navy + blur + low-opacity border.
+ *
+ * Supported browsers get backdrop-filter; unsupported ones keep a fully
+ * opaque surface (the fallback IS the background — no @supports wrapper
+ * needed, the color stays opaque and blur simply does nothing when
+ * unsupported because backdrop-filter is ignored by the cascade).
+ * Reduced-transparency users get opaque surfaces via the media query below.
+ * ===================================================================== */
+
+.glass {
+  /* Opaque base = the no-backdrop-filter fallback. */
+  background-color: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.dark .glass {
+  background-color: rgba(19, 27, 39, 0.78);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Header-weight glass: a little more opaque for text-heavy chrome. */
+.glass-strong {
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.dark .glass-strong {
+  background-color: rgba(16, 23, 34, 0.88);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Suggestion panels / drawers float over busy content: most opaque. */
+.glass-overlay {
+  background-color: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 12px 32px rgba(16, 24, 40, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.dark .glass-overlay {
+  background-color: rgba(17, 24, 36, 0.94);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/*
+ * Reduced transparency: browsers expose this when the user opts out of
+ * translucency (macOS "reduce transparency", iOS increase contrast).
+ * Glass surfaces become fully opaque; blur is dropped.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong,
+  .glass-overlay {
+    background-color: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  }
+  .dark .glass,
+  .dark .glass-strong,
+  .dark .glass-overlay {
+    background-color: #131b27;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* iPhone safe-area padding for fixed drawer panels. */
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 body {
@@ -55,7 +171,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ===== Phase 10: iLovePDF-style dense tool cards ===== */
+/* =====================================================================
+ * Deliberate z-index system (mobile + landing chrome)
+ *   0        decorative fixed background
+ *   10       normal page content
+ *   30       sticky section rails (scroll-mt anchors)
+ *   40       sticky header
+ *   50       drawer overlays + backdrop (siblings of the header, NOT nested)
+ *   70       search suggestion panel (above page content, below drawer chrome)
+ *   80       modal dialogs (permission modal)
+ * ===================================================================== */
 .tool-card:hover {
   transform: translateY(-1px);
 }

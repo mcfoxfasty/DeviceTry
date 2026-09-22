@@ -67,6 +67,17 @@ export interface Translations {
     home: string;
     tools: string;
     guides: string;
+    openMenu: string;
+    openTools: string;
+    closeMenu: string;
+    toolsDrawerTitle: string;
+    toolsDrawerSearch: string;
+    toolsDrawerNoResults: string;
+    popularTools: string;
+    browseByCategory: string;
+    themeToggle: string;
+    themeLight: string;
+    themeDark: string;
     mic: string;
     webcam: string;
     keyboard: string;

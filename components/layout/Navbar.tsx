@@ -1,234 +1,417 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Menu, X, ClipboardCheck, ChevronRight } from 'lucide-react';
+import {
+  Menu,
+  X,
+  ClipboardCheck,
+  ChevronRight,
+  Grip,
+  Sun,
+  Moon,
+  Home,
+  LayoutGrid,
+  BookOpen,
+  Info,
+  ShieldCheck,
+  Mail,
+} from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
 import { CATEGORY_META } from '@/lib/tools/categories';
-import { TOOLS_REGISTRY } from '@/lib/tools/registry';
+import { TOOLS_REGISTRY, ToolDefinition } from '@/lib/tools/registry';
+import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
+import { searchTools } from '@/lib/tools/search';
+import { ThemeProvider, useTheme } from '@/lib/theme';
 
 interface NavbarProps {
   t: Translations;
 }
 
+/** Links rendered inside the LEFT navigation drawer. */
+const DRAWER_LINKS: Array<{
+  href: string;
+  labelKey: 'home' | 'tools' | 'guides' | 'guidedInspection' | 'about' | 'privacy' | 'contact';
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { href: '/', labelKey: 'home', icon: Home },
+  { href: '/tests', labelKey: 'tools', icon: LayoutGrid },
+  { href: '/guides', labelKey: 'guides', icon: BookOpen },
+  { href: '/inspection', labelKey: 'guidedInspection', icon: ClipboardCheck },
+  { href: '/about', labelKey: 'about', icon: Info },
+  { href: '/privacy', labelKey: 'privacy', icon: ShieldCheck },
+  { href: '/contact', labelKey: 'contact', icon: Mail },
+];
+
+type DrawerId = 'nav' | 'tools' | null;
+
 /**
- * Phase 10 compact white sticky header — iLovePDF-style structure with an
- * original DeviceTry identity:
- *   logo left · Tests / Guides / Guided Checkup right (+ hamburger on mobile)
+ * Shared drawer chrome: a full-viewport overlay (backdrop + sliding panel).
+ * Both instances are rendered as SIBLINGS of the sticky header — never
+ * nested inside it — so `fixed inset-0` resolves against the real viewport
+ * instead of the header's backdrop-filter stacking context (the defect that
+ * previously produced an empty drawer).
  *
- * Mobile drawer accessibility contract:
- *  - closed content cannot be focused (inert + visibility hidden),
- *  - Escape closes (category panel first),
- *  - focus returns to the hamburger trigger after closing.
+ * Accessibility contract (both drawers):
+ *  - closed: inert + visibility hidden (unfocusable, hidden from AT),
+ *  - open:   role=dialog aria-modal, focus moved to the panel,
+ *            Tab/Shift+Tab cycled inside, Escape closes, backdrop closes,
+ *            focus restored to the trigger that opened it,
+ *  - body scroll locked while open; only one drawer open at a time.
  */
-export function Navbar({ t }: NavbarProps) {
-  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
-  const [openCategory, setOpenCategory] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'main' | 'category'>('main');
-  const router = useRouter();
-  const drawerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+function DrawerOverlay({
+  id,
+  open,
+  side,
+  label,
+  onClose,
+  children,
+}: {
+  id: string;
+  open: boolean;
+  side: 'left' | 'right';
+  label: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Lock body scroll while the drawer is open.
+  // Focus management: into the panel on open, back to the trigger on close.
   useEffect(() => {
-    document.body.style.overflow = drawerOpen ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [drawerOpen]);
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
 
-  const closeDrawer = () => {
-    setDrawerOpen(false);
-    setPanel('main');
-    setOpenCategory(null);
-  };
+    const previousActive = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
 
-  // Escape closes the drawer (category panel first); focus returns to trigger.
-  useEffect(() => {
-    if (!drawerOpen) return;
+    const raf = requestAnimationFrame(() => focusables()[0]?.focus());
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (panel === 'category') {
-          setPanel('main');
-          setOpenCategory(null);
-        } else {
-          closeDrawer();
-        }
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [drawerOpen, panel]);
+    panel.addEventListener('keydown', onKey);
 
-  // Move focus into the drawer when it opens; return focus to the trigger
-  // when it closes.
-  useEffect(() => {
-    if (drawerOpen) {
-      drawerRef.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
-      document.body.dataset.drawerWasOpen = '1';
-    } else if (document.body.dataset.drawerWasOpen === '1') {
-      triggerRef.current?.focus();
-      document.body.dataset.drawerWasOpen = '0';
-    }
-  }, [drawerOpen]);
+    return () => {
+      cancelAnimationFrame(raf);
+      panel.removeEventListener('keydown', onKey);
+      // Restore focus to whichever trigger opened this drawer.
+      previousActive?.focus?.();
+    };
+  }, [open, onClose]);
 
-  // Close if the viewport grows to desktop where the drawer isn't used.
+  return (
+    <div
+      id={id}
+      className={`no-print fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}
+      aria-hidden={!open}
+    >
+      {/* Shared backdrop */}
+      <div
+        className={`absolute inset-0 bg-[#0B111A]/55 transition-opacity duration-300 ${
+          open ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        inert={!open}
+        className={`glass-overlay no-print absolute top-0 ${side}-0 h-full w-[86%] max-w-sm border-${
+          side === 'left' ? 'r' : 'l'
+        } border-[#E8E3F2] dark:border-[#223043] flex flex-col transition-transform duration-300 ease-out safe-b ${
+          open ? 'translate-x-0' : side === 'left' ? '-translate-x-full' : 'translate-x-full'
+        } ${open ? '' : 'invisible'}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Theme control block used inside the left drawer. */
+function ThemeControl({ t }: { t: Translations }) {
+  const { theme, setTheme } = useTheme();
+  const options: Array<{ value: 'light' | 'dark'; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { value: 'light', label: t.nav.themeLight, icon: Sun },
+    { value: 'dark', label: t.nav.themeDark, icon: Moon },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t.nav.themeToggle}
+      className="flex items-center gap-1 p-1 rounded-xl bg-[#F4F2FA] dark:bg-[#192332]"
+    >
+      {options.map(({ value, label, icon: Icon }) => {
+        const active = theme === value;
+        return (
+          <button
+            key={value}
+            role="radio"
+            aria-checked={active}
+            onClick={() => setTheme(value)}
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              active
+                ? 'bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#14B8A6] shadow-sm'
+                : 'text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4]'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function NavbarInner({ t }: NavbarProps) {
+  const [openDrawer, setOpenDrawer] = useState<DrawerId>(null);
+  const [toolsQuery, setToolsQuery] = useState<string>('');
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const router = useRouter();
+
+  const navTriggerRef = useRef<HTMLButtonElement>(null);
+  const toolsTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const closeDrawers = () => {
+    setOpenDrawer(null);
+    setOpenCategory(null);
+  };
+
+  // Body scroll lock while any drawer is open.
   useEffect(() => {
-    if (!drawerOpen) return;
+    document.body.style.overflow = openDrawer ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [openDrawer]);
+
+  // Close if the viewport grows to desktop where drawers aren't used.
+  useEffect(() => {
+    if (!openDrawer) return;
     const mq = window.matchMedia('(min-width: 768px)');
     const onChange = (e: MediaQueryListEvent) => {
-      if (e.matches) closeDrawer();
+      if (e.matches) closeDrawers();
     };
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, [drawerOpen]);
+  }, [openDrawer]);
 
   const navigate = (href: string) => {
-    closeDrawer();
+    closeDrawers();
     router.push(href);
   };
 
-  const toolsByCategory = (key: string) =>
-    TOOLS_REGISTRY.filter((tool) => tool.category === key);
+  const toolsByCategory = (key: string) => TOOLS_REGISTRY.filter((tool) => tool.category === key);
 
+  // Tools-launcher search: strong-first over the primary registry.
+  const toolHits = useMemo(() => {
+    if (!toolsQuery.trim()) return null;
+    return searchTools(toolsQuery, TOOLS_REGISTRY).slice(0, 8);
+  }, [toolsQuery]);
+
+  const popularTools = useMemo(
+    () =>
+      ['microphone-test', 'webcam-test', 'speakers-test']
+        .map((slug) => TOOLS_REGISTRY.find((tool) => tool.slug === slug))
+        .filter((tool): tool is ToolDefinition => Boolean(tool)),
+    []
+  );
+
+  // Desktop navigation is compact: Tests, Guides — Guided Checkup exists once
+  // as the CTA button (no duplicated normal link + CTA).
   const desktopLinks = [
     { href: '/tests', label: t.nav.tools },
     { href: '/guides', label: t.nav.guides ?? 'Guides' },
-    { href: '/inspection', label: t.nav.guidedInspection },
   ];
 
   return (
-    <header className="no-print sticky top-0 z-40 w-full bg-white/95 dark:bg-[#101722]/95 backdrop-blur border-b border-[#E8E3F2] dark:border-[#223043]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* Brand */}
-        <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="DeviceTry home">
-          <DeviceTryLogo size={30} />
-        </Link>
-
-        {/* Desktop links */}
-        <nav
-          className="hidden md:flex items-center gap-1 text-[13px] font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]"
-          aria-label="Main navigation"
-        >
-          {desktopLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="px-3 py-2 rounded-lg hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link
-            href="/inspection"
-            className="ml-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors"
-          >
-            <ClipboardCheck className="w-3.5 h-3.5" />
-            {t.nav.guidedInspection}
-          </Link>
-        </nav>
-
-        {/* Mobile hamburger */}
-        <button
-          ref={triggerRef}
-          onClick={() => setDrawerOpen((v) => !v)}
-          className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors"
-          aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={drawerOpen}
-          aria-controls="mobile-menu"
-        >
-          {drawerOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-      </div>
-
-      {/* ============ Mobile drawer ============ */}
-      <div
-        id="mobile-menu"
-        className={`md:hidden fixed inset-0 z-50 ${
-          drawerOpen ? '' : 'pointer-events-none'
-        }`}
-        aria-hidden={!drawerOpen}
-      >
-        {/* Backdrop */}
-        <div
-          className={`absolute inset-0 bg-[#0B111A]/50 transition-opacity duration-300 ${
-            drawerOpen ? 'opacity-100' : 'opacity-0'
-          }`}
-          onClick={closeDrawer}
-          aria-hidden="true"
-        />
-
-        {/* Panel — inert + visibility hidden when closed so nothing inside
-            can receive focus. */}
-        <div
-          ref={drawerRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Site menu"
-          inert={!drawerOpen}
-          className={`absolute top-0 right-0 h-full w-[86%] max-w-sm bg-white dark:bg-[#101722] border-l border-[#E8E3F2] dark:border-[#223043] shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
-            drawerOpen ? 'translate-x-0' : 'translate-x-full invisible'
-          }`}
-        >
-          {/* Drawer header */}
-          <div className="flex items-center justify-between px-4 h-14 border-b border-[#E8E3F2] dark:border-[#223043] shrink-0">
-            {panel === 'category' ? (
-              <button
-                data-autofocus
-                onClick={() => {
-                  setPanel('main');
-                  setOpenCategory(null);
-                }}
-                className="inline-flex items-center gap-1 text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] cursor-pointer"
-              >
-                <ChevronRight className="w-4 h-4 rotate-180" />
-                Back
-              </button>
-            ) : (
-              <DeviceTryLogo size={26} />
-            )}
+    <>
+      {/* ============ Sticky glass header ============ */}
+      <header className="no-print sticky top-0 z-40 w-full glass-strong border-b border-[#E8E3F2] dark:border-[#223043]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 grid grid-cols-[1fr_auto_1fr] items-center">
+          {/* Left: hamburger (mobile) */}
+          <div className="flex justify-start md:hidden">
             <button
-              onClick={closeDrawer}
-              className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
-              aria-label="Close menu"
+              ref={navTriggerRef}
+              onClick={() => setOpenDrawer(openDrawer === 'nav' ? null : 'nav')}
+              className="inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+              aria-label={t.nav.openMenu}
+              aria-expanded={openDrawer === 'nav'}
+              aria-controls="site-nav-drawer"
             >
-              <X className="w-5 h-5" />
+              <Menu className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Drawer body */}
-          <div className="flex-1 overflow-y-auto">
-            {panel === 'main' ? (
-              <div className="px-4 py-4">
-                <div className="space-y-1.5">
-                  <button
-                    data-autofocus
-                    onClick={() => navigate('/tests')}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-[#E8E3F2] dark:border-[#223043] text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
-                  >
-                    {t.nav.tools}
-                  </button>
-                  <button
-                    onClick={() => navigate('/guides')}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-[#E8E3F2] dark:border-[#223043] text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
-                  >
-                    {t.nav.guides ?? 'Guides'}
-                  </button>
-                  <button
-                    onClick={() => navigate('/inspection')}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#0F766E] dark:bg-[#14B8A6] text-white dark:text-[#0B111A] text-sm font-bold hover:opacity-95 transition-opacity cursor-pointer"
-                  >
-                    <ClipboardCheck className="w-4 h-4" />
-                    {t.nav.guidedInspection}
-                  </button>
-                </div>
+          {/* Centre: logo (independently centred on mobile via grid columns) */}
+          <Link href="/" className="flex items-center justify-center gap-2 shrink-0" aria-label="DeviceTry home">
+            <DeviceTryLogo size={30} />
+          </Link>
 
-                <p className="mt-6 mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
-                  Browse by category
-                </p>
+          {/* Right: dots grid (mobile) / links (desktop) */}
+          <div className="flex justify-end items-center">
+            <button
+              ref={toolsTriggerRef}
+              onClick={() => setOpenDrawer(openDrawer === 'tools' ? null : 'tools')}
+              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+              aria-label={t.nav.openTools}
+              aria-expanded={openDrawer === 'tools'}
+              aria-controls="tools-drawer"
+            >
+              <Grip className="w-5 h-5" />
+            </button>
+
+            <nav
+              className="hidden md:flex items-center gap-1 text-[13px] font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]"
+              aria-label="Main navigation"
+            >
+              {desktopLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="px-3 py-2 rounded-lg hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
+              {/* Single Guided Checkup CTA (desktop) — no duplicate link. */}
+              <Link
+                href="/inspection"
+                className="ml-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                {t.nav.guidedInspection}
+              </Link>
+            </nav>
+          </div>
+        </div>
+      </header>
+
+      {/* ============ LEFT navigation drawer (sibling of header) ============ */}
+      <DrawerOverlay
+        id="site-nav-drawer"
+        open={openDrawer === 'nav'}
+        side="left"
+        label="Site menu"
+        onClose={closeDrawers}
+      >
+        <div className="flex items-center justify-between px-4 h-14 border-b border-[#E8E3F2] dark:border-[#223043] shrink-0">
+          <DeviceTryLogo size={26} />
+          <button
+            onClick={closeDrawers}
+            className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+            aria-label={t.nav.closeMenu}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="space-y-1">
+            {DRAWER_LINKS.map(({ href, labelKey, icon: Icon }) => (
+              <button
+                key={href}
+                onClick={() => navigate(href)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+              >
+                <Icon className="w-4 h-4 text-[#0F766E] dark:text-[#14B8A6]" />
+                {t.nav[labelKey]}
+              </button>
+            ))}
+          </div>
+
+          {/* Theme control — Light/Dark persisted locally. */}
+          <div className="mt-6">
+            <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
+              {t.nav.themeToggle}
+            </p>
+            <ThemeControl t={t} />
+          </div>
+        </div>
+      </DrawerOverlay>
+
+      {/* ============ RIGHT tools-launcher drawer (sibling of header) ============ */}
+      <DrawerOverlay
+        id="tools-drawer"
+        open={openDrawer === 'tools'}
+        side="right"
+        label={t.nav.toolsDrawerTitle}
+        onClose={closeDrawers}
+      >
+        <div className="flex items-center justify-between px-4 h-14 border-b border-[#E8E3F2] dark:border-[#223043] shrink-0">
+          <h2 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{t.nav.toolsDrawerTitle}</h2>
+          <button
+            onClick={closeDrawers}
+            className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+            aria-label={t.nav.closeMenu}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-4 pt-3 shrink-0">
+          <div className="relative">
+            <input
+              type="text"
+              value={toolsQuery}
+              onChange={(e) => setToolsQuery(e.target.value)}
+              placeholder={t.nav.toolsDrawerSearch}
+              aria-label={t.nav.toolsDrawerSearch}
+              className="w-full pl-3 pr-3 py-2 rounded-lg text-sm bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#142033] dark:text-[#E9EEF4] placeholder-[#8996A6] focus:outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] transition-colors"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {toolHits ? (
+            toolHits.length > 0 ? (
+              <ToolList
+                tools={toolHits.map((hit) => hit.tool)}
+                t={t}
+                onNavigate={navigate}
+              />
+            ) : (
+              <p className="px-1 py-6 text-xs text-[#8996A6]">{t.nav.toolsDrawerNoResults}</p>
+            )
+          ) : (
+            <>
+              <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
+                {t.nav.popularTools}
+              </p>
+              <ToolList tools={popularTools} t={t} onNavigate={navigate} popular />
+
+              <p className="mt-5 mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
+                {t.nav.browseByCategory}
+              </p>
+              {openCategory === null ? (
                 <div className="space-y-1">
                   {CATEGORY_META.map((cat) => {
                     const count = toolsByCategory(cat.key).length;
@@ -236,63 +419,89 @@ export function Navbar({ t }: NavbarProps) {
                     return (
                       <button
                         key={cat.key}
-                        onClick={() => {
-                          setOpenCategory(cat.key);
-                          setPanel('category');
-                        }}
+                        onClick={() => setOpenCategory(cat.key)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
                       >
                         <span className="flex-1 min-w-0">
                           <span className="block text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
                             {cat.label}
                           </span>
-                          <span className="block text-[11px] text-[#8996A6] truncate">
-                            {count} tools
-                          </span>
+                          <span className="block text-[11px] text-[#8996A6] truncate">{count} tools</span>
                         </span>
                         <ChevronRight className="w-4 h-4 shrink-0 text-[#8996A6]" />
                       </button>
                     );
                   })}
                 </div>
-              </div>
-            ) : (
-              <div className="px-4 py-4">
-                {(() => {
+              ) : (
+                (() => {
                   const cat = CATEGORY_META.find((c) => c.key === openCategory);
                   if (!cat) return null;
-                  const tools = toolsByCategory(cat.key);
                   return (
                     <div>
-                      <h2 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] px-1 mb-3">
-                        {cat.label}
-                      </h2>
-                      <div className="space-y-1">
-                        {tools.map((tool) => (
-                          <button
-                            key={tool.id}
-                            onClick={() => navigate(`/test/${tool.slug}`)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
-                          >
-                            <span className="flex-1 min-w-0">
-                              <span className="block text-[13px] font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
-                                {tool.title}
-                              </span>
-                              <span className="block text-[11px] text-[#8996A6] truncate">
-                                {tool.shortDesc}
-                              </span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      <button
+                        onClick={() => setOpenCategory(null)}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] mb-3 cursor-pointer"
+                      >
+                        <ChevronRight className="w-4 h-4 rotate-180" />
+                        Back
+                      </button>
+                      <h3 className="sr-only">{cat.label}</h3>
+                      <ToolList tools={toolsByCategory(cat.key)} t={t} onNavigate={navigate} />
                     </div>
                   );
-                })()}
-              </div>
-            )}
-          </div>
+                })()
+              )}
+            </>
+          )}
         </div>
-      </div>
-    </header>
+      </DrawerOverlay>
+    </>
+  );
+}
+
+/** Tool row used by the right drawer (icons + title, tap target ≥44px). */
+function ToolList({
+  tools,
+  t,
+  onNavigate,
+  popular = false,
+}: {
+  tools: ToolDefinition[];
+  t: Translations;
+  onNavigate: (href: string) => void;
+  popular?: boolean;
+}) {
+  if (tools.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      {tools.map((tool) => (
+        <button
+          key={tool.id}
+          onClick={() => onNavigate(`/test/${tool.slug}`)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+        >
+          <span className="shrink-0">
+            <ToolIcon name={toolSlugToIconName(tool.slug)} size={30} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
+              {tool.title}
+            </span>
+            {popular && (
+              <span className="block text-[11px] text-[#8996A6] truncate">{tool.shortDesc}</span>
+            )}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Navbar({ t }: NavbarProps) {
+  return (
+    <ThemeProvider>
+      <NavbarInner t={t} />
+    </ThemeProvider>
   );
 }

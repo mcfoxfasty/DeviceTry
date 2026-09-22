@@ -318,8 +318,21 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
             {t.hero.subtitle}
           </p>
 
-          {/* Compact search (accessible combobox) */}
-          <div className="fade-up mt-7 max-w-xl mx-auto" ref={searchBoxRef} style={{ animationDelay: '0.16s' }}>
+          {/* Compact search (accessible combobox).
+
+              STACKING FIX (search-overlap defect): the ROOT of the search
+              region is the positioned stacking context, raised ABOVE the
+              trust line, category pills, and every later section while
+              suggestions are open. The previous structure kept the elevated
+              panel trapped inside the `fade-up` animation's own stacking
+              context (the wrapper stayed at z-auto), so the later trust line
+              painted on top. `isolate` makes this root self-contained; its
+              z-index now decides the order relative to the page. */}
+          <div
+            ref={searchBoxRef}
+            className="fade-up relative isolate mt-7 max-w-xl mx-auto"
+            style={{ animationDelay: '0.16s', zIndex: suggestionsOpen ? 70 : 'auto' }}
+          >
             <div className="relative group">
               <Search className="w-4.5 h-4.5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0F766E] dark:group-focus-within:text-[#14B8A6] transition-colors" />
               <label htmlFor="tool-search" className="sr-only">
@@ -346,7 +359,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 onFocus={() => {
                   if (searchQuery.trim()) setSuggestionsOpen(true);
                 }}
-                className="w-full pl-11 pr-11 py-3 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-sm text-[#142033] dark:text-[#E9EEF4] placeholder-slate-400 shadow-sm focus:outline-none focus:border-[#0F766E] focus:ring-4 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] dark:focus:ring-[#14B8A6]/15 transition-all"
+                className="glass w-full pl-11 pr-11 py-3 rounded-xl border border-[#DFE5EB] dark:border-[#223043] text-sm text-[#142033] dark:text-[#E9EEF4] placeholder-slate-400 shadow-sm focus:outline-none focus:border-[#0F766E] focus:ring-4 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] dark:focus:ring-[#14B8A6]/15 transition-all"
               />
               {inputValue && (
                 <button
@@ -358,16 +371,18 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 </button>
               )}
 
-              {/* Autocomplete suggestions (top 5). Opaque panel on its own
-                  stacking layer so it never shows underlying content through
-                  translucent rows; rows are normal-flow flex with automatic
-                  height; the footer is a separate row; long lists scroll. */}
+              {/* Autocomplete suggestions (top 5). glass-overlay surface:
+                  near-opaque so underlying content can never show through;
+                  rows are normal-flow flex with automatic height; the footer
+                  is a separate row; long lists scroll. The wrapper above owns
+                  the stacking, so this z-index only competes with siblings
+                  inside the search region. */}
               {suggestionsOpen && suggestions.length > 0 && (
                 <div
                   id="tool-search-suggestions"
                   role="listbox"
                   aria-label="Search suggestions"
-                  className="absolute z-[70] left-0 right-0 top-full mt-2 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] shadow-xl shadow-slate-900/15 overflow-hidden text-left"
+                  className="glass-overlay absolute z-10 left-0 right-0 top-full mt-2 rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden text-left"
                 >
                   <ul className="max-h-[min(15rem,40vh)] overflow-y-auto overscroll-contain">
                     {suggestions.map((hit, idx) => {
@@ -530,7 +545,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 <Link
                   key={tool.id}
                   href={`/test/${tool.slug}`}
-                  className="tool-card group relative flex flex-col p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all"
+                  className="glass tool-card group relative flex flex-col p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all"
                   style={idx < 10 ? { animationDelay: `${Math.min(idx * 0.04, 0.3)}s` } : undefined}
                 >
                   {popular && (
@@ -598,7 +613,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 <Link
                   key={guide.slug}
                   href={`/guides/${guide.slug}`}
-                  className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
+                  className="glass group p-4 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
                     {guide.type === 'troubleshooting'
@@ -632,7 +647,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
           {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
             <li
               key={title}
-              className="p-5 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043]"
+              className="glass p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043]"
             >
               <div className="flex items-center gap-2.5">
                 <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#EEF7F5] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] shrink-0">
@@ -680,7 +695,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
       {/* ================= Guided Checkup (lavender band) ================= */}
       <section aria-labelledby="checkup-title" className="bg-[#EFEAFB] dark:bg-[#141221] py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="p-6 sm:p-8 rounded-2xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="glass p-6 sm:p-8 rounded-2xl border border-[#E2E8F0] dark:border-[#223043] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="text-left">
               <h2 id="checkup-title" className="text-lg sm:text-xl font-bold text-[#142033] dark:text-[#E9EEF4]">
                 {t.landing.inspectionTitle}
@@ -708,7 +723,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
           {faqs.map((faq, idx) => (
             <div
               key={idx}
-              className="rounded-xl border border-[#E2E8F0] dark:border-[#223043] bg-white dark:bg-[#131B27] overflow-hidden transition-colors hover:border-[#0F766E]/40 dark:hover:border-[#14B8A6]/40"
+              className="glass rounded-xl border border-[#E2E8F0] dark:border-[#223043] overflow-hidden transition-colors hover:border-[#0F766E]/40 dark:hover:border-[#14B8A6]/40"
             >
               <button
                 onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}

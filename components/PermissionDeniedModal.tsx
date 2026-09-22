@@ -147,7 +147,7 @@ export function PermissionDeniedModal({ open, kind, onRetry, onClose }: Permissi
       aria-modal="true"
       aria-label={meta.title}
     >
-      <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] shadow-2xl overflow-hidden fade-up">
+      <div className="glass-overlay relative w-full max-w-md rounded-3xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden fade-up">
         {/* Close */}
         <button
           onClick={onClose}

@@ -57,7 +57,7 @@ export default function TestsHub() {
                   <Link
                     key={tool.id}
                     href={`/test/${tool.slug}`}
-                    className="group p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md transition-all flex items-start gap-3"
+                    className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md transition-all flex items-start gap-3"
                   >
                     <div className="shrink-0 group-hover:scale-105 transition-transform">
                       <ToolIcon name={toolSlugToIconName(tool.slug)} size={40} className="w-10 h-10" />

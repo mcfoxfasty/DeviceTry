@@ -87,7 +87,7 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
 
       {/* Instructions, limitations, troubleshooting */}
       <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${compact ? '' : 'pt-2'}`}>
-        <div className="p-5 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] space-y-3">
+        <div className="glass p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043] space-y-3">
           <h2 className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-1.5 uppercase tracking-wider">
             <Info className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#14B8A6]" />
             How to Test
@@ -102,7 +102,7 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
           </ul>
         </div>
 
-        <div className="p-5 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] space-y-3">
+        <div className="glass p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043] space-y-3">
           <h2 className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-1.5 uppercase tracking-wider">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
             Browser Limitations
@@ -117,7 +117,7 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
           </ul>
         </div>
 
-        <div className="p-5 rounded-xl bg-white dark:bg-[#131B27] border border-[#E2E8F0] dark:border-[#223043] space-y-3">
+        <div className="glass p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043] space-y-3">
           <h2 className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4] flex items-center gap-1.5 uppercase tracking-wider">
             <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
             Troubleshooting Tips
