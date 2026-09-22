@@ -114,6 +114,57 @@ test('search - single-letter queries return no results', async () => {
   assert.deepEqual(m, [], '1-letter query must not fan out across the registry');
 });
 
+// ---------- Live-search parity through the actual UI adapter ----------
+
+/**
+ * The three live surfaces (homepage grid, homepage suggestions, tools-drawer
+ * launcher) must all go through uiToolSearch — one implementation, one
+ * registry — so "Mi"/"mic" behave identically everywhere. These tests call
+ * the exact adapter function the components call, not the raw engine.
+ */
+test('uiToolSearch - "Mi" returns Microphone Test only (no Webcam), homepage + drawer', async () => {
+  const { uiToolSearch } = await import('../lib/tools/search.js');
+
+  // Homepage suggestion surface (limit 5, exactly as LandingClient.tsx).
+  const suggestions = uiToolSearch('Mi', 5);
+  assert.deepEqual(
+    suggestions.map((tool) => tool.slug),
+    ['microphone-test'],
+    '"Mi" must yield Microphone Test only through the UI adapter'
+  );
+
+  // Tools-drawer surface (limit 8, exactly as Navbar.tsx).
+  const drawer = uiToolSearch('Mi', 8);
+  assert.deepEqual(
+    drawer.map((tool) => tool.slug),
+    ['microphone-test'],
+    'drawer and homepage must share one implementation and data'
+  );
+});
+
+test('uiToolSearch - "mic" returns Microphone Test + Online Voice Recorder, no Webcam', async () => {
+  const { uiToolSearch } = await import('../lib/tools/search.js');
+  const slugs = uiToolSearch('mic', 8).map((tool) => tool.slug);
+
+  assert.ok(slugs.includes('microphone-test'), '"mic" must include Microphone Test');
+  assert.ok(slugs.includes('voice-recorder'), '"mic" must include Online Voice Recorder');
+  assert.equal(slugs.includes('webcam-test'), false, '"mic" must never return Webcam Test');
+  assert.equal(slugs[0], 'microphone-test', 'Microphone Test must rank first');
+});
+
+test('uiToolSearch - one shared implementation powers every surface (source contract)', () => {
+  // Structural guarantee: no component may call the raw engine directly.
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  assert.equal(/\bsearchTools\(/.test(landing), false,
+    'LandingClient must use uiToolSearch, not the raw engine');
+  assert.match(landing, /uiToolSearch\(/);
+
+  const navbar = readFileSync('components/layout/Navbar.tsx', 'utf8');
+  assert.equal(/\bsearchTools\(/.test(navbar), false,
+    'Navbar must use uiToolSearch, not the raw engine');
+  assert.match(navbar, /uiToolSearch\(/);
+});
+
 // ---------- Drawer search input focus retention (source contract) ----------
 
 test('navbar - closeDrawers is a stable useCallback so typing never re-runs focus logic', () => {

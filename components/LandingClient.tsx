@@ -21,7 +21,7 @@ import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
 import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
 import { CATEGORY_META } from '@/lib/tools/categories';
-import { searchTools } from '@/lib/tools/search';
+import { uiToolSearch } from '@/lib/tools/search';
 
 /** Lightweight guide pick resolved server-side (keeps article content out of the client bundle). */
 export interface HomeGuidePick {
@@ -225,13 +225,19 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
 
     if (!searchQuery.trim()) return inCategory;
 
-    return searchTools(searchQuery, inCategory).map((hit) => hit.tool);
+    // Single shared UI adapter: the grid filter and the suggestion panel (and
+    // the tools drawer) always rank identically. Category filtering narrows
+    // the adapter's full-registry result rather than searching a subset.
+    const adapterResult = new Set(
+      uiToolSearch(searchQuery, TOOLS_REGISTRY.length)
+    );
+    return inCategory.filter((tool) => adapterResult.has(tool));
   }, [selectedCategory, searchQuery]);
 
   // Top 5 suggestions for the autocomplete panel.
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    return searchTools(searchQuery, TOOLS_REGISTRY).slice(0, 5);
+    return uiToolSearch(searchQuery, 5);
   }, [searchQuery]);
 
   const toolCount = TOOLS_REGISTRY.length;
@@ -386,19 +392,19 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 >
                   <ul className="max-h-[min(15rem,40vh)] overflow-y-auto overscroll-contain">
                     {suggestions.map((hit, idx) => {
-                      const meta = CATEGORY_META.find((c) => c.key === hit.tool.category);
+                      const meta = CATEGORY_META.find((c) => c.key === hit.category);
                       return (
                         <li
-                          key={hit.tool.id}
+                          key={hit.id}
                           id={`tool-search-option-${idx}`}
                           role="option"
                           aria-selected={idx === activeIndex}
                         >
                           <Link
-                            href={`/test/${hit.tool.slug}`}
+                            href={`/test/${hit.slug}`}
                             onClick={(e) => {
                               e.preventDefault();
-                              openSuggestion(hit.tool);
+                              openSuggestion(hit);
                             }}
                             onMouseEnter={() => setActiveIndex(idx)}
                             className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
@@ -408,14 +414,14 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                             }`}
                           >
                             <span className="shrink-0">
-                              <ToolIcon name={toolSlugToIconName(hit.tool.slug)} size={28} />
+                              <ToolIcon name={toolSlugToIconName(hit.slug)} size={28} />
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
-                                {hit.tool.title}
+                                {hit.title}
                               </span>
                               <span className="block text-[11px] text-[#8996A6] truncate">
-                                {meta?.label ?? hit.tool.categoryLabel}
+                                {meta?.label ?? hit.categoryLabel}
                               </span>
                             </span>
                           </Link>

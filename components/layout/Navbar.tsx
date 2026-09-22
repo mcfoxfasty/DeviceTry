@@ -23,7 +23,7 @@ import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { TOOLS_REGISTRY, ToolDefinition } from '@/lib/tools/registry';
 import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
-import { searchTools } from '@/lib/tools/search';
+import { uiToolSearch } from '@/lib/tools/search';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 
 interface NavbarProps {
@@ -276,10 +276,11 @@ function NavbarInner({ t }: NavbarProps) {
 
   const toolsByCategory = (key: string) => TOOLS_REGISTRY.filter((tool) => tool.category === key);
 
-  // Tools-launcher search: strong-first over the primary registry.
+  // Tools-launcher search: THE shared UI adapter — identical ranking to the
+  // homepage search by construction (one implementation, one registry).
   const toolHits = useMemo(() => {
     if (!toolsQuery.trim()) return null;
-    return searchTools(toolsQuery, TOOLS_REGISTRY).slice(0, 8);
+    return uiToolSearch(toolsQuery, 8);
   }, [toolsQuery]);
 
   const popularTools = useMemo(
@@ -445,11 +446,7 @@ function NavbarInner({ t }: NavbarProps) {
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {toolHits ? (
             toolHits.length > 0 ? (
-              <ToolList
-                tools={toolHits.map((hit) => hit.tool)}
-                t={t}
-                onNavigate={navigate}
-              />
+              <ToolList tools={toolHits} t={t} onNavigate={navigate} />
             ) : (
               <p className="px-1 py-6 text-xs text-[#8996A6]">{t.nav.toolsDrawerNoResults}</p>
             )

@@ -291,3 +291,16 @@ export function searchTools(query: string, tools: ToolDefinition[] = TOOLS_REGIS
   }));
   return hits.sort((a, b) => b.score - a.score);
 }
+
+/**
+ * THE single UI search adapter. Every live search surface — homepage grid +
+ * suggestion panel, tools-drawer launcher, and the /tests hub — calls this
+ * one function over TOOLS_REGISTRY, so all surfaces are guaranteed identical
+ * results for identical queries ("Mi"/"mic" behave the same everywhere).
+ *
+ * Returns plain ToolDefinitions in rank order. Limit is the surface's own
+ * display bound (suggestions 5, drawer 8, full grid unbounded).
+ */
+export function uiToolSearch(query: string, limit: number): ToolDefinition[] {
+  return searchTools(query, TOOLS_REGISTRY).slice(0, limit).map((hit) => hit.tool);
+}
