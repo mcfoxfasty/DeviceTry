@@ -1,0 +1,24 @@
+// Cloudflare Workers configuration — DeviceTry via @opennextjs/cloudflare.
+// Build output: `bun run cf:build` produces .open-next/ (worker.js + assets).
+// Deploy: `bun run cf:deploy`. Do not commit credentials; auth comes from
+// CLOUDFLARE_API_TOKEN (or `wrangler login`) in the environment only.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devicetry",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // /api/ip trusts Cloudflare's cf-connecting-ip header only under this
+    // setting (see docs/phase9-migration.md — operator must keep the Worker
+    // reachable only through Cloudflare, which Workers deployment satisfies).
+    "IP_TRUSTED_PROXY": "cloudflare"
+  }
+}
