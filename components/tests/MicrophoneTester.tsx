@@ -22,9 +22,13 @@ interface MicrophoneTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
-export function MicrophoneTester({ t, onRecordResult, onResultClear }: MicrophoneTesterProps) {
+export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: MicrophoneTesterProps) {
   const { result, emitRunRich, clear, reset, startRun, invalidate, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -630,7 +634,7 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear }: Microphon
       )}
 
       {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
 
       {/* How to interpret & Troubleshooting */}
       <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

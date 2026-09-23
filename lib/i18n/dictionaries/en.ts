@@ -60,6 +60,7 @@ export const enTranslations: Translations = {
     gamepad: 'Gamepad',
     battery: 'Battery',
     guidedInspection: 'Guided Inspection',
+    testHistory: 'Test History',
     help: 'Help & FAQ',
     about: 'About',
     contact: 'Contact',

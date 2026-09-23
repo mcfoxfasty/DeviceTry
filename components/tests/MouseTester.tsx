@@ -9,9 +9,13 @@ interface MouseTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
-export function MouseTester({ t, onRecordResult, onResultClear }: MouseTesterProps) {
+export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: MouseTesterProps) {
   const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -231,7 +235,7 @@ export function MouseTester({ t, onRecordResult, onResultClear }: MouseTesterPro
       </p>
 
       {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
 
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
         <h3 className="font-semibold text-[#142033] dark:text-[#E9EEF4] text-sm mb-1.5">

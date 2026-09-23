@@ -87,6 +87,7 @@ export interface Translations {
     gamepad: string;
     battery: string;
     guidedInspection: string;
+    testHistory: string;
     help: string;
     about: string;
     contact: string;

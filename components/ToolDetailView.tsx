@@ -77,13 +77,17 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
         </div>
       </div>
 
-      {/* Permission encouragement only for permission-gated tools */}
-      {needsPermission && <PermissionPromptCard t={t} />}
-
       {/* Live tester — one clear white workspace card. Result banner is
           rendered INSIDE each tester card. DeepLink wrapper reads ?tab= for
-          migrated route deep links. */}
+          migrated route deep links. The interactive test card always comes
+          FIRST; explanatory permission guidance sits immediately after it
+          (correction F) — the browser permission prompt itself is still
+          requested only when the user starts the test. */}
       <ToolRendererDeepLink tool={tool} t={t} onResultUpdate={onResultUpdate} />
+
+      {/* Permission guidance only for permission-gated tools — placed
+          immediately AFTER the interactive test card (correction F). */}
+      {needsPermission && <PermissionPromptCard t={t} />}
 
       {/* Instructions, limitations, troubleshooting */}
       <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${compact ? '' : 'pt-2'}`}>

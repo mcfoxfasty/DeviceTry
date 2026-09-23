@@ -9,6 +9,23 @@ export type { ToolDefinition, ToolCategory } from './types';
  * devicetry-storage-inspector) live in SUPPORTING_REGISTRY below: they get
  * pages under /test/ but are not primary catalog cards.
  */
+/**
+ * Share-ability policy per tool (post-deployment correction C).
+ * 'score'  — numeric-score tool: the result score (CPS, ms) may be shared.
+ * 'summary' — every other tool: only a generic Pass/Warning/Needs-attention
+ *             sentence may be shared; never measurements, media, IPs, keys,
+ *             clipboard content, or device identifiers.
+ * Adding a tool defaults it to the restrictive 'summary' policy.
+ */
+const SHARE_POLICY: Record<string, 'score' | 'summary'> = {
+  'reaction-time-test': 'score',
+  'click-speed-test': 'score',
+};
+
+/** True when this tool's numeric result may be included in a share message. */
+export function sharePolicyForTool(tool: Pick<ToolDefinition, 'id'>): 'score' | 'summary' {
+  return SHARE_POLICY[tool.id] ?? 'summary';
+}
 export const TOOLS_REGISTRY: ToolDefinition[] = [
   {
     id: 'microphone-test',

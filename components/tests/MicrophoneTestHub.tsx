@@ -20,6 +20,10 @@ interface MicrophoneTestHubProps {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
   /** Initial tab (migration deep links use ?tab=pitch etc.). */
   initialTab?: string;
+  /** Registry identity forwarded to the in-card banner (safe share + history). */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 type MicTab = 'level' | 'pitch' | 'recorder';
@@ -30,7 +34,7 @@ type MicTab = 'level' | 'pitch' | 'recorder';
  * graph, timers, and animation callbacks via each tester's existing Phase 2/3
  * lifecycle cleanup. No microphone session ever coexists with another tab's.
  */
-export function MicrophoneTestHub({ t, onRecordResult, onResultClear, onResultUpdate, initialTab }: MicrophoneTestHubProps) {
+export function MicrophoneTestHub({ t, onRecordResult, onResultClear, onResultUpdate, initialTab, toolId, toolTitle, toolSlug }: MicrophoneTestHubProps) {
   const isInitialTabValid = initialTab === 'level' || initialTab === 'pitch' || initialTab === 'recorder';
   const [tab, setTab] = useState<MicTab>(isInitialTabValid ? initialTab : 'level');
 
@@ -67,7 +71,7 @@ export function MicrophoneTestHub({ t, onRecordResult, onResultClear, onResultUp
       {/* Exclusive mounting: switching tabs unmounts the previous tester,
           which stops its stream, audio graph, timers, and listeners. */}
       <div role="tabpanel">
-        {tab === 'level' && <MicrophoneTester t={t} onRecordResult={onRecordResult} onResultClear={onResultClear} />}
+        {tab === 'level' && <MicrophoneTester t={t} onRecordResult={onRecordResult} onResultClear={onResultClear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />}
         {tab === 'pitch' && <PitchDetectorTester t={t} onResultUpdate={onResultUpdate} />}
         {tab === 'recorder' && <VoiceRecorderTester t={t} onResultUpdate={onResultUpdate} />}
       </div>

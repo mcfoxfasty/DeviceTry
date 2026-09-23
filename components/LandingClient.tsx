@@ -95,7 +95,7 @@ const faqs = [
   },
   {
     q: 'How many diagnostic tools are available on DeviceTry?',
-    a: 'DeviceTry offers 15 focused tools covering microphone, webcam, speakers, voice recording, tones, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup. A few advanced browser diagnostics are also linked from the relevant help sections.',
+    a: `DeviceTry offers ${TOOLS_REGISTRY.length} core tests plus supporting diagnostics: microphone, webcam, speakers, voice recording, tones, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup. A few advanced browser diagnostics are also linked from the relevant help sections.`,
   },
   {
     q: 'My browser asked for permission and I clicked Block. What now?',

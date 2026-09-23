@@ -18,6 +18,10 @@ interface WebcamTestHubProps {
   onResultClear?: () => void;
   /** Initial tab (migration deep links use ?tab=mirror). */
   initialTab?: string;
+  /** Registry identity forwarded to the in-card banner (safe share + history). */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 /**
@@ -26,7 +30,7 @@ interface WebcamTestHubProps {
  * session exists at a time — switching tabs unmounts the previous tester,
  * which stops every track through the Phase 2 CameraSession lifecycle.
  */
-export function WebcamTestHub({ t, onRecordResult, onResultClear, initialTab }: WebcamTestHubProps) {
+export function WebcamTestHub({ t, onRecordResult, onResultClear, initialTab, toolId, toolTitle, toolSlug }: WebcamTestHubProps) {
   const isInitialTabValid = initialTab === 'test' || initialTab === 'mirror';
   const [tab, setTab] = useState<CamTab>(isInitialTabValid ? initialTab : 'test');
 
@@ -57,7 +61,7 @@ export function WebcamTestHub({ t, onRecordResult, onResultClear, initialTab }: 
       </div>
 
       <div role="tabpanel">
-        {tab === 'test' && <WebcamTester t={t} onRecordResult={onRecordResult} onResultClear={onResultClear} />}
+        {tab === 'test' && <WebcamTester t={t} onRecordResult={onRecordResult} onResultClear={onResultClear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />}
         {/* OnlineMirror reports the (status, details) shape; adapt the hub's
             rich payload hook so both tabs reach the same guided sink. */}
         {tab === 'mirror' && (

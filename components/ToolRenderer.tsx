@@ -61,6 +61,8 @@ interface ToolRendererProps {
   onResultClear?: () => void;
   /** Initial tab for merged-tab tools (migration deep links, ?tab=...). */
   initialTab?: string;
+  /** Enable privacy-safe share + browser-local history for this tool's banner. */
+  withShare?: boolean;
 }
 
 /**
@@ -95,27 +97,38 @@ export const TESTER_COMPONENTS: Record<string, React.ComponentType<any>> = {
   WebRTCTester,
 };
 
-/** Flagship testers receive the rich payload callback directly. */
-const RICH_FLAGSHIP: ReadonlySet<string> = new Set([
+/**
+ * Testers that render their own in-card banner and receive the host result
+ * sink plus the registry identity directly. Rich flagships additionally take
+ * the rich payload callback (onRecordResult).
+ */
+const DIRECT_MOUNT_TESTERS: ReadonlySet<string> = new Set([
   'GamepadTester',
   'KeyboardTester',
   'MouseTester',
   'SpeakersTester',
   'WebcamTester',
   'MicrophoneTester',
+  // Owns its internal banner; wrapping it in TesterWithBanner would render
+  // two banners and its own verdict stream would bypass the host sink.
+  'ReactionTimeTester',
 ]);
 
 /**
  * Renders the correct tester component for a registry tool definition.
  * Unknown componentName throws (loud) instead of rendering nothing (silent).
- */export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult, onResultClear, initialTab }: ToolRendererProps) {
+ */export function ToolRenderer({ tool, t, onResultUpdate, onRecordResult, onResultClear, initialTab, withShare = true }: ToolRendererProps) {
   const Tester = TESTER_COMPONENTS[tool.componentName];
 
   if (!Tester) {
     throw new Error(`ToolRenderer: no tester component registered for "${tool.componentName}" (tool id: ${tool.id})`);
   }
 
-  if (RICH_FLAGSHIP.has(tool.componentName)) {
+  const bannerExtras = withShare
+    ? { toolId: tool.id, toolTitle: tool.title, toolSlug: tool.slug }
+    : {};
+
+  if (DIRECT_MOUNT_TESTERS.has(tool.componentName)) {
     return (
       <Tester
         t={t}
@@ -123,6 +136,7 @@ const RICH_FLAGSHIP: ReadonlySet<string> = new Set([
         onResultUpdate={onResultUpdate}
         onResultClear={onResultClear}
         initialTab={initialTab}
+        {...bannerExtras}
       />
     );
   }
@@ -132,6 +146,7 @@ const RICH_FLAGSHIP: ReadonlySet<string> = new Set([
       testerProps={{ t, onResultUpdate, initialTab }}
       onResultUpdate={onResultUpdate}
       onResultClear={onResultClear}
+      {...bannerExtras}
     />
   );
 }

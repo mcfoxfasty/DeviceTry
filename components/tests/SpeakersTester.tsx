@@ -16,9 +16,13 @@ interface SpeakersTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
-export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTesterProps) {
+export function SpeakersTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: SpeakersTesterProps) {
   const { result, emitRich, clear } = useTestResult({ onRecordResult, onResultClear });
   const [playingChannel, setPlayingChannel] = useState<'left' | 'right' | 'both' | null>(null);
   const [userObservation, setUserObservation] = useState<string | null>(null);
@@ -347,7 +351,7 @@ export function SpeakersTester({ t, onRecordResult, onResultClear }: SpeakersTes
       </p>
 
       {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
 
       {/* Evaluation guidance */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

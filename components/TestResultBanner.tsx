@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardCheck, RotateCcw } from 'lucide-react';
 import { BannerStatus } from '@/lib/testing/resultPolicy';
 import { ResultController, ResultSink } from '@/lib/testing/resultController';
+import { recordTestResult } from '@/lib/testing/testHistory';
+import { buildSharePayload, extractScoreForShare, SharePayload, ShareResultInput } from '@/lib/share';
+import { ShareButton } from '@/components/ui/ShareButton';
 
 export type { BannerStatus } from '@/lib/testing/resultPolicy';
 
@@ -18,6 +21,10 @@ interface TestResultBannerProps {
   onClear?: () => void;
   /** "attached" fuses the banner to the bottom of a tester card (no gap, shared corners). */
   variant?: 'card' | 'attached';
+  /** Registry id/slug of the tool owning this banner (enables safe share + history). */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 const STATUS_STYLES: Record<BannerStatus, { wrap: string; pill: string; icon: string }> = {
@@ -57,12 +64,60 @@ const STATUS_STYLES: Record<BannerStatus, { wrap: string; pill: string; icon: st
  * In-card verdict banner: rendered inside each tester card, directly under
  * the test area, so the outcome is always attached to the tool being used.
  */
-export function TestResultBanner({ result, onClear, variant = 'card' }: TestResultBannerProps) {
+export function TestResultBanner({ result, onClear, variant = 'card', toolId, toolTitle, toolSlug }: TestResultBannerProps) {
+  // Rules of Hooks: every hook runs unconditionally, BEFORE the conditional
+  // return below. An early return placed above these hooks would change the
+  // hook count between renders (null → value) and crash the component.
+
+  // Type narrowing only: ShareResultInput's status union is the same five
+  // members the host accepts — 'skipped' can never reach the share builder
+  // because forwardGenericResult() drops it before the banner sees a verdict.
+  const shareStatus = result?.status as ShareResultInput['status'] | undefined;
+
+  /** Privacy-safe share payload; null when nothing shareable is available. */
+  const sharePayload: SharePayload | null = useMemo(() => {
+    if (!toolId || !toolTitle || !result) return null;
+    const score = extractScoreForShare(toolId, result.details);
+    return buildSharePayload(
+      { id: toolId, title: toolTitle },
+      {
+        status: shareStatus!,
+        score: score?.score ?? null,
+        scoreUnit: score?.unit,
+      }
+    );
+  }, [toolId, toolTitle, result, shareStatus]);
+
+  /**
+   * Browser-local history (correction D): record once per completed verdict.
+   * Only name/status/safe summary/timestamp are stored — see testHistory.ts.
+   * Guarded by a ref so a polling tester that re-emits the identical verdict
+   * does not create duplicate history entries.
+   */
+  const recordedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!toolId || !toolTitle || !toolSlug || !result) return;
+    // 'skipped' is not a completed verdict: it must never be recorded.
+    if (result.status === 'skipped') return;
+    const key = `${toolSlug}|${result.status}|${result.details}`;
+    if (recordedKeyRef.current === key) return;
+    recordedKeyRef.current = key;
+    recordTestResult({
+      slug: toolSlug,
+      title: toolTitle,
+      status: result.status,
+      summary: result.details,
+    });
+  }, [toolId, toolTitle, toolSlug, result]);
+
+  // All hooks have run; only plain derivation and the conditional return
+  // happen from here on.
   if (!result) return null;
 
   const styles = STATUS_STYLES[result.status] ?? STATUS_STYLES.inconclusive;
   const metrics = result.metrics ? Object.entries(result.metrics).filter(([, v]) => v !== undefined && v !== '') : [];
   const attach = variant === 'attached';
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin + (toolSlug ? `/test/${toolSlug}` : window.location.pathname) : '';
 
   return (
     <div className={`${attach ? 'rounded-b-xl border-t-0' : 'mt-6 rounded-xl'} border p-4 ${styles.wrap}`} data-testid="test-result-banner">
@@ -93,16 +148,21 @@ export function TestResultBanner({ result, onClear, variant = 'card' }: TestResu
             )}
           </div>
         </div>
-        {onClear && (
-          <button
-            onClick={onClear}
-            title="Clear result"
-            aria-label="Clear result"
-            className="text-[#59677D] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer shrink-0"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {sharePayload && shareUrl && (
+            <ShareButton payload={sharePayload} url={shareUrl} />
+          )}
+          {onClear && (
+            <button
+              onClick={onClear}
+              title="Clear result"
+              aria-label="Clear result"
+              className="text-[#59677D] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -215,19 +275,23 @@ interface TesterWithBannerProps {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
   /** Host hook notified when the user clears/resets this tester's result. */
   onResultClear?: () => void;
+  /** Forwarded to the banner to enable privacy-safe share + local history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 /**
  * Renders a tester and fuses the result banner to its bottom edge, so
  * every tester on the site shows its verdict directly under the test area.
  */
-export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, onResultClear }: TesterWithBannerProps) {
+export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, onResultClear, toolId, toolTitle, toolSlug }: TesterWithBannerProps) {
   const { result, emit, reset } = useTestResult({ onResultUpdate, onResultClear });
 
   return (
     <div className="w-full">
       <Tester {...testerProps} onResultUpdate={emit} />
-      <TestResultBanner result={result} onClear={reset} variant="attached" />
+      <TestResultBanner result={result} onClear={reset} variant="attached" toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
     </div>
   );
 }

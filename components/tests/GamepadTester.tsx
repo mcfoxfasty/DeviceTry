@@ -14,6 +14,10 @@ interface GamepadTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 const BUTTON_LABELS = [
@@ -36,7 +40,7 @@ const BUTTON_LABELS = [
   'Guide / Home (16)',
 ];
 
-export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTesterProps) {
+export function GamepadTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: GamepadTesterProps) {
   const { result, emitRunRich, clear, startRun, invalidate, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -455,7 +459,7 @@ export function GamepadTester({ t, onRecordResult, onResultClear }: GamepadTeste
       )}
 
       {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
 
       {/* Hardware Disclaimer */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

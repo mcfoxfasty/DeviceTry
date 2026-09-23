@@ -4,6 +4,7 @@ import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Cpu, Video, ShoppingBag, Wrench, CheckCircle } from 'lucide-react';
+import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -67,7 +68,7 @@ export default function AboutPage() {
           <div className="border-t border-[#DFE5EB] dark:border-[#223043] pt-6 flex flex-wrap gap-4 text-xs font-medium text-[#142033] dark:text-[#E9EEF4]">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-[#0F766E]" />
-              38 Pure Client Diagnostic Tools
+              {TOOLS_REGISTRY.length} core tests plus supporting diagnostics
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-[#0F766E]" />

@@ -61,8 +61,12 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     setStatus('finished');
     const computedCps = elapsedSecs > 0 ? parseFloat((finalCount / elapsedSecs).toFixed(2)) : 0;
     setCps(computedCps);
-    if (onResultUpdate) {
-      onResultUpdate('passed', `Result: ${finalCount} clicks (${computedCps} CPS)`);
+    if (onResultUpdate && elapsedSecs > 0) {
+      // A CPS number is a score, not a verdict: report it neutrally
+      // ("inconclusive") so an incomplete/zero run can never be presented
+      // as a hardware "pass". The share layer may include the CPS score;
+      // the status itself never claims success.
+      onResultUpdate('inconclusive', `Result: ${finalCount} clicks (${computedCps} CPS)`);
     }
   }, [onResultUpdate]);
 

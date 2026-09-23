@@ -12,7 +12,14 @@ import {
 
 interface ReactionTimeTesterProps {
   t?: Translations;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported',
+    details?: string
+  ) => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 /**
@@ -21,9 +28,15 @@ interface ReactionTimeTesterProps {
  * visibility cancels the in-flight attempt; departure cancels pending timers
  * and invalidates stale callbacks. A slower result is a normal observation —
  * never reported as defective hardware.
+ *
+ * Result plumbing: this tester renders the authoritative in-card banner and
+ * receives the registry identity plus the host result sink directly
+ * (ToolRenderer mounts it like the rich flagship testers). The host sink is
+ * wired through useTestResult so the banner, the host flow, and browser-local
+ * history all observe the same run-guarded verdict stream.
  */
-export function ReactionTimeTester({ onResultUpdate }: ReactionTimeTesterProps) {
-  const { result, emit, clear, invalidate, startRun, currentRun } = useTestResult({});
+export function ReactionTimeTester({ onResultUpdate, toolId, toolTitle, toolSlug }: ReactionTimeTesterProps) {
+  const { result, emit, clear, invalidate, startRun, currentRun } = useTestResult({ onResultUpdate });
   const runRef = useRef<ReactionRun | null>(null);
   const [phase, setPhase] = useState<'idle' | 'waiting' | 'signal' | 'done'>('idle');
   const [summary, setSummary] = useState<ReactionSummary | null>(null);
@@ -219,7 +232,7 @@ export function ReactionTimeTester({ onResultUpdate }: ReactionTimeTesterProps) 
         </div>
       )}
 
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
     </div>
   );
 }

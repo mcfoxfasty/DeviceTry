@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+import { TOOLS_REGISTRY } from '../lib/tools/registry';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const navbarSource = readFileSync(join(repoRoot, 'components/layout/Navbar.tsx'), 'utf8');
@@ -203,6 +205,139 @@ test('navbar - closed drawer is aria-hidden AND inert; open drawer is neither', 
   // Guard against the regression where the OPEN dialog was hidden from AT.
   assert.equal(/aria-hidden=\{true\}/.test(navbarSource.replace(/aria-hidden="true"/g, '')), false,
     'no element may be unconditionally aria-hidden=true (backdrop only)');
+});
+
+// ---------- Post-deployment pass: share payload safety ----------
+
+test('share - numeric-score tools share their score; everyone else gets a generic sentence only', () => {
+  const registry = readFileSync('lib/tools/registry.ts', 'utf8');
+  const shareLib = readFileSync('lib/share.ts', 'utf8');
+
+  // Only the two numeric-score tools may reveal numbers.
+  const scoreTools = ['click-speed-test', 'reaction-time-test'];
+  const sharePolicyBlock = registry.slice(
+    registry.indexOf('const SHARE_POLICY'),
+    registry.indexOf('export const TOOLS_REGISTRY')
+  );
+  for (const tool of TOOLS_REGISTRY) {
+    const allowed = scoreTools.includes(tool.id);
+    assert.equal(
+      sharePolicyBlock.includes(`'${tool.id}': 'score'`),
+      allowed,
+      `${tool.id} must ${allowed ? '' : 'NOT '}be a score-sharing tool`
+    );
+  }
+
+  // The generic sentence path never emits tester details verbatim.
+  assert.ok(shareLib.includes('GENERIC_SENTENCE'), 'generic summary path exists');
+  assert.ok(shareLib.includes('includesScore: false'), 'generic path explicitly denies scores');
+  // WhatsApp/Facebook/X/LinkedIn targets live in lib/share.ts (ShareButton
+  // renders them); assert the real source of truth.
+  assert.match(shareLib, /wa\.me/, 'WhatsApp fallback target defined');
+  assert.match(shareLib, /facebook\.com\/sharer/, 'Facebook fallback target defined');
+  assert.match(shareLib, /twitter\.com\/intent\/tweet/, 'X fallback target defined');
+  assert.match(shareLib, /linkedin\.com\/sharing/, 'LinkedIn fallback target defined');
+
+  // Reaction/CPS unit strings are the only score units extracted.
+  assert.ok(/CPS/i.test(shareLib) && /median/i.test(shareLib), 'score extraction covers CPS and reaction median');
+});
+
+test('share - ShareButton uses Web Share first with privacy-safe fallback targets and no SDKs', () => {
+  const shareButton = readFileSync('components/ui/ShareButton.tsx', 'utf8');
+  assert.match(shareButton, /navigator\.share/, 'Web Share API is tried first');
+  // Fallback targets come from lib/share.ts's shareTargetsFor(); the button
+  // renders them via the imported builder (verified in the previous test).
+  assert.match(shareButton, /shareTargetsFor/, 'fallback targets flow from the shared builder');
+  assert.match(shareButton, /navigator\.clipboard\.writeText/, 'Copy Link fallback present');
+  // No third-party SDK scripts: everything is plain outbound links.
+  assert.ok(!/<script/i.test(shareButton), 'no script tags (no social SDKs, no trackers)');
+});
+
+test('share - media/network testers never render a share payload with measurements', () => {
+  // Webcam/mic/IP-style tools map to the restrictive policy in the registry.
+  const restricted = ['webcam-test', 'microphone-test', 'what-is-my-ip', 'internet-speed-test', 'screen-test', 'keyboard-test'];
+  const registry = readFileSync('lib/tools/registry.ts', 'utf8');
+  const sharePolicyBlock = registry.slice(
+    registry.indexOf('const SHARE_POLICY'),
+    registry.indexOf('export const TOOLS_REGISTRY')
+  );
+  for (const id of restricted) {
+    assert.ok(!sharePolicyBlock.includes(`'${id}': 'score'`), `${id} must never share numeric values`);
+  }
+});
+
+// ---------- Post-deployment pass: test history privacy ----------
+
+test('test history - stores only name/status/safe summary/timestamp; deny-list strips IPs, key codes, and device ids', () => {
+  const history = readFileSync('lib/testing/testHistory.ts', 'utf8');
+  // The sanitizer must run before storage and strip every forbidden class.
+  // Plain string matching against raw source (no regex-vs-source escaping
+  // ambiguity): each literal below is exactly the bytes the file must contain.
+  assert.match(history, /function sanitizeSummary/);
+  assert.ok(
+    history.includes('\\d{1,3}(?:\\.\\d{1,3}){3}'),
+    'IPv4 pattern stripped'
+  );
+  assert.match(history, /Key\[A-Z\]|Arrow\(/, 'KeyboardEvent codes stripped');
+  assert.ok(
+    history.includes('[0-9a-f]{2}[:-]){5}') && history.includes('{32,}'),
+    'hex/MAC-style identifiers stripped'
+  );
+  // Entry cap and delete/clear operations exist.
+  assert.match(history, /MAX_ENTRIES/);
+  assert.match(history, /export function deleteTestHistoryEntry/);
+  assert.match(history, /export function clearAllTestHistory/);
+});
+
+test('test history - wired through the shared result banner and reachable from navigation', () => {
+  const banner = readFileSync('components/TestResultBanner.tsx', 'utf8');
+  assert.match(banner, /recordTestResult/, 'banner records history entries');
+  const navbar = readFileSync('components/layout/Navbar.tsx', 'utf8');
+  assert.match(navbar, /\/test-history/, 'navbar links the history page');
+  const footer = readFileSync('components/layout/Footer.tsx', 'utf8');
+  assert.match(footer, /\/test-history/, 'footer links the history page');
+  assert.ok(existsSync('app/test-history/page.tsx'), 'history page exists');
+});
+
+// ---------- Post-deployment pass: mobile keyboard honesty ----------
+
+test('keyboard - virtual keyboard events can never produce a full keyboard pass', () => {
+  const gates = readFileSync('lib/testing/virtualTyping.ts', 'utf8');
+  // keyCode 229 / isComposing classify as virtual typing.
+  assert.match(gates, /keyCode === 229/);
+  assert.match(gates, /isComposing/);
+
+  const keyboard = readFileSync('components/tests/KeyboardTester.tsx', 'utf8');
+  // The virtual branch returns BEFORE the pass emission and never emits a verdict.
+  const handleKeyDown = keyboard.slice(keyboard.indexOf('const handleKeyDown'), keyboard.indexOf('const handleKeyUp'));
+  assert.match(handleKeyDown, /isVirtualKeyboardKey\(e\)/, 'virtual events are classified');
+  assert.match(handleKeyDown, /return;/, 'virtual branch exits early');
+  assert.ok(!/emitRef\.current[\s\S]*229/.test(handleKeyDown), 'no pass emission from the virtual branch');
+  // The separate check states it is not a keyboard test.
+  assert.match(gates, /never produces a keyboard pass/);
+  // Touch-first devices get the physical-keyboard requirement notice.
+  assert.match(keyboard, /TOUCH_DEVICE_NOTICE/);
+  assert.match(gates, /Bluetooth or USB/);
+});
+
+// ---------- Post-deployment pass: registry-derived count wording ----------
+
+test('homepage FAQ derives its tool count from the registry, never a hard-coded total', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  assert.match(landing, /\$\{TOOLS_REGISTRY\.length\} core tests plus supporting diagnostics/,
+    'FAQ count is registry-derived with the agreed wording');
+  assert.ok(!landing.includes('offers 15 focused tools'), 'stale hard-coded wording removed');
+  assert.ok(!landing.includes('28 tools') && !landing.includes('38 tools'), 'no stale totals anywhere');
+});
+
+// ---------- Post-deployment pass: permission section order ----------
+
+test('tool pages render the permission guidance AFTER the interactive test card', () => {
+  const detail = readFileSync('components/ToolDetailView.tsx', 'utf8');
+  const testerIdx = detail.indexOf('<ToolRendererDeepLink');
+  const permissionIdx = detail.indexOf('<PermissionPromptCard');
+  assert.ok(testerIdx !== -1 && permissionIdx !== -1);
+  assert.ok(testerIdx < permissionIdx, 'permission guidance must follow the test card');
 });
 
 // ---------- Desktop theme control ----------

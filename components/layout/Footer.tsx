@@ -17,7 +17,7 @@ const GUARANTEES = [
   {
     icon: HardDrive,
     title: 'No Anonymous Tracking',
-    description: 'Free tests perform zero database writes. History is stored strictly in your browser’s local storage.',
+    description: 'Test history is stored strictly in your browser’s local storage — on the Test History page you can view or delete it at any time.',
   },
   {
     icon: Cpu,
@@ -94,6 +94,7 @@ export function Footer({ t }: FooterProps) {
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li><Link href="/inspection" className={linkClass}>{t.nav.guidedInspection}</Link></li>
+              <li><Link href="/test-history" className={linkClass}>{t.nav.testHistory}</Link></li>
               <li><Link href="/about" className={linkClass}>{t.nav.about}</Link></li>
               <li><Link href="/privacy" className={linkClass}>{t.nav.privacy}</Link></li>
               <li><Link href="/terms" className={linkClass}>{t.nav.terms}</Link></li>

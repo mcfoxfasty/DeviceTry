@@ -8,6 +8,11 @@ import {
   SpeedPhase,
 } from '@/lib/testing/speedProvider';
 
+interface InternetSpeedTesterProps {
+  /** Host telemetry sink — also feeds the shared banner (history + safe share). */
+  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+}
+
 interface SpeedState {
   phase: SpeedPhase;
   error?: string;
@@ -39,10 +44,12 @@ function Metric({ label, value, unit }: { label: string; value: number | null; u
  * provider adapter (lib/testing/speedProvider.ts); the UI never fabricates a
  * value — unavailable metrics render as "—". No test starts automatically.
  */
-export function InternetSpeedTester() {
+export function InternetSpeedTester({ onResultUpdate }: InternetSpeedTesterProps) {
   const [state, setState] = useState<SpeedState>({ phase: 'idle' });
   const [summary, setSummary] = useState<SpeedSummary>(EMPTY_SUMMARY);
   const controllerRef = useRef<CloudflareSpeedTestController | null>(null);
+  /** Latest progress values, readable synchronously at the finish transition. */
+  const summaryRef = useRef<SpeedSummary>(EMPTY_SUMMARY);
 
   // Departure: cancel ongoing work through the adapter.
   useEffect(
@@ -53,21 +60,49 @@ export function InternetSpeedTester() {
     []
   );
 
+  const handleProgress = useCallback((s: SpeedSummary) => {
+    summaryRef.current = s;
+    setSummary(s);
+  }, []);
+
   const handlePhase = useCallback((phase: SpeedPhase, error?: string) => {
     setState({ phase, error });
-  }, []);
+    // Result plumbing (post-deployment pass): the run's outcome reaches the
+    // shared banner → browser-local history → privacy-safe share. A completed
+    // measurement is reported NEUTRALLY ('inconclusive' = observation, not a
+    // verdict); 'aborted' deliberately emits nothing — a cancelled run records
+    // no result, so partial values can never be presented as a success.
+    if (phase === 'finished') {
+      const s = summaryRef.current;
+      const parts = [
+        s.downloadMbps !== null ? `download ${s.downloadMbps} Mbps` : null,
+        s.uploadMbps !== null ? `upload ${s.uploadMbps} Mbps` : null,
+        s.latencyMs !== null ? `latency ${s.latencyMs} ms` : null,
+        s.jitterMs !== null ? `jitter ${s.jitterMs} ms` : null,
+      ].filter(Boolean);
+      onResultUpdate?.(
+        'inconclusive',
+        parts.length > 0
+          ? `Measurement complete — ${parts.join(', ')}.`
+          : 'Measurement completed, but the engine returned no usable values.'
+      );
+    } else if (phase === 'error') {
+      onResultUpdate?.('failed', 'The measurement failed before completion — see the error above.');
+    }
+  }, [onResultUpdate]);
 
   const start = useCallback(() => {
     if (state.phase === 'running') return;
     controllerRef.current?.dispose();
     setSummary(EMPTY_SUMMARY);
+    summaryRef.current = EMPTY_SUMMARY;
     const controller = new CloudflareSpeedTestController({
       onPhase: handlePhase,
-      onProgress: setSummary,
+      onProgress: handleProgress,
     });
     controllerRef.current = controller;
     void controller.start();
-  }, [state.phase, handlePhase]);
+  }, [state.phase, handlePhase, handleProgress]);
 
   const cancel = useCallback(() => {
     controllerRef.current?.cancel();
@@ -130,16 +165,42 @@ export function InternetSpeedTester() {
 
       {state.phase === 'aborted' && (
         <p role="status" className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-          Test cancelled — partial values above are provisional, not a result.
+          Test cancelled — no result recorded. Run again for a complete measurement.
         </p>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Metric label="Download" value={summary.downloadMbps} unit="Mbps" />
-        <Metric label="Upload" value={summary.uploadMbps} unit="Mbps" />
-        <Metric label="Latency" value={summary.latencyMs} unit="ms" />
-        <Metric label="Jitter" value={summary.jitterMs} unit="ms" />
-      </div>
+      {/* Correction B: a failed or cancelled measurement must never leave
+          incomplete values on screen as if they were a result. The metrics
+          grid renders ONLY when the engine finished every phase. */}
+      {state.phase === 'finished' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Metric label="Download" value={summary.downloadMbps} unit="Mbps" />
+          <Metric label="Upload" value={summary.uploadMbps} unit="Mbps" />
+          <Metric label="Latency" value={summary.latencyMs} unit="ms" />
+          <Metric label="Jitter" value={summary.jitterMs} unit="ms" />
+        </div>
+      )}
+      {running && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-hidden="true">
+          <Metric label="Download" value={null} unit="Mbps" />
+          <Metric label="Upload" value={null} unit="Mbps" />
+          <Metric label="Latency" value={null} unit="ms" />
+          <Metric label="Jitter" value={null} unit="ms" />
+        </div>
+      )}
+
+      {/* One concise disclosure next to Start (correction B): the test
+          transfers real data through Cloudflare's external measurement
+          network. Provider and privacy detail stay in the box below and on
+          the privacy page. */}
+      {state.phase === 'idle' && (
+        <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] leading-relaxed max-w-2xl">
+          Pressing Start transfers real data through Cloudflare&apos;s external
+          measurement network — your connection carries the test traffic, and
+          it can consume significant mobile data. Everything else on DeviceTry
+          stays in your browser.
+        </p>
+      )}
 
       <div className="p-4 rounded-xl bg-[#F6F8FB] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] text-[11px] text-[#59677D] dark:text-[#9AA6B8] leading-relaxed space-y-2">
         <p className="flex items-start gap-2 font-semibold text-[#142033] dark:text-[#E9EEF4]">
@@ -148,8 +209,9 @@ export function InternetSpeedTester() {
         </p>
         <p>
           Measurements run against Cloudflare&apos;s public measurement network
-          (speed.cloudflare.com) via the official engine. Results reflect your connection to that
-          network at this moment — other networks and times differ.
+          (speed.cloudflare.com) via the official engine — see the disclosure above and the
+          privacy page for exactly what leaves your device. Results reflect your connection to
+          that network at this moment — other networks and times differ.
         </p>
         <p>
           &quot;Latency&quot; here is HTTP round-trip timing to the measurement endpoint, not ICMP

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Keyboard, Play, Square, RotateCcw, AlertCircle, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { Keyboard, Play, Square, RotateCcw, AlertCircle, Check, Smartphone } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import { isVirtualKeyboardKey, VIRTUAL_TYPING_NOTICE, TOUCH_DEVICE_NOTICE } from '@/lib/testing/virtualTyping';
 
 interface KeyboardTesterProps {
   t: Translations;
@@ -13,6 +14,10 @@ interface KeyboardTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /** Registry identity for the in-card banner's safe share + history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 type LayoutType = 'qwerty' | 'azerty' | 'arabic';
@@ -26,6 +31,8 @@ interface KeyDef {
   };
   width?: string;
 }
+
+const subscribeNoop = () => () => {};
 
 const KEYBOARD_ROWS: KeyDef[][] = [
   // Row 1: Function keys & Esc
@@ -124,7 +131,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ];
 
-export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTesterProps) {
+export function KeyboardTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: KeyboardTesterProps) {
   const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -134,6 +141,8 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
   const [pressedCodes, setPressedCodes] = useState<Set<string>>(new Set());
   const [activeCodes, setActiveCodes] = useState<Set<string>>(new Set());
   const [lastKey, setLastKey] = useState<{ key: string; code: string; keyCode: number } | null>(null);
+  const [virtualInfo, setVirtualInfo] = useState<string | null>(null);
+  const [virtualCount, setVirtualCount] = useState<number>(0);
 
   const isTestActiveRef = useRef<boolean>(false);
   const emitRef = useRef(emit);
@@ -145,6 +154,27 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
   useEffect(() => {
     emitRef.current = emit;
   }, [emit]);
+
+  /**
+   * Correction E: detect coarse-pointer (touch-first) devices to explain —
+   * honestly — that the on-screen keyboard cannot verify physical keys or
+   * layout, and that this full test needs a physical Bluetooth/USB keyboard
+   * or a desktop. Detection is display-capability based only; nothing is
+   * stored or reported anywhere.
+   *
+   * Device capability is browser state, not React state: useSyncExternalStore
+   * reads it without a setState-in-effect cascade and stays hydration-safe
+   * (server snapshot is `false`, so SSR/CSR markup match on first paint).
+   */
+  const touchDevice = useSyncExternalStore(
+    subscribeNoop,
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches &&
+      !window.matchMedia('(pointer: fine)').matches,
+    () => false
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -160,6 +190,19 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
         code: e.code,
         keyCode: e.keyCode,
       });
+
+      /**
+       * Correction E: events whose keyCode is 229 come from an on-screen
+       * (virtual) keyboard or IME composition. They light up the virtual
+       * typing check below but are NEVER treated as physical-key evidence,
+       * never counted toward the matrix, and never produce a full
+       * keyboard-test pass.
+       */
+      if (isVirtualKeyboardKey(e)) {
+        setVirtualCount((c) => c + 1);
+        setVirtualInfo(`Virtual key “${e.key}” received — on-screen typing only`);
+        return;
+      }
 
       setPressedCodes((prev) => {
         const next = new Set(prev).add(e.code);
@@ -205,6 +248,8 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
     setPressedCodes(new Set());
     setActiveCodes(new Set());
     setLastKey(null);
+    setVirtualCount(0);
+    setVirtualInfo(null);
     // Explicit user reset: clears the verdict and the host/guided result
     // exactly once, and invalidates any in-flight emissions.
     reset();
@@ -266,6 +311,18 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
           </button>
         </div>
       </div>
+
+      {/* Correction E: touch-first devices get an honest scope notice before
+          the matrix; a physical keyboard still works here when connected. */}
+      {touchDevice && (
+        <div
+          className="mt-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-300 flex items-start gap-2.5"
+          role="note"
+        >
+          <Smartphone className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="leading-relaxed">{TOUCH_DEVICE_NOTICE}</p>
+        </div>
+      )}
 
       {/* Real-time Pressed Key Status Banner */}
       <div className="mt-4 p-3 bg-[#F6F7F9] dark:bg-[#192332] rounded-lg border border-[#DFE5EB] dark:border-[#223043] flex flex-wrap items-center justify-between gap-4 text-xs">
@@ -335,8 +392,30 @@ export function KeyboardTester({ t, onRecordResult, onResultClear }: KeyboardTes
         {t.keyboardTest.pressInstruction}
       </p>
 
+      {/* Correction E: clearly SEPARATE virtual-typing check. Counts only
+          keyCode-229/composition events, never touches the pass verdict,
+          and says explicitly that it is not a keyboard test. */}
+      {(touchDevice || virtualCount > 0) && (
+        <div
+          className="mt-3 p-3 rounded-lg bg-[#F6F8FB] dark:bg-[#192332] border border-dashed border-[#DFE5EB] dark:border-[#223043] text-xs"
+          data-testid="virtual-typing-check"
+        >
+          <p className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
+            Virtual keyboard typing check
+          </p>
+          <p className="mt-1 text-[#59677D] dark:text-[#9AA6B8] leading-relaxed">
+            {VIRTUAL_TYPING_NOTICE}
+          </p>
+          <p className="mt-1.5 font-mono-num font-semibold text-[#0F766E] dark:text-[#14B8A6]" role="status">
+            {virtualCount > 0
+              ? `${virtualCount} on-screen key event${virtualCount === 1 ? '' : 's'} received${virtualInfo ? ` — ${virtualInfo}` : ''}`
+              : 'Type on the on-screen keyboard to try it.'}
+          </p>
+        </div>
+      )}
+
       {/* Test result — in-card, directly under the test area */}
-      <TestResultBanner result={result} onClear={clear} />
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
 
       {/* OS Notice & Troubleshooting */}
       <div className="mt-6 pt-5 border-t border-[#DFE5EB] dark:border-[#223043] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">

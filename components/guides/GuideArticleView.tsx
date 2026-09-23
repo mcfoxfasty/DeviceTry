@@ -5,6 +5,7 @@ import { GuideArticle } from '@/lib/guides/registry';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { getGuideBySlug } from '@/lib/guides/registry';
 import { ProductBuyBox } from './ProductBuyBox';
+import { GuideShareRow } from '@/components/ui/GuideShareRow';
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -48,6 +49,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
             )}
           </span>
         </div>
+        <GuideShareRow title={guide.title} slug={guide.slug} />
         {guide.hasAffiliateLinks && (
           <p className="mt-3 p-3 rounded-lg bg-[#F6F8FB] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043] text-[11px] text-[#59677D] dark:text-[#9AA6B8]">
             Disclosure: this article contains affiliate links. If you purchase through them, we may earn a
