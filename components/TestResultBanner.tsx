@@ -121,32 +121,18 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
 
   return (
     <div className={`${attach ? 'rounded-b-xl border-t-0' : 'mt-6 rounded-xl'} border p-4 ${styles.wrap}`} data-testid="test-result-banner">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <ClipboardCheck className={`w-5 h-5 mt-0.5 shrink-0 ${styles.icon}`} />
-          <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">
-              Test result
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${styles.pill}`}>
-                {result.status}
-              </span>
-            </p>
-            {result.details && (
-              <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] mt-1 leading-relaxed break-words">{result.details}</p>
-            )}
-            {metrics.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {metrics.map(([key, value]) => (
-                  <span
-                    key={key}
-                    className="font-mono-num text-[10px] font-semibold bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-2 py-1 text-[#142033] dark:text-[#E9EEF4] break-all"
-                  >
-                    {key}: {String(value)}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* Header row: title left, share/clear right. flex-wrap (never shrink)
+          keeps them side by side on wide screens and stacks them cleanly on
+          narrow ones — the button can no longer overlap the title. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <ClipboardCheck className={`w-5 h-5 shrink-0 ${styles.icon}`} />
+          <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] min-w-0">
+            Test result
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${styles.pill}`}>
+              {result.status}
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {sharePayload && shareUrl && (
@@ -164,6 +150,27 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
           )}
         </div>
       </div>
+
+      {/* Summary spans the full card width, below the header — not squeezed
+          into the narrow column beside the share button. */}
+      {result.details && (
+        <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] mt-2 leading-relaxed break-words">{result.details}</p>
+      )}
+
+      {/* Result details as a responsive grid: full width on all screens,
+          2 columns on phones, 3/4 as space allows. */}
+      {metrics.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
+          {metrics.map(([key, value]) => (
+            <span
+              key={key}
+              className="font-mono-num text-[10px] font-semibold bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-2 py-1 text-[#142033] dark:text-[#E9EEF4] break-all"
+            >
+              {key}: {String(value)}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
