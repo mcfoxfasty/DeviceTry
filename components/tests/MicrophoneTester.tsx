@@ -100,10 +100,13 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, too
   };
 
   const stopMicrophone = () => {
-    // Explicit stop: one lifecycle transition only. startRun() clears the
-    // visible verdict and the host/guided result exactly once and invalidates
-    // every token captured by the old run.
-    startRun();
+    // Explicit user Stop (Phase 1): releases devices and measurement
+    // resources while PRESERVING the last verdict on screen. invalidate()
+    // bumps the run token — in-flight getUserMedia resolutions, waveform
+    // frames, countdown ticks, and recorder callbacks can no longer report —
+    // but unlike startRun() it never clears the visible verdict or the
+    // host/guided result. Results remain until the user explicitly clears
+    // them or actually starts a new attempt.
 
     // 1. Cancel animation frame loop
     if (animationFrameRef.current !== null) {
@@ -157,13 +160,15 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, too
 
   const startMicrophone = async (deviceId?: string) => {
     stopMicrophone();
+
+    // A new attempt begins: exactly one lifecycle transition clears the
+    // previous attempt's verdict and the host/guided result, and returns the
+    // immutable token this getUserMedia request is bound to (captured NOW,
+    // never inside the later promise resolution).
+    const runToken = startRun();
+
     setPermissionState('requesting');
     setErrorMessage('');
-
-    // Capture the run token NOW (operation start), never inside the later
-    // promise resolution. stopMicrophone() bumped the token, so this token
-    // uniquely identifies this getUserMedia request.
-    const runToken = currentRun();
 
     try {
       const constraints: MediaStreamConstraints = {
@@ -396,9 +401,9 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, too
   };
 
   // Unmount & route cleanup. Unmount must NOT clear a legitimately recorded
-  // guided result, so it uses invalidate() (token bump, no host clear) plus
-  // direct resource teardown — not stopMicrophone(), which is an explicit
-  // user-visible stop and would erase the step's recorded verdict.
+  // guided result: it invalidates in-flight work (token bump, no host clear)
+  // and releases resources directly — the same preserve-the-verdict
+  // semantics as an explicit Stop, minus UI state owned by a live component.
   useEffect(() => {
     return () => {
       unmountedRef.current = true;
