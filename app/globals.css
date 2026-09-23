@@ -269,3 +269,19 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* Phase 2 local export: the print report opens in its own scoped window
+   (see ExportReportControl), so only conservative global print hygiene is
+   added here. The existing .no-print / .report-page rules are untouched. */
+@media print {
+  /* Interactive controls never appear in a printed page. */
+  button,
+  .no-print {
+    display: none !important;
+  }
+  /* Force readable ink on white paper regardless of theme. */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

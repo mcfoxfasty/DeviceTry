@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardCheck, RotateCcw } from 'lucide-react';
+import { ClipboardCheck, ChevronDown, RotateCcw } from 'lucide-react';
 import { BannerStatus } from '@/lib/testing/resultPolicy';
 import { ResultController, ResultSink } from '@/lib/testing/resultController';
 import { recordTestResult } from '@/lib/testing/testHistory';
 import { buildSharePayload, extractScoreForShare, SharePayload, ShareResultInput } from '@/lib/share';
 import { ShareButton } from '@/components/ui/ShareButton';
+import { ExportReportControl } from '@/components/ui/ExportReportControl';
+import { findToolBySlug } from '@/lib/tools/registry';
+import { buildResultDetails } from '@/lib/testing/resultDetails';
 
 export type { BannerStatus } from '@/lib/testing/resultPolicy';
 
@@ -14,6 +17,8 @@ export interface TestResultPayload {
   status: BannerStatus;
   details: string;
   metrics?: Record<string, unknown>;
+  /** Epoch ms when this verdict was observed (set by useTestResult; Phase 2 export). */
+  observedAt?: number;
 }
 
 interface TestResultBannerProps {
@@ -118,6 +123,13 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
   const metrics = result.metrics ? Object.entries(result.metrics).filter(([, v]) => v !== undefined && v !== '') : [];
   const attach = variant === 'attached';
   const shareUrl = typeof window !== 'undefined' ? window.location.origin + (toolSlug ? `/test/${toolSlug}` : window.location.pathname) : '';
+  // Phase 2 export: the registry definition provides honest "how obtained"
+  // and "limitations" text for the report. Attached banners only know the
+  // slug; registry lookup is a constant-time find.
+  const exportTool = toolSlug ? findToolBySlug(toolSlug) : undefined;
+  // Phase 2: expandable, test-specific explanation for the verdict. Derived
+  // from the registry definition — never invented; see resultDetails.ts.
+  const resultDetails = exportTool ? buildResultDetails(exportTool, result.status) : null;
 
   return (
     <div className={`${attach ? 'rounded-b-xl border-t-0' : 'mt-6 rounded-xl'} border p-4 ${styles.wrap}`} data-testid="test-result-banner">
@@ -135,6 +147,9 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {exportTool && (
+            <ExportReportControl tool={exportTool} result={result} />
+          )}
           {sharePayload && shareUrl && (
             <ShareButton payload={sharePayload} url={shareUrl} />
           )}
@@ -155,6 +170,40 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
           into the narrow column beside the share button. */}
       {result.details && (
         <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] mt-2 leading-relaxed break-words">{result.details}</p>
+      )}
+
+      {/* Phase 2: expandable test-specific explanation, between the summary
+          and the measurements. Honest, registry-derived lines — see
+          resultDetails.ts. Hidden entirely when no registry identity exists. */}
+      {resultDetails && (
+        <details className="mt-2 group/details">
+          <summary className="cursor-pointer select-none inline-flex items-center gap-1.5 text-xs font-semibold text-[#0F766E] dark:text-[#14B8A6] hover:underline [&::-webkit-details-marker]:hidden">
+            <ChevronDown className="w-3.5 h-3.5 transition-transform group-open/details:rotate-180" />
+            What this result means
+          </summary>
+          <div className="mt-2 space-y-2 text-xs text-[#59677D] dark:text-[#9AA6B8] leading-relaxed">
+            {resultDetails.sections.map((section) => (
+              <div key={section.heading}>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4]">{section.heading}</p>
+                <ul className="mt-1 space-y-0.5">
+                  {section.lines.map((line, i) => (
+                    <li key={i} className="break-words">{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {resultDetails.nextSteps.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4]">Next steps</p>
+                <ul className="mt-1 space-y-0.5">
+                  {resultDetails.nextSteps.map((step, i) => (
+                    <li key={i} className="break-words">{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </details>
       )}
 
       {/* Result details as a responsive grid: full width on all screens,
@@ -209,28 +258,28 @@ export function useTestResult(opts: ResultSink) {
   const emit = useCallback((status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
     const outcome = controller.emit(status, details, metrics);
     if (outcome.changed) {
-      setResult({ status, details: details ?? '', metrics });
+      setResult({ status, details: details ?? '', metrics, observedAt: Date.now() });
     }
   }, [controller]);
 
   const emitRun = useCallback((runToken: number, status: BannerStatus, details?: string, metrics?: Record<string, unknown>) => {
     const outcome = controller.emitRun(runToken, status, details, metrics);
     if (outcome.accepted && outcome.changed) {
-      setResult({ status, details: details ?? '', metrics });
+      setResult({ status, details: details ?? '', metrics, observedAt: Date.now() });
     }
   }, [controller]);
 
   const emitRich = useCallback((payload: TestResultPayload) => {
     const outcome = controller.emitRich(payload);
     if (outcome.changed) {
-      setResult(payload);
+      setResult({ ...payload, observedAt: payload.observedAt ?? Date.now() });
     }
   }, [controller]);
 
   const emitRunRich = useCallback((runToken: number, payload: TestResultPayload) => {
     const outcome = controller.emitRunRich(runToken, payload);
     if (outcome.accepted && outcome.changed) {
-      setResult(payload);
+      setResult({ ...payload, observedAt: payload.observedAt ?? Date.now() });
     }
   }, [controller]);
 

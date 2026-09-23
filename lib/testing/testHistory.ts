@@ -30,11 +30,15 @@ const HISTORY_KEY = 'devicetry_test_history';
 const MAX_ENTRIES = 50;
 
 /**
- * Strip anything that must never be persisted from a caller-provided
- * summary. Apply-safe: the output is a short single line of plain text.
+ * Strip anything that must never be persisted or exported from a
+ * caller-provided string. Apply-safe: the output is a single line of plain
+ * text with every forbidden class replaced by `[removed]`.
+ *
+ * Shared by local history (`sanitizeSummary`) and the Phase 2 local export
+ * (`lib/testing/exportReport.ts`) so both surfaces enforce ONE deny-list.
  */
-export function sanitizeSummary(raw: string): string {
-  const stripped = String(raw ?? '')
+export function stripPrivateValues(raw: string): string {
+  return String(raw ?? '')
     // IPv4 and IPv6-ish tokens (IP addresses must never be stored).
     .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[removed]')
     .replace(/\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi, '[removed]')
@@ -45,8 +49,14 @@ export function sanitizeSummary(raw: string): string {
     .replace(/\b[0-9a-f]{32,}\b/gi, '[removed]')
     // Newlines collapse to spaces so an entry is always one line.
     .replace(/[\r\n]+/g, ' ');
+}
 
-  return stripped.replace(/\s+/g, ' ').trim().slice(0, 140);
+/**
+ * Strip private values, collapse whitespace, and cap the length for the
+ * one-line history summary.
+ */
+export function sanitizeSummary(raw: string): string {
+  return stripPrivateValues(raw).replace(/\s+/g, ' ').trim().slice(0, 140);
 }
 
 function readAll(): TestHistoryEntry[] {
