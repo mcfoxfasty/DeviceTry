@@ -66,6 +66,7 @@ export const enTranslations: Translations = {
     contact: 'Contact',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
+    shareSite: 'Share DeviceTry',
   },
   hero: {
     badge: 'Privacy-First Browser Diagnostics',

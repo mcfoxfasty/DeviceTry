@@ -93,6 +93,7 @@ export interface Translations {
     contact: string;
     privacy: string;
     terms: string;
+    shareSite: string;
   };
   hero: {
     badge: string;

@@ -26,6 +26,7 @@ import { TOOLS_REGISTRY, ToolDefinition } from '@/lib/tools/registry';
 import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
 import { uiToolSearch } from '@/lib/tools/search';
 import { ThemeProvider, useTheme } from '@/lib/theme';
+import { ShareSiteButton } from '@/components/ui/ShareSiteButton';
 
 interface NavbarProps {
   t: Translations;
@@ -410,6 +411,11 @@ function NavbarInner({ t }: NavbarProps) {
             </p>
             <ThemeControl t={t} />
           </div>
+
+          {/* Share DeviceTry — public site URL only, Web Share first. */}
+          <div className="mt-3">
+            <ShareSiteButton variant="row" label={t.nav.shareSite} onShared={closeDrawers} />
+          </div>
         </div>
       </DrawerOverlay>
 
@@ -505,6 +511,11 @@ function NavbarInner({ t }: NavbarProps) {
               )}
             </>
           )}
+
+          {/* Share DeviceTry — pinned at the drawer bottom, public URL only. */}
+          <div className="mt-5 pt-3 border-t border-[#E8E3F2] dark:border-[#223043]">
+            <ShareSiteButton variant="row" label={t.nav.shareSite} onShared={closeDrawers} />
+          </div>
         </div>
       </DrawerOverlay>
     </>

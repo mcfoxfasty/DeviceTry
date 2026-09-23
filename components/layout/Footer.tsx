@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Lock, HardDrive, Cpu, ShieldCheck } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
+import { ShareSiteButton } from '@/components/ui/ShareSiteButton';
 
 interface FooterProps {
   t: Translations;
@@ -99,6 +100,10 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/privacy" className={linkClass}>{t.nav.privacy}</Link></li>
               <li><Link href="/terms" className={linkClass}>{t.nav.terms}</Link></li>
               <li><Link href="/contact" className={linkClass}>{t.nav.contact}</Link></li>
+              <li>
+                {/* Share DeviceTry — same public-URL-only share as the drawers. */}
+                <ShareSiteButton variant="link" label={t.nav.shareSite} />
+              </li>
             </ul>
           </div>
         </div>
