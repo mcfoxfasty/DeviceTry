@@ -7,7 +7,11 @@ import { Translations } from '@/lib/i18n/types';
 interface TesterProps {
   t?: Translations;
   locale?: string;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
 }
 
 interface FpsResult {
@@ -73,7 +77,20 @@ export function DisplayFpsTester({ onResultUpdate }: TesterProps) {
         };
         setResult(res);
         setMeasuring(false);
-        onResultUpdate?.('passed', `Estimated refresh rate ~${res.hz} Hz over ${res.totalFrames} frames`);
+        // Phase 3: numeric measurements ride with the verdict so the result
+        // banner can offer rerun comparison (previous Hz vs this run) and an
+        // honest CSV export. Values come only from the observed frame timing.
+        onResultUpdate?.(
+          'passed',
+          `Estimated refresh rate ~${res.hz} Hz over ${res.totalFrames} frames`,
+          {
+            estimatedHz: res.hz,
+            avgFrameMs: res.avgFrameMs,
+            droppedFrames: res.droppedFrames,
+            totalFrames: res.totalFrames,
+            measurement: 'requestAnimationFrame frame timing over a 3 s sample',
+          }
+        );
       }
     };
     rafRef.current = requestAnimationFrame(loop);

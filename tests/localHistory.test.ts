@@ -10,6 +10,7 @@ import {
   saveLocalInspection,
   getLocalInspections,
   clearAllLocalInspections,
+  updateLocalInspectionNotes,
 } from '../lib/testing/localHistory';
 import { TestResultItem } from '../lib/testing/reportStatus';
 
@@ -97,4 +98,55 @@ test('local history - unavailable localStorage returns saved:false (non-browser 
 
   const item = saveLocalInspection(SAMPLE);
   assert.equal(item.saved, false, 'missing localStorage must be reported as saved:false');
+});
+
+test('local history - updateLocalInspectionNotes edits only the target entry', () => {
+  const restore = installStorageStub();
+  try {
+    const a = saveLocalInspection({ ...SAMPLE, notes: 'before' });
+    const b = saveLocalInspection({ ...SAMPLE, deviceLabel: 'Other Laptop', notes: '' });
+
+    const ok = updateLocalInspectionNotes(a.id, 'hinge is firm; minor scratch on lid');
+    assert.equal(ok, true, 'a successful notes update reports true');
+
+    const all = getLocalInspections();
+    const updatedA = all.find((i) => i.id === a.id);
+    const untouchedB = all.find((i) => i.id === b.id);
+    assert.equal(updatedA?.notes, 'hinge is firm; minor scratch on lid');
+    assert.equal(untouchedB?.notes, '', 'other entries are not modified');
+    assert.equal(untouchedB?.deviceLabel, 'Other Laptop', 'other entry fields survive');
+  } finally {
+    restore();
+  }
+});
+
+test('local history - updateLocalInspectionNotes reports failure honestly', () => {
+  const restore = installStorageStub();
+  try {
+    // Seed a real entry with a working stub, THEN make subsequent writes fail
+    // (simulating a quota hit between the original save and the notes edit).
+    const a = saveLocalInspection({ ...SAMPLE, notes: 'original' });
+    const realSetItem = globalThis.localStorage.setItem.bind(globalThis.localStorage);
+    globalThis.localStorage.setItem = () => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    };
+
+    const ok = updateLocalInspectionNotes(a.id, 'changed');
+    assert.equal(ok, false, 'a rejected write must be reported as false, not assumed stored');
+
+    // Reader-only path still shows the unmodified stored entry.
+    globalThis.localStorage.setItem = realSetItem;
+    assert.equal(getLocalInspections().find((i) => i.id === a.id)?.notes, 'original');
+  } finally {
+    restore();
+  }
+});
+
+test('local history - updateLocalInspectionNotes without localStorage returns false', () => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: undefined,
+    configurable: true,
+    writable: true,
+  });
+  assert.equal(updateLocalInspectionNotes('any', 'text'), false);
 });

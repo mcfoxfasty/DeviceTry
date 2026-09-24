@@ -7,7 +7,11 @@ import { Translations } from '@/lib/i18n/types';
 interface ToolComponentProps {
   t: Translations;
   locale?: string;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
 }
 
 export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
@@ -65,10 +69,17 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
       // A CPS number is a score, not a verdict: report it neutrally
       // ("inconclusive") so an incomplete/zero run can never be presented
       // as a hardware "pass". The share layer may include the CPS score;
-      // the status itself never claims success.
-      onResultUpdate('inconclusive', `Result: ${finalCount} clicks (${computedCps} CPS)`);
+      // the status itself never claims success. Numeric metrics ride along
+      // for Phase 3 rerun comparison (previous run vs this one) — only the
+      // actually counted values, never inferred or ranked.
+      onResultUpdate('inconclusive', `Result: ${finalCount} clicks (${computedCps} CPS)`, {
+        clicks: finalCount,
+        cps: computedCps,
+        durationSeconds: elapsedSecs,
+        inputMode: mode === 'spacebar' ? 'spacebar' : 'mouse',
+      });
     }
-  }, [onResultUpdate]);
+  }, [onResultUpdate, mode]);
 
   const registerHit = useCallback(() => {
     if (status === 'finished') return;

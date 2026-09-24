@@ -20,7 +20,7 @@ import { MouseTester } from '../tests/MouseTester';
 import { DisplayTester } from '../tests/DisplayTester';
 import { GamepadTester } from '../tests/GamepadTester';
 import { BatteryTester } from '../tests/BatteryTester';
-import { saveLocalInspection } from '@/lib/testing/localHistory';
+import { saveLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/localHistory';
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
 
 interface GuidedInspectionFlowProps {
@@ -74,6 +74,11 @@ export function GuidedInspectionFlow({
   const [results, setResults] = useState<Record<string, TestResultItem>>({});
   const resultsRef = useRef<Record<string, TestResultItem>>({});
 
+  // The report id this run saved into (set on first finish). Going back and
+  // finishing again UPDATES the same local entry instead of creating a
+  // duplicate history row for one inspection run.
+  const savedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     resultsRef.current = results;
   }, [results]);
@@ -88,6 +93,7 @@ export function GuidedInspectionFlow({
     setResults({});
     resultsRef.current = {};
     setSaveError(null);
+    savedIdRef.current = null; // a new run is a new local history entry
   };
 
   const handleStepResult = (
@@ -132,6 +138,18 @@ export function GuidedInspectionFlow({
   const persistOnFinish = (currentResults: Record<string, TestResultItem>) => {
     const finalStatus = calculateReportStatus(suite.steps, currentResults);
     const saveRun = ++saveRunRef.current;
+    if (savedIdRef.current) {
+      // This run already saved once (user went back and re-finished):
+      // update the SAME history entry instead of duplicating it. Notes may
+      // have changed since the first save — sync them too.
+      const updated = updateLocalInspectionNotes(savedIdRef.current, notes);
+      if (!updated && saveRun === saveRunRef.current) {
+        setSaveError(
+          'The re-finished report could NOT be refreshed in your browser history. Local storage is unavailable or full — use Print / Save as PDF or Export JSON to keep a copy.'
+        );
+      }
+      return;
+    }
     const savedItem = saveLocalInspection({
       locale: 'en',
       deviceLabel: deviceLabel || 'Device',
@@ -140,6 +158,9 @@ export function GuidedInspectionFlow({
       testsResults: currentResults,
       notes,
     });
+    if (savedItem.saved) {
+      savedIdRef.current = savedItem.id;
+    }
     // saveLocalInspection returns saved:false when localStorage rejected the
     // write (quota exceeded, disabled storage). Surface it honestly — never
     // claim the report was stored when it was not.
@@ -310,27 +331,51 @@ export function GuidedInspectionFlow({
               </h3>
             </div>
 
-            {/* Stepper Dots */}
+            {/* Stepper Dots — status-aware: a dot's fill reflects the step's
+                recorded outcome (completed / skipped / inconclusive), so the
+                user can see at a glance which steps still need attention. */}
             <div className="flex items-center gap-2">
-              {suite.steps.map((st, i) => (
-                <div
-                  key={st}
-                  className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${
-                    i === activeStepIndex
-                      ? 'bg-[#0F766E] text-white ring-2 ring-emerald-300'
-                      : i < activeStepIndex
+              {suite.steps.map((st, i) => {
+                const stepResult = results[st];
+                const stepCls =
+                  i === activeStepIndex
+                    ? 'bg-[#0F766E] text-white ring-2 ring-emerald-300'
+                    : stepResult?.status === 'passed'
                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {i + 1}
-                </div>
-              ))}
+                      : stepResult?.status === 'warning'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        : stepResult?.status === 'failed'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                          : stepResult?.status === 'skipped' || stepResult?.status === 'inconclusive'
+                            ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 line-through'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+                return (
+                  <div
+                    key={st}
+                    title={
+                      stepResult
+                        ? `${st}: ${stepResult.status}`
+                        : `${st}: not evaluated yet`
+                    }
+                    className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${stepCls}`}
+                  >
+                    {i + 1}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Render Current Tester with pass/fail telemetry hook */}
           <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
+            {/* Revisit hint: going back to a step that already recorded a
+                result makes the rerun outcome explicit — a rerun replaces the
+                recorded value; nothing is merged or averaged. */}
+            {results[activeStepKey] && (
+              <p role="status" className="mb-4 px-3 py-2 rounded-lg bg-[#EEF7F5] dark:bg-[#133230] border border-[#0F766E]/30 text-[11px] font-medium text-[#0F766E] dark:text-[#14B8A6]">
+                This step already has a recorded result ({results[activeStepKey].status}). Running it again replaces that result — the report always keeps only the latest observation.
+              </p>
+            )}
             {activeStepKey === 'mic' && (
               <MicrophoneTester
                 t={t}
@@ -566,7 +611,15 @@ export function GuidedInspectionFlow({
               </label>
               <textarea
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(e) => {
+                  setNotes(e.target.value);
+                  // Keep the saved local history entry in sync with what the
+                  // user sees and prints. Best-effort: if storage fails, the
+                  // printed copy is still authoritative.
+                  if (savedIdRef.current) {
+                    updateLocalInspectionNotes(savedIdRef.current, e.target.value);
+                  }
+                }}
                 placeholder="Add physical condition notes (e.g., cosmetic scratches, hinge firmness, missing accessories)..."
                 rows={3}
                 className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md p-3 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"

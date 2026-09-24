@@ -7,10 +7,17 @@ import {
   SpeedSummary,
   SpeedPhase,
 } from '@/lib/testing/speedProvider';
+import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
 interface InternetSpeedTesterProps {
   /** Host telemetry sink — also feeds the shared banner (history + safe share). */
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  /** Host hook notified when the user clears/resets this tester's result. */
+  onResultClear?: () => void;
+  /** Forwarded to the banner to enable privacy-safe share + local history. */
+  toolId?: string;
+  toolTitle?: string;
+  toolSlug?: string;
 }
 
 interface SpeedState {
@@ -44,7 +51,15 @@ function Metric({ label, value, unit }: { label: string; value: number | null; u
  * provider adapter (lib/testing/speedProvider.ts); the UI never fabricates a
  * value — unavailable metrics render as "—". No test starts automatically.
  */
-export function InternetSpeedTester({ onResultUpdate }: InternetSpeedTesterProps) {
+export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, toolTitle, toolSlug }: InternetSpeedTesterProps) {
+  // Owns its banner (direct-mount in ToolRenderer): useTestResult keeps the
+  // last verdict visible (Phase 1 semantics) and forwards results + clears
+  // to the guided-inspection host exactly like the other direct testers.
+  const { result, emitRich, clear } = useTestResult({ onResultClear });
+  const recordResultRef = useRef(onResultUpdate);
+  useEffect(() => {
+    recordResultRef.current = onResultUpdate;
+  }, [onResultUpdate]);
   const [state, setState] = useState<SpeedState>({ phase: 'idle' });
   const [summary, setSummary] = useState<SpeedSummary>(EMPTY_SUMMARY);
   const controllerRef = useRef<CloudflareSpeedTestController | null>(null);
@@ -80,16 +95,28 @@ export function InternetSpeedTester({ onResultUpdate }: InternetSpeedTesterProps
         s.latencyMs !== null ? `latency ${s.latencyMs} ms` : null,
         s.jitterMs !== null ? `jitter ${s.jitterMs} ms` : null,
       ].filter(Boolean);
-      onResultUpdate?.(
-        'inconclusive',
+      const text =
         parts.length > 0
           ? `Measurement complete — ${parts.join(', ')}.`
-          : 'Measurement completed, but the engine returned no usable values.'
-      );
+          : 'Measurement completed, but the engine returned no usable values.';
+      // Phase 3: the completed measurement is emitted with ONLY the real
+      // numeric values, so the banner can offer rerun comparison and an
+      // honest CSV export. 'measurement' documents how values were obtained
+      // (text, so both features skip it). Status stays NEUTRAL — a finished
+      // download number is an observation, never a pass/fail verdict.
+      const metrics: Record<string, unknown> = {};
+      if (s.downloadMbps !== null) metrics.downloadMbps = s.downloadMbps;
+      if (s.uploadMbps !== null) metrics.uploadMbps = s.uploadMbps;
+      if (s.latencyMs !== null) metrics.latencyMs = s.latencyMs;
+      if (s.jitterMs !== null) metrics.jitterMs = s.jitterMs;
+      metrics.measurement = 'HTTP transfers via the Cloudflare measurement engine';
+      emitRich({ status: 'inconclusive', details: text, metrics });
+      recordResultRef.current?.('inconclusive', text);
     } else if (phase === 'error') {
-      onResultUpdate?.('failed', 'The measurement failed before completion — see the error above.');
+      emitRich({ status: 'failed', details: 'The measurement failed before completion — see the error above.' });
+      recordResultRef.current?.('failed', 'The measurement failed before completion — see the error above.');
     }
-  }, [onResultUpdate]);
+  }, [emitRich]);
 
   const start = useCallback(() => {
     if (state.phase === 'running') return;
@@ -194,7 +221,7 @@ export function InternetSpeedTester({ onResultUpdate }: InternetSpeedTesterProps
           network. Provider and privacy detail stay in the box below and on
           the privacy page. */}
       {state.phase === 'idle' && (
-        <p className="text-xs text-[#59677D] dark:text-[#9AA6B8] leading-relaxed max-w-2xl">
+        <p className="text-[11px] text-[#59677D] dark:text-[#9AA6B8] leading-relaxed max-w-2xl">
           Pressing Start transfers real data through Cloudflare&apos;s external
           measurement network — your connection carries the test traffic, and
           it can consume significant mobile data. Everything else on DeviceTry
@@ -219,6 +246,10 @@ export function InternetSpeedTester({ onResultUpdate }: InternetSpeedTesterProps
           internet-quality insights; see Cloudflare&apos;s documentation and the site privacy page.
         </p>
       </div>
+
+      {/* Shared verdict banner: measurement, safe share, history, export,
+          and Phase 3 rerun comparison — identical to every other tester. */}
+      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
     </div>
   );
 }

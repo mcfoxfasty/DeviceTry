@@ -68,8 +68,15 @@ export function ReactionTimeTester({ onResultUpdate, toolId, toolTitle, toolSlug
   const publishSession = useCallback(
     (s: ReactionSummary) => {
       if (s.median !== null) {
-        // Honest, neutral reporting: descriptive stats only.
-        emit('inconclusive', `Session complete — best ${Math.round(s.best ?? 0)} ms, median ${Math.round(s.median)} ms over ${ATTEMPTS_PER_SESSION} valid attempts.`);
+        // Honest, neutral reporting: descriptive stats only. Numeric metrics
+        // ride along for Phase 3 rerun comparison (previous session vs this
+        // one) and CSV export — nothing invented, only measured times.
+        emit('inconclusive', `Session complete — best ${Math.round(s.best ?? 0)} ms, median ${Math.round(s.median)} ms over ${ATTEMPTS_PER_SESSION} valid attempts.`, {
+          bestMs: s.best ?? 0,
+          medianMs: Math.round(s.median * 100) / 100,
+          validAttempts: s.times.length,
+          measurement: 'visual response timing (pointer/keyboard) over 5 attempts',
+        });
       }
     },
     [emit]

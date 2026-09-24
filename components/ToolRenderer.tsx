@@ -112,6 +112,10 @@ const DIRECT_MOUNT_TESTERS: ReadonlySet<string> = new Set([
   // Owns its internal banner; wrapping it in TesterWithBanner would render
   // two banners and its own verdict stream would bypass the host sink.
   'ReactionTimeTester',
+  // Owns its presentation but not a banner: the rich payload (with numeric
+  // measurements) must reach the shared banner for Phase 3 rerun comparison
+  // and CSV export. Lazily code-split, so TesterWithBanner must not wrap it.
+  'InternetSpeedTester',
 ]);
 
 /**

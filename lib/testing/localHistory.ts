@@ -66,6 +66,24 @@ export function deleteLocalInspection(id: string): void {
   }
 }
 
+/**
+ * Update only the notes of an already-saved inspection (the notes field is
+ * edited on the finished-report screen, after the automatic save). Returns
+ * false when the entry could not be updated (storage unavailable/rejected)
+ * so the caller can say so honestly instead of assuming it was stored.
+ */
+export function updateLocalInspectionNotes(id: string, notes: string): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    const existing = getLocalInspections();
+    const updated = existing.map((i) => (i.id === id ? { ...i, notes } : i));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function clearAllLocalInspections(): void {
   if (typeof window === 'undefined') return;
   try {

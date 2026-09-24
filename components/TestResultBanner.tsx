@@ -10,6 +10,7 @@ import { ShareButton } from '@/components/ui/ShareButton';
 import { ExportReportControl } from '@/components/ui/ExportReportControl';
 import { findToolBySlug } from '@/lib/tools/registry';
 import { buildResultDetails } from '@/lib/testing/resultDetails';
+import { compareToPrevious, formatDelta } from '@/lib/testing/compare';
 
 export type { BannerStatus } from '@/lib/testing/resultPolicy';
 
@@ -115,6 +116,44 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
     });
   }, [toolId, toolTitle, toolSlug, result]);
 
+  /**
+   * Phase 3: rerun comparison. When this tool's verdict carries numeric
+   * measurements, they are compared with the previous run's stored values
+   * (browser-local, lib/testing/compare.ts). Comparison is pure derivation
+   * from the accepted result, so it is computed in render (useMemo) — never
+   * via setState-in-effect. The matching write happens in the effect below,
+   * AFTER this read (render precedes effects), so deltas always describe
+   * the genuinely previous run.
+   */
+  const comparison = useMemo(() => {
+    if (!toolSlug || !result || result.status === 'skipped') return null;
+    const numeric = Object.fromEntries(
+      Object.entries(result.metrics ?? {}).filter(([, v]) => typeof v === 'number' && Number.isFinite(v))
+    );
+    if (Object.keys(numeric).length === 0) return null;
+    return compareToPrevious(toolSlug, numeric);
+  }, [toolSlug, result]);
+
+  /**
+   * Record the current run's numeric measurements once per distinct verdict.
+   * Identical re-emissions are skipped (dedupe key) so a polling tester
+   * cannot collapse the stored baseline into the current value.
+   */
+  const compareKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!toolSlug || !result || result.status === 'skipped') return;
+    const numeric = Object.fromEntries(
+      Object.entries(result.metrics ?? {}).filter(([, v]) => typeof v === 'number' && Number.isFinite(v))
+    );
+    if (Object.keys(numeric).length === 0) return;
+    const key = `${toolSlug}|${result.status}|${result.details}`;
+    if (compareKeyRef.current === key) return;
+    compareKeyRef.current = key;
+    import('@/lib/testing/compare').then(({ recordMeasurements }) =>
+      recordMeasurements(toolSlug, numeric, result.observedAt ?? Date.now())
+    );
+  }, [toolSlug, result]);
+
   // All hooks have run; only plain derivation and the conditional return
   // happen from here on.
   if (!result) return null;
@@ -219,6 +258,26 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
             </span>
           ))}
         </div>
+      )}
+
+      {/* Phase 3: neutral rerun comparison, shown only when numeric
+          measurements exist. Deltas are directional facts, never judgements —
+          "higher" is not automatically better for every measurement. */}
+      {comparison && (comparison.deltas.length > 0 || comparison.firstRecorded.length > 0) && (
+        <p className="mt-2 text-[10px] text-[#59677D] dark:text-[#9AA6B8] leading-relaxed">
+          {comparison.deltas.length > 0 && (
+            <>
+              Compared with your previous run:{' '}
+              {comparison.deltas.map((d) => `${d.key} ${formatDelta(d)} (${d.direction})`).join(' · ')}.{' '}
+            </>
+          )}
+          {comparison.firstRecorded.length > 0 && (
+            <>
+              First recorded: {comparison.firstRecorded.join(', ')} — no earlier run to compare yet.{' '}
+            </>
+          )}
+          Comparisons stay in this browser only.
+        </p>
       )}
     </div>
   );
