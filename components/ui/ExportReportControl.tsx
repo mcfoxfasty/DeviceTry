@@ -15,6 +15,7 @@ import {
   ExportReportData,
 } from '@/lib/testing/exportReport';
 import { buildPdf, pdfBlob, pdfFilename, reportLinesFromText } from '@/lib/testing/pdf';
+import { deliverOnce } from '@/lib/testing/deliver';
 import { SITE_URL } from '@/lib/site';
 
 interface ExportReportControlProps {
@@ -26,42 +27,33 @@ interface ExportReportControlProps {
 /**
  * Hand a generated file to the user without leaving the page.
  *
- * Delivery is browser-specific, and each branch is a real, working path:
- *  - Web Share with files (iOS Safari, most Android browsers) opens the
- *    system share sheet, where "Save to Files" produces a real PDF.
- *  - An object-URL download is the universal fallback; the anchor is a
- *    direct user-gesture activation, so no pop-up is involved and the tab
- *    never navigates. The test result stays exactly where it was.
+ * Exactly ONE file is produced per tap. See lib/testing/deliver.ts for the
+ * full rationale — in short, the Web Share `title` member used to produce a
+ * stray `text.txt` containing only the filename, and a share failure could
+ * also trigger a second download. The delivery decision itself lives in a
+ * tested module; this function only supplies the real browser surface.
  *
- * Neither path ever navigates the current tab: losing the result the user
- * came to export was the original defect.
+ * Neither path navigates the current tab: losing the result the user came to
+ * export was the original defect.
  */
 async function deliverFile(blob: Blob, filename: string): Promise<'share' | 'download'> {
-  const file = new File([blob], filename, { type: blob.type });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-  if (typeof nav.share === 'function' && typeof nav.canShare === 'function') {
-    try {
-      if (nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: filename });
-        return 'share';
-      }
-    } catch (err) {
-      // A user-cancelled share is not an error to report; anything else
-      // (not supported, permission) falls through to the download path.
-      if (err instanceof DOMException && err.name === 'AbortError') return 'share';
-    }
-  }
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return 'download';
+  const result = await deliverOnce(blob, filename, {
+    share: typeof nav.share === 'function' ? nav.share.bind(nav) : undefined,
+    canShare: typeof nav.canShare === 'function' ? nav.canShare.bind(nav) : undefined,
+    createObjectURL: (b) => URL.createObjectURL(b),
+    startDownload: (url, name) => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    },
+  });
+  return result.method;
 }
 
 /**

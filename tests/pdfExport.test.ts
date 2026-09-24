@@ -222,8 +222,12 @@ test('export flow - the PDF is generated locally from the previewed data', () =>
 });
 
 test('export flow - delivery prefers the share sheet and falls back to a download', () => {
-  assert.match(controlSource, /nav\.canShare\(\{ files: \[file\] \}\)/, 'file sharing is attempted when supported');
-  assert.match(controlSource, /a\.download = filename/, 'a real download anchor is the fallback');
+  // The delivery decision lives in lib/testing/deliver.ts and is covered
+  // behaviorally by tests/deliverOnce.test.ts. Here we only assert that the
+  // component wires the real browser surface into it, exactly once.
+  assert.match(controlSource, /await deliverOnce\(/, 'the single-file delivery module is used');
+  assert.match(controlSource, /canShare:[\s\S]{0,80}nav\.canShare\.bind\(nav\)/, 'canShare is supplied');
+  assert.match(controlSource, /a\.download = name/, 'the download anchor carries the filename');
   assert.match(controlSource, /pdfBlob\(bytes, model\.title\)/, 'a real PDF blob is produced');
 });
 
@@ -235,6 +239,12 @@ test('export flow - the text fallback is offered only after a failure and is nev
   assert.ok(
     !/>Download PDF report<\/[\s\S]{0,400}downloadTextReport\(\)/.test(controlSource),
     'the PDF button never triggers the text download'
+  );
+  // The PDF action must never pass a title to Web Share: that is what
+  // produced the stray text.txt (see lib/testing/deliver.ts).
+  assert.ok(
+    !/nav\.share\(\{[^}]*title/.test(controlSource),
+    'no title is passed to navigator.share'
   );
 });
 
