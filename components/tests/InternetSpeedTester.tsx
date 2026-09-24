@@ -6,6 +6,7 @@ import {
   CloudflareSpeedTestController,
   SpeedSummary,
   SpeedPhase,
+  describeSpeedPhase,
 } from '@/lib/testing/speedProvider';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 import type { SpeedPhaseInfo } from '@/lib/testing/speedProvider';
@@ -157,21 +158,12 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
   const running = state.phase === 'running';
 
   /**
-   * Defect 2: active-phase label derived ONLY from the engine's own
-   * onPhaseChange payload — a real step type, size, and position. When the
-   * engine has not reported a step (brief startup window), fall back to the
-   * neutral "Measuring…" text. Nothing here is fabricated or animated.
+   * Concise active-phase label derived ONLY from the engine's own
+   * onPhaseChange payload (lib/testing/speedProvider.describeSpeedPhase).
+   * Before the engine reports its first step it reads simply "Measuring…".
+   * Nothing here is fabricated or animated.
    */
-  const phaseLabel = useMemo(() => {
-    if (!running) return '';
-    if (!phaseInfo) return 'Measuring… stay on this tab';
-    const sizeMb = phaseInfo.bytes ? phaseInfo.bytes / 1_000_000 : null;
-    const what =
-      phaseInfo.type === 'latency'
-        ? 'latency'
-        : `${phaseInfo.type}${sizeMb !== null && sizeMb >= 1 ? ` (${Math.round(sizeMb)} MB per request)` : ''}`;
-    return `Measuring ${what} — step ${phaseInfo.step}/${phaseInfo.totalSteps}`;
-  }, [running, phaseInfo]);
+  const phaseLabel = useMemo(() => (running ? describeSpeedPhase(phaseInfo) : ''), [running, phaseInfo]);
 
   return (
     <div className="space-y-4">

@@ -50,6 +50,21 @@ export interface SpeedPhaseInfo {
   totalSteps: number;
 }
 
+/**
+ * Short, honest progress label for the running speed test.
+ *
+ * Concise by design (it sits in a narrow toolbar next to the buttons on a
+ * phone), but never vague: the engine's own step type and position are shown
+ * so the user can see WHICH phase is active. Nothing is invented — the input
+ * is exactly what the engine reported via onPhaseChange.
+ */
+export function describeSpeedPhase(info: SpeedPhaseInfo | null): string {
+  if (!info) return 'Measuring…';
+  const phase =
+    info.type === 'latency' ? 'Latency' : info.type === 'download' ? 'Download' : 'Upload';
+  return `Measuring ${phase.toLowerCase()} — ${info.step}/${info.totalSteps}`;
+}
+
 export interface SpeedTestEvents {
   onPhase(phase: SpeedPhase, error?: string): void;
   onProgress(summary: SpeedSummary): void;

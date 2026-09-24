@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mouse, RotateCcw, Zap } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { BoundedCpsRun, computeCps } from '@/lib/testing/clickSpeed';
 
 interface ToolComponentProps {
   t: Translations;
@@ -21,87 +22,119 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
   const [clicks, setClicks] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(5);
   const [cps, setCps] = useState<number>(0);
-  const startTimeRef = useRef<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The authoritative run. Click counting and timing live HERE, not in React
+   * state, so finishing a run never has to read state from inside a state
+   * updater — which is what produced "Cannot update TesterWithBanner while
+   * rendering ClickCounterTester". The component drives this from event
+   * handlers and timer ticks, then forwards the result from ordinary event
+   * context.
+   */
+  const runRef = useRef<BoundedCpsRun | null>(null);
+  // Latest host callback, read at event time so the timer never closes over
+  // a stale prop and no callback identity churn restarts the interval.
+  const onResultUpdateRef = useRef(onResultUpdate);
+  useEffect(() => {
+    onResultUpdateRef.current = onResultUpdate;
+  }, [onResultUpdate]);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  }, []);
 
   const resetTest = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    clearTimer();
     setStatus('idle');
     setClicks(0);
     setTimeLeft(duration);
     setCps(0);
-    startTimeRef.current = null;
-  }, [duration]);
+    runRef.current = null;
+  }, [duration, clearTimer]);
 
   // Changing configuration starts a fresh challenge: reset in the event
   // handler (allowed) instead of during render.
   const setDurationWithReset = useCallback(
     (sec: number) => {
       setDuration(sec);
-      if (timerRef.current) clearInterval(timerRef.current);
+      clearTimer();
       setStatus('idle');
       setClicks(0);
       setTimeLeft(sec);
       setCps(0);
-      startTimeRef.current = null;
+      runRef.current = null;
     },
-    []
+    [clearTimer]
   );
 
   const setModeWithReset = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    clearTimer();
     setStatus('idle');
     setClicks(0);
     setTimeLeft(duration);
     setCps(0);
-    startTimeRef.current = null;
-  }, [duration]);
+    runRef.current = null;
+  }, [duration, clearTimer]);
 
   // Reset on configuration change is handled by the config buttons above
   // (setDurationWithReset/setModeWithReset) — never during render.
 
-  const finishTest = useCallback((finalCount: number, elapsedSecs: number) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setStatus('finished');
-    const computedCps = elapsedSecs > 0 ? parseFloat((finalCount / elapsedSecs).toFixed(2)) : 0;
-    setCps(computedCps);
-    if (onResultUpdate && elapsedSecs > 0) {
-      // A completed bounded run produced a real counted value → 'measured'
-      // (defect 1). It is a neutral completed observation, NOT inconclusive
-      // (that now means genuinely unusable/incomplete) and never a pass/fail
-      // skill rating. The share layer may include the CPS score; the status
-      // itself claims neither success nor failure. Numeric metrics ride along
-      // for rerun comparison — only the actually counted values.
-      onResultUpdate('measured', `Result: ${finalCount} clicks (${computedCps} CPS)`, {
-        clicks: finalCount,
-        cps: computedCps,
-        durationSeconds: elapsedSecs,
-        inputMode: mode === 'spacebar' ? 'spacebar' : 'mouse',
-      });
-    }
-  }, [onResultUpdate, mode]);
+  /**
+   * End the run from an event/timer callback. The result is read from the
+   * run object and forwarded to the host HERE — outside every state
+   * updater — so no parent update happens during render.
+   */
+  const finishTest = useCallback(
+    (run: BoundedCpsRun) => {
+      clearTimer();
+      setStatus('finished');
+      const result = run.result(performance.now());
+      setClicks(result.clicks);
+      setCps(result.cps);
+      if (onResultUpdateRef.current && result.durationSeconds > 0) {
+        // A completed bounded run produced a real counted value → 'measured'.
+        // It is a neutral completed observation, NOT inconclusive (that now
+        // means genuinely unusable/incomplete) and never a pass/fail skill
+        // rating. Numeric metrics ride along for rerun comparison — only the
+        // actually counted values.
+        onResultUpdateRef.current(
+          'measured',
+          `Result: ${result.clicks} clicks (${result.cps} CPS)`,
+          {
+            clicks: result.clicks,
+            cps: result.cps,
+            durationSeconds: result.durationSeconds,
+            inputMode: result.inputMode,
+          }
+        );
+      }
+    },
+    [clearTimer]
+  );
 
   const registerHit = useCallback(() => {
     if (status === 'finished') return;
 
     if (status === 'idle') {
       setStatus('running');
-      startTimeRef.current = performance.now();
-      setClicks(1);
+      const run = new BoundedCpsRun(duration, mode);
+      runRef.current = run;
+      const count = run.hit(performance.now());
+      setClicks(count);
+      setCps(computeCps(count, run.elapsedSeconds(performance.now())));
 
       if (duration > 0) {
         setTimeLeft(duration);
         timerRef.current = setInterval(() => {
-          if (!startTimeRef.current) return;
-          const elapsed = (performance.now() - startTimeRef.current) / 1000;
-          const remaining = Math.max(0, duration - elapsed);
-          setTimeLeft(parseFloat(remaining.toFixed(1)));
-
-          if (remaining <= 0) {
-            setClicks((current) => {
-              finishTest(current, duration);
-              return current;
-            });
+          const active = runRef.current;
+          if (!active) return;
+          // Timer callback context: reading the run and calling the host is
+          // safe here — it is not a render or state-updater context.
+          const tick = active.tick(performance.now());
+          setTimeLeft(tick.remaining);
+          if (tick.finished) {
+            finishTest(active);
           }
         }, 50);
       }
@@ -109,18 +142,14 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     }
 
     if (status === 'running') {
-      setClicks((c) => {
-        const next = c + 1;
-        if (startTimeRef.current) {
-          const elapsed = (performance.now() - startTimeRef.current) / 1000;
-          if (elapsed > 0) {
-            setCps(parseFloat((next / elapsed).toFixed(2)));
-          }
-        }
-        return next;
-      });
+      const active = runRef.current;
+      if (!active) return;
+      const now = performance.now();
+      const next = active.hit(now);
+      setClicks(next);
+      setCps(active.liveCps(now));
     }
-  }, [status, duration, finishTest]);
+  }, [status, duration, mode, finishTest]);
 
   // Spacebar listener
   useEffect(() => {
@@ -133,6 +162,10 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, registerHit]);
+
+  // Departure must stop the countdown timer; it never forwards a result
+  // (an abandoned run produces no verdict).
+  useEffect(() => clearTimer, [clearTimer]);
 
   return (
     <div className="space-y-6">

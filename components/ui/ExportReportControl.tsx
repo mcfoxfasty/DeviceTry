@@ -23,6 +23,21 @@ interface ExportReportControlProps {
 }
 
 /**
+ * Escape text for safe insertion into the same-tab report document. The
+ * report body is user-adjacent text (tool summaries); it is inserted with
+ * textContent in the pop-up path and escaped here in the blob path, so no
+ * markup from a summary can ever become live HTML.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Phase 2 — reusable "Export report" control for a completed test verdict.
  *
  * Everything happens in the browser: the print report opens a scoped print
@@ -41,11 +56,17 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
   /** Observation time captured when the dialog opens (event-time, not render-time). */
   const [observedAt, setObservedAt] = useState<number | null>(null);
   /**
-   * Set when the browser blocked the print window and a plain-text report
-   * was downloaded instead. The dialog then says so plainly — a .txt file
-   * is NOT a PDF, and the user must not be told otherwise.
+   * Set when the browser blocked the print window AND the same-tab print
+   * fallback could not run either. The dialog then names the limitation
+   * plainly and offers the text report — a .txt file is never called a PDF.
    */
   const [txtFallback, setTxtFallback] = useState(false);
+  /**
+   * True when this browser cannot open a print surface at all (iOS Safari
+   * blocks pop-ups). The primary action is relabeled accordingly so the user
+   * is never promised a PDF the browser cannot produce here.
+   */
+  const [popupsBlocked, setPopupsBlocked] = useState(false);
 
   const data: ExportReportData = useMemo(
     () =>
@@ -68,7 +89,7 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const openPrintWindow = useCallback(() => {
+  const reportText = useCallback(() => {
     // Prefer the origin the test actually ran on: it is always the public
     // page the user is looking at, so a production report can never claim a
     // localhost URL. SITE_URL (a build-time constant that falls back to
@@ -78,35 +99,69 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
       typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
         ? window.location.origin
         : SITE_URL;
-    const report = buildPrintReport(data, origin || undefined);
+    return buildPrintReport(data, origin || undefined);
+  }, [data]);
+
+  const downloadTextReport = useCallback(() => {
+    // Honest last resort: a TEXT report. It is never described as a PDF.
+    const blob = new Blob([reportText()], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `devicetry-${data.toolSlug}-report.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTxtFallback(true);
+  }, [data.toolSlug, reportText]);
+
+  const openPrintWindow = useCallback(() => {
+    const report = reportText();
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>DeviceTry — Local Test Report</title>' +
+      '<style>body{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
+      'font-size:13px;line-height:1.55;margin:2rem;white-space:pre-wrap;color:#111;}' +
+      '@media print{@page{margin:16mm;}}</style>' +
+      '</head><body></body></html>';
+
     const win = window.open('', '_blank', 'noopener,noreferrer');
-    if (!win) {
-      // Popup blocked (common on iOS Safari): a plain-text report is
-      // downloaded instead. This is a TEXT file, not a PDF — the dialog
-      // states that explicitly rather than implying a PDF was produced.
-      const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `devicetry-${data.toolSlug}-report.txt`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setTxtFallback(true);
+    if (win) {
+      win.document.write(html);
+      win.document.body.textContent = report;
+      win.document.close();
+      win.focus();
+      win.print();
+      setTxtFallback(false);
       return;
     }
-    setTxtFallback(false);
-    win.document.write(
-      '<!doctype html><html><head><meta charset="utf-8"><title>' +
-        'DeviceTry — Local Test Report</title>' +
-        '<style>body{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
-        'font-size:13px;line-height:1.55;margin:2rem;white-space:pre-wrap;color:#111;}</style>' +
-        '</head><body></body></html>'
-    );
-    win.document.body.textContent = report;
-    win.document.close();
-    win.focus();
-    win.print();
-  }, [data]);
+
+    // Pop-up blocked — the normal case on iOS Safari, which only allows
+    // pop-ups from a real user gesture in the same tab. Navigate this tab to
+    // a blob URL instead: a same-tab navigation is NOT a pop-up, so iOS
+    // permits it, and the resulting page can print or share to PDF. The app
+    // state lives outside the URL, so going back returns the user to the
+    // test page exactly as it was.
+    setPopupsBlocked(true);
+    const blob = new Blob([html.replace('</body>', `<pre>${escapeHtml(report)}</pre></body>`)], {
+      type: 'text/html;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    try {
+      window.location.assign(url);
+      // If the navigation is refused, fall back to the text report rather
+      // than doing nothing at all.
+      setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          URL.revokeObjectURL(url);
+          downloadTextReport();
+        }
+      }, 1200);
+    } catch {
+      URL.revokeObjectURL(url);
+      downloadTextReport();
+    }
+  }, [reportText, downloadTextReport]);
 
   const downloadCsv = useCallback(() => {
     const csv = buildCsv(data);
@@ -230,13 +285,20 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
                   className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors cursor-pointer"
                 >
                   <FileText className="w-4 h-4" />
-                  Open print report (save as PDF)
+                  {popupsBlocked ? 'Open report in this tab (print or save as PDF)' : 'Open print report (save as PDF)'}
                 </button>
+                {popupsBlocked && !txtFallback && (
+                  <p role="status" className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+                    This browser blocks separate print windows, so the report opens in a new view
+                    in this tab. Use your device&apos;s Print action (or Share &rarr; Print) there
+                    to save it as a PDF, then go back to return to your test.
+                  </p>
+                )}
                 {txtFallback && (
                   <p role="status" className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-                    Your browser blocked the print window, so a plain-text (.txt) copy of this
-                    report was downloaded instead — it is not a PDF. Open the file, then use your
-                    device&apos;s Share or Print action to save it as a PDF if you need one.
+                    This browser would not open a print surface, so a plain-text (.txt) copy of
+                    this report was downloaded instead — it is not a PDF. Open the file, then use
+                    your device&apos;s Share or Print action to save it as a PDF if you need one.
                   </p>
                 )}
                 {csvAvailable && (
