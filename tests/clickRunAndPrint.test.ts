@@ -116,38 +116,29 @@ test('speed label - no payload sizes or word salad in the progress line', () => 
 /* 3. Honest, working print fallback on iOS                            */
 /* ------------------------------------------------------------------ */
 
-test('print fallback - a blocked print window falls back to a same-tab report, not a dead end', () => {
-  assert.match(exportControlSource, /window\.location\.assign\(url\)/, 'iOS path navigates the same tab (not a pop-up)');
-  assert.match(exportControlSource, /setPopupsBlocked\(true\)/, 'the dialog knows a pop-up was blocked');
-  assert.match(
-    exportControlSource,
-    /Open report in this tab \(print or save as PDF\)/,
-    'the action is relabeled for the same-tab path'
-  );
-  assert.match(
-    exportControlSource,
-    /Use your device(?:&apos;|')s Print action/,
-    'the user is told exactly how to get the PDF on iOS'
-  );
+test('print fallback - the export never navigates away from the test', () => {
+  // The same-tab blob navigation shipped in 567bdfb discarded the result the
+  // user came to export. The PDF is now generated in memory and delivered as
+  // a file, so no navigation, pop-up, or print() call is involved.
+  assert.ok(!/window\.location\.assign/.test(exportControlSource), 'the tab is never navigated');
+  assert.ok(!/window\.open\(/.test(exportControlSource), 'no pop-up window is opened');
+  assert.ok(!/\.print\(\)/.test(exportControlSource), 'no reliance on window.print()');
+  assert.ok(!/Open report in this tab/.test(exportControlSource), 'the navigation action is gone');
 });
 
 test('print fallback - the text report is only a last resort and is never called a PDF', () => {
-  assert.match(exportControlSource, /plain-text \(\.txt\) copy/, 'the notice says what was actually produced');
-  assert.match(exportControlSource, /it is not a PDF/);
-  // The TXT download must not be the first thing attempted.
-  const openIdx = exportControlSource.indexOf('const openPrintWindow');
-  const textIdx = exportControlSource.indexOf('const downloadTextReport');
-  assert.ok(openIdx >= 0 && textIdx >= 0);
+  assert.match(exportControlSource, /The PDF could not be created on this device/, 'failure is stated plainly');
+  assert.match(exportControlSource, /Download a plain-text \(\.txt\) report instead/);
+  assert.match(exportControlSource, /The \.txt file is not a PDF/);
   assert.ok(
-    /window\.open\('',\s*'_blank'/.test(exportControlSource),
-    'the pop-up print window is still tried first on browsers that allow it'
+    !/window\.open\('',\s*'_blank'/.test(exportControlSource),
+    'the unreliable pop-up path is not attempted at all'
   );
-});
-
-test('print fallback - the report is escaped before entering the same-tab document', () => {
-  assert.match(exportControlSource, /function escapeHtml/);
-  assert.match(exportControlSource, /escapeHtml\(report\)/, 'summary text cannot inject markup into the report page');
-  assert.match(exportControlSource, /\.replace\(/);
+  // The PDF action must never be wired to the text download.
+  assert.ok(
+    !/onClick=\{downloadTextReport\}[\s\S]{0,80}Download PDF/.test(exportControlSource),
+    'no PDF-labelled control triggers a text download'
+  );
 });
 
 test('print fallback - preview scope and device-label opt-in are unchanged', () => {

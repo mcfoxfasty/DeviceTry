@@ -14,6 +14,7 @@ import {
   previewMetrics,
   ExportReportData,
 } from '@/lib/testing/exportReport';
+import { buildPdf, pdfBlob, pdfFilename, reportLinesFromText } from '@/lib/testing/pdf';
 import { SITE_URL } from '@/lib/site';
 
 interface ExportReportControlProps {
@@ -23,18 +24,44 @@ interface ExportReportControlProps {
 }
 
 /**
- * Escape text for safe insertion into the same-tab report document. The
- * report body is user-adjacent text (tool summaries); it is inserted with
- * textContent in the pop-up path and escaped here in the blob path, so no
- * markup from a summary can ever become live HTML.
+ * Hand a generated file to the user without leaving the page.
+ *
+ * Delivery is browser-specific, and each branch is a real, working path:
+ *  - Web Share with files (iOS Safari, most Android browsers) opens the
+ *    system share sheet, where "Save to Files" produces a real PDF.
+ *  - An object-URL download is the universal fallback; the anchor is a
+ *    direct user-gesture activation, so no pop-up is involved and the tab
+ *    never navigates. The test result stays exactly where it was.
+ *
+ * Neither path ever navigates the current tab: losing the result the user
+ * came to export was the original defect.
  */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+async function deliverFile(blob: Blob, filename: string): Promise<'share' | 'download'> {
+  const file = new File([blob], filename, { type: blob.type });
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  if (typeof nav.share === 'function' && typeof nav.canShare === 'function') {
+    try {
+      if (nav.canShare({ files: [file] })) {
+        await nav.share({ files: [file], title: filename });
+        return 'share';
+      }
+    } catch (err) {
+      // A user-cancelled share is not an error to report; anything else
+      // (not supported, permission) falls through to the download path.
+      if (err instanceof DOMException && err.name === 'AbortError') return 'share';
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return 'download';
 }
 
 /**
@@ -61,12 +88,10 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
    * plainly and offers the text report — a .txt file is never called a PDF.
    */
   const [txtFallback, setTxtFallback] = useState(false);
-  /**
-   * True when this browser cannot open a print surface at all (iOS Safari
-   * blocks pop-ups). The primary action is relabeled accordingly so the user
-   * is never promised a PDF the browser cannot produce here.
-   */
-  const [popupsBlocked, setPopupsBlocked] = useState(false);
+  /** How the last PDF was delivered: system share sheet, or a download. */
+  const [delivery, setDelivery] = useState<'share' | 'download' | null>(null);
+  /** Set when PDF generation itself failed; the text report remains offered. */
+  const [pdfError, setPdfError] = useState(false);
 
   const data: ExportReportData = useMemo(
     () =>
@@ -114,54 +139,32 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
     setTxtFallback(true);
   }, [data.toolSlug, reportText]);
 
-  const openPrintWindow = useCallback(() => {
-    const report = reportText();
-    const html =
-      '<!doctype html><html><head><meta charset="utf-8">' +
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<title>DeviceTry — Local Test Report</title>' +
-      '<style>body{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
-      'font-size:13px;line-height:1.55;margin:2rem;white-space:pre-wrap;color:#111;}' +
-      '@media print{@page{margin:16mm;}}</style>' +
-      '</head><body></body></html>';
-
-    const win = window.open('', '_blank', 'noopener,noreferrer');
-    if (win) {
-      win.document.write(html);
-      win.document.body.textContent = report;
-      win.document.close();
-      win.focus();
-      win.print();
-      setTxtFallback(false);
-      return;
-    }
-
-    // Pop-up blocked — the normal case on iOS Safari, which only allows
-    // pop-ups from a real user gesture in the same tab. Navigate this tab to
-    // a blob URL instead: a same-tab navigation is NOT a pop-up, so iOS
-    // permits it, and the resulting page can print or share to PDF. The app
-    // state lives outside the URL, so going back returns the user to the
-    // test page exactly as it was.
-    setPopupsBlocked(true);
-    const blob = new Blob([html.replace('</body>', `<pre>${escapeHtml(report)}</pre></body>`)], {
-      type: 'text/html;charset=utf-8',
-    });
-    const url = URL.createObjectURL(blob);
+  /**
+   * Produce a REAL PDF in memory and hand it to the user. No pop-up, no
+   * tab navigation, no print() — so it behaves identically on iOS Safari,
+   * Android Chrome, and desktop, and the result stays on screen.
+   *
+   * The PDF is built from the same previewed data model the dialog shows,
+   * so a device label appears only if the user opted in.
+   */
+  const downloadPdf = useCallback(async () => {
+    setPdfError(false);
+    setDelivery(null);
     try {
-      window.location.assign(url);
-      // If the navigation is refused, fall back to the text report rather
-      // than doing nothing at all.
-      setTimeout(() => {
-        if (document.visibilityState === 'visible') {
-          URL.revokeObjectURL(url);
-          downloadTextReport();
-        }
-      }, 1200);
+      const text = reportText();
+      const model = reportLinesFromText(text);
+      const bytes = buildPdf({ title: model.title, lines: model.lines });
+      const blob = pdfBlob(bytes, model.title);
+      const filename = pdfFilename(data.toolSlug, data.observedAt);
+      const how = await deliverFile(blob, filename);
+      setDelivery(how);
+      setTxtFallback(false);
     } catch {
-      URL.revokeObjectURL(url);
-      downloadTextReport();
+      // A failed PDF must say so plainly and offer the text report, rather
+      // than silently doing nothing.
+      setPdfError(true);
     }
-  }, [reportText, downloadTextReport]);
+  }, [data.toolSlug, data.observedAt, reportText]);
 
   const downloadCsv = useCallback(() => {
     const csv = buildCsv(data);
@@ -281,24 +284,44 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
               <div className="mt-4 flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={openPrintWindow}
+                  onClick={downloadPdf}
                   className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors cursor-pointer"
                 >
                   <FileText className="w-4 h-4" />
-                  {popupsBlocked ? 'Open report in this tab (print or save as PDF)' : 'Open print report (save as PDF)'}
+                  Download PDF report
                 </button>
-                {popupsBlocked && !txtFallback && (
+                {delivery === 'share' && (
                   <p role="status" className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-                    This browser blocks separate print windows, so the report opens in a new view
-                    in this tab. Use your device&apos;s Print action (or Share &rarr; Print) there
-                    to save it as a PDF, then go back to return to your test.
+                    A real PDF was created and handed to your device&apos;s share sheet — choose
+                    &ldquo;Save to Files&rdquo; or a destination there. Your test result is still on
+                    this page.
                   </p>
                 )}
-                {txtFallback && (
+                {delivery === 'download' && !pdfError && (
+                  <p role="status" className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+                    The PDF was created in your browser and sent to your downloads. Nothing was
+                    uploaded, and this page did not navigate away.
+                  </p>
+                )}
+                {pdfError && (
+                  <div role="status" className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed space-y-1.5">
+                    <p>The PDF could not be created on this device. No file was produced.</p>
+                    <button
+                      type="button"
+                      onClick={downloadTextReport}
+                      className="underline underline-offset-2 cursor-pointer"
+                    >
+                      Download a plain-text (.txt) report instead
+                    </button>
+                    <p className="text-[#5F6B7A] dark:text-[#9AA6B8]">
+                      The .txt file is not a PDF, but it contains the same report text.
+                    </p>
+                  </div>
+                )}
+                {txtFallback && !pdfError && (
                   <p role="status" className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-                    This browser would not open a print surface, so a plain-text (.txt) copy of
-                    this report was downloaded instead — it is not a PDF. Open the file, then use
-                    your device&apos;s Share or Print action to save it as a PDF if you need one.
+                    A plain-text (.txt) copy of this report was downloaded. It is not a PDF — use
+                    the PDF button above for a real PDF.
                   </p>
                 )}
                 {csvAvailable && (
