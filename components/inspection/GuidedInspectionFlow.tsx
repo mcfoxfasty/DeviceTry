@@ -46,6 +46,17 @@ interface GuidedInspectionFlowProps {
 
 type TestKey = 'mic' | 'webcam' | 'speakers' | 'keyboard' | 'mouse' | 'display' | 'gamepad' | 'battery';
 
+const TEST_LABELS: Record<TestKey, string> = {
+  mic: 'Microphone',
+  webcam: 'Camera',
+  speakers: 'Speaker',
+  keyboard: 'Keyboard',
+  mouse: 'Mouse',
+  display: 'Display',
+  gamepad: 'Gamepad',
+  battery: 'Battery',
+};
+
 const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKey[] }> = {
   pre_call: {
     title: 'Pre-Call / Meeting Readiness (3 Mins)',
@@ -101,8 +112,9 @@ export function GuidedInspectionFlow({
   const activeStepKey = suite.steps[activeStepIndex];
   const isFinished = activeStepIndex >= suite.steps.length;
 
-  const startSuite = () => {
+  const startSuite = (key: string) => {
     saveRunRef.current += 1;
+    setSelectedSuiteKey(key);
     setActiveStepIndex(0);
     setResults({});
     resultsRef.current = {};
@@ -327,12 +339,10 @@ export function GuidedInspectionFlow({
                 {Object.entries(PRESET_SUITES).map(([k, s]) => (
                   <button
                     key={k}
-                    onClick={() => setSelectedSuiteKey(k)}
-                    className={`p-4 rounded-xl border text-left rtl:text-right transition-all cursor-pointer flex flex-col justify-between ${
-                      selectedSuiteKey === k
-                        ? 'border-[#0F766E] bg-[#E6F4F2]/30 dark:bg-[#133230]/40 ring-1 ring-[#0F766E]'
-                        : 'border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] hover:border-slate-400'
-                    }`}
+                    type="button"
+                    onClick={() => startSuite(k)}
+                    aria-label={`Start ${s.title} at step 1`}
+                    className="p-4 rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:shadow-sm text-left rtl:text-right transition-all cursor-pointer flex flex-col justify-between focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
                   >
                     <div>
                       <h4 className="font-semibold text-sm text-[#142033] dark:text-[#E9EEF4]">
@@ -352,50 +362,18 @@ export function GuidedInspectionFlow({
                         </span>
                       ))}
                     </div>
+                    <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#0F766E] dark:text-[#14B8A6]">
+                      Start at step 1
+                      <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Inspection Context Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#DFE5EB] dark:border-[#223043]">
-              <div>
-                <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
-                  {t.report.deviceIdentifier}
-                </label>
-                <input
-                  type="text"
-                  value={deviceLabel}
-                  onChange={(e) => setDeviceLabel(e.target.value)}
-                  placeholder={t.report.deviceIdentifierPlaceholder}
-                  className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
-                  {t.report.testedBy}
-                </label>
-                <input
-                  type="text"
-                  value={operatorName}
-                  onChange={(e) => setOperatorName(e.target.value)}
-                  placeholder="e.g. IT Technician / Staff"
-                  className="w-full text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                id="btn-start-inspection-flow"
-                onClick={startSuite}
-                className="px-6 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
-              >
-                {t.inspection.presetComprehensive}
-                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
-              </button>
-            </div>
+            <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+              Choose a checklist to open its first test immediately. Device and inspector details remain optional and can be added from any test step.
+            </p>
           </div>
         </div>
       )}
@@ -404,55 +382,115 @@ export function GuidedInspectionFlow({
       {activeStepIndex >= 0 && !isFinished && (
         <div className="space-y-6">
           {/* Progress Tracker Bar */}
-          <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-[11px] font-bold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-wider">
-                {suite.title}
-              </span>
-              <h3 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] mt-0.5">
-                {t.inspection.stepCount} ({activeStepIndex + 1} / {suite.steps.length}): {activeStepKey.toUpperCase()}
-              </h3>
+          <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold text-[#0F766E] dark:text-[#14B8A6] uppercase tracking-wider">
+                  {suite.title}
+                </span>
+                <h3 className="text-base font-bold text-[#142033] dark:text-[#E9EEF4] mt-0.5">
+                  {t.inspection.stepCount} ({activeStepIndex + 1} / {suite.steps.length}): {activeStepKey.toUpperCase()}
+                </h3>
+              </div>
+
+              <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
+                {activeStepKey === 'speakers'
+                  ? 'Use the Play controls in the speaker test to begin.'
+                  : `Use “Start ${TEST_LABELS[activeStepKey]} Test” in the test card to begin.`}
+              </p>
             </div>
 
-            {/* Stepper Dots — status-aware: a dot's fill reflects the step's
-                recorded outcome (completed / skipped / inconclusive), so the
-                user can see at a glance which steps still need attention. */}
-            <div className="flex items-center gap-2">
-              {suite.steps.map((st, i) => {
-                const stepResult = results[st];
-                const stepCls =
-                  i === activeStepIndex
-                    ? 'bg-[#0F766E] text-white ring-2 ring-emerald-300'
-                    : stepResult?.status === 'passed'
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                      : stepResult?.status === 'warning'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                        : stepResult?.status === 'failed'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
-                          : // 'measured' is a COMPLETED, neutral observation —
-                            // it gets its own completed marker and is never
-                            // confused with skipped/inconclusive (nothing
-                            // usable) or with an unevaluated step.
-                            stepResult?.status === 'measured'
+            {/* Previous, numbered steps, and Next stay together at the top so
+                the next action is visible before and after the test card. */}
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3" aria-label="Inspection step navigation">
+              <button
+                type="button"
+                onClick={() => setActiveStepIndex((prev) => Math.max(0, prev - 1))}
+                disabled={activeStepIndex === 0}
+                className="min-h-9 px-3 py-2 border border-[#DFE5EB] dark:border-[#223043] rounded-lg text-xs font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-slate-50 dark:hover:bg-[#192332] disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                Previous
+              </button>
+
+              <div className="flex items-center gap-2" aria-label={`Step ${activeStepIndex + 1} of ${suite.steps.length}`}>
+                {suite.steps.map((st, i) => {
+                  const stepResult = results[st];
+                  const stepCls =
+                    i === activeStepIndex
+                      ? 'bg-[#0F766E] text-white ring-2 ring-emerald-300'
+                      : stepResult?.status === 'passed'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : stepResult?.status === 'warning'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                          : stepResult?.status === 'failed'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                            : stepResult?.status === 'measured'
                               ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
                               : stepResult?.status === 'skipped' || stepResult?.status === 'inconclusive'
                                 ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 line-through'
                                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
-                return (
-                  <div
-                    key={st}
-                    title={
-                      stepResult
-                        ? `${st}: ${stepResult.status}`
-                        : `${st}: not evaluated yet`
-                    }
-                    className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${stepCls}`}
-                  >
-                    {i + 1}
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={st}
+                      title={
+                        stepResult
+                          ? `${st}: ${stepResult.status}`
+                          : `${st}: not evaluated yet`
+                      }
+                      aria-current={i === activeStepIndex ? 'step' : undefined}
+                      className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${stepCls}`}
+                    >
+                      {i + 1}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                id="btn-next-inspection-step"
+                type="button"
+                onClick={nextStep}
+                className="min-h-9 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                {activeStepIndex === suite.steps.length - 1 ? 'View Report' : t.common.next}
+                <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
+              </button>
             </div>
+
+            <details className="rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-[#F8FAFC] dark:bg-[#192332]">
+              <summary className="cursor-pointer text-xs font-semibold text-[#142033] dark:text-[#E9EEF4] px-3 py-2.5">
+                Inspection details (optional){deviceLabel || operatorName ? ' — added' : ''}
+              </summary>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-3 pb-3">
+                <div>
+                  <label htmlFor="guided-device-label" className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
+                    {t.report.deviceIdentifier}
+                  </label>
+                  <input
+                    id="guided-device-label"
+                    type="text"
+                    value={deviceLabel}
+                    onChange={(e) => setDeviceLabel(e.target.value)}
+                    placeholder={t.report.deviceIdentifierPlaceholder}
+                    className="w-full text-xs bg-white dark:bg-[#131B27] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="guided-operator-name" className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-1">
+                    {t.report.testedBy}
+                  </label>
+                  <input
+                    id="guided-operator-name"
+                    type="text"
+                    value={operatorName}
+                    onChange={(e) => setOperatorName(e.target.value)}
+                    placeholder="e.g. IT Technician / Staff"
+                    className="w-full text-xs bg-white dark:bg-[#131B27] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                  />
+                </div>
+              </div>
+            </details>
           </div>
 
           {/* Render Current Tester with pass/fail telemetry hook */}
@@ -493,6 +531,7 @@ export function GuidedInspectionFlow({
                 onRecordResult={(res) => handleStepResult('mic', res)}
                 onResultClear={() => clearStepResult('mic')}
                 onPermissionBlocked={(reason) => handleStepBlocked('mic', reason)}
+                startButtonLabel="Start Microphone Test"
               />
             )}
             {activeStepKey === 'webcam' && (
@@ -501,6 +540,7 @@ export function GuidedInspectionFlow({
                 onRecordResult={(res) => handleStepResult('webcam', res)}
                 onResultClear={() => clearStepResult('webcam')}
                 onPermissionBlocked={(reason) => handleStepBlocked('webcam', reason)}
+                startButtonLabel="Start Camera Test"
               />
             )}
             {activeStepKey === 'speakers' && (
@@ -515,6 +555,7 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('keyboard', res)}
                 onResultClear={() => clearStepResult('keyboard')}
+                startButtonLabel="Start Keyboard Test"
               />
             )}
             {activeStepKey === 'mouse' && (
@@ -522,6 +563,7 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('mouse', res)}
                 onResultClear={() => clearStepResult('mouse')}
+                startButtonLabel="Start Mouse Test"
               />
             )}
             {activeStepKey === 'display' && (
@@ -529,6 +571,7 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('display', res)}
                 onResultClear={() => clearStepResult('display')}
+                startButtonLabel="Start Display Test"
               />
             )}
             {activeStepKey === 'gamepad' && (
@@ -536,6 +579,7 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('gamepad', res)}
                 onResultClear={() => clearStepResult('gamepad')}
+                startButtonLabel="Start Gamepad Test"
               />
             )}
             {activeStepKey === 'battery' && (
@@ -543,40 +587,21 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('battery', res)}
                 onResultClear={() => clearStepResult('battery')}
+                startButtonLabel="Start Battery Test"
               />
             )}
 
-            {/* Step Advancement Controls */}
-            <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043] flex items-center justify-between">
+            {/* Navigation lives at the top; the test card keeps only the
+                always-available skip action. */}
+            <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043]">
               <button
+                id="btn-skip-inspection-step"
+                type="button"
                 onClick={skipStep}
                 className="px-4 py-2 text-xs font-medium text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] cursor-pointer"
               >
                 {t.inspection.skipTest}
               </button>
-
-              <div className="flex items-center gap-3">
-                {activeStepIndex > 0 && (
-                  <button
-                    onClick={() => setActiveStepIndex((prev) => prev - 1)}
-                    className="px-4 py-2 border border-[#DFE5EB] dark:border-[#223043] rounded-lg text-xs font-medium text-[#142033] dark:text-[#E9EEF4] hover:bg-slate-50 dark:hover:bg-[#192332] cursor-pointer flex items-center gap-1.5"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-                    Previous
-                  </button>
-                )}
-
-                <button
-                  id="btn-next-inspection-step"
-                  onClick={nextStep}
-                  className="px-6 py-2.5 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
-                >
-                  {activeStepIndex === suite.steps.length - 1
-                    ? t.inspection.finishInspection
-                    : t.inspection.viewReport}
-                  <ArrowRight className="w-4 h-4 rtl:rotate-180" />
-                </button>
-              </div>
             </div>
           </div>
         </div>

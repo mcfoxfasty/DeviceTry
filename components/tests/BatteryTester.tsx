@@ -14,6 +14,8 @@ interface BatteryTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
 }
 
 interface BatteryManager {
@@ -25,7 +27,7 @@ interface BatteryManager {
   removeEventListener: (type: string, listener: EventListener) => void;
 }
 
-export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTesterProps) {
+export function BatteryTester({ t, onRecordResult, onResultClear, startButtonLabel }: BatteryTesterProps) {
   const { result, emitRunRich, clear, invalidate, startRun, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -179,7 +181,7 @@ export function BatteryTester({ t, onRecordResult, onResultClear }: BatteryTeste
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-amber-500" />
-              Refresh Reading
+              {startButtonLabel ?? 'Refresh Reading'}
             </button>
             <button
               id="btn-reset-battery"

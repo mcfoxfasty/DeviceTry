@@ -9,11 +9,13 @@ interface DisplayTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
 }
 
 type PatternType = 'red' | 'green' | 'blue' | 'white' | 'black' | 'gray' | 'gradient' | 'grid';
 
-export function DisplayTester({ t, onRecordResult, onResultClear }: DisplayTesterProps) {
+export function DisplayTester({ t, onRecordResult, onResultClear, startButtonLabel }: DisplayTesterProps) {
   const [selectedPattern, setSelectedPattern] = useState<PatternType>('white');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [measuredHz, setMeasuredHz] = useState<number | null>(null);
@@ -155,7 +157,9 @@ export function DisplayTester({ t, onRecordResult, onResultClear }: DisplayTeste
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-xs rounded-lg transition-colors cursor-pointer"
           >
             <Maximize className="w-3.5 h-3.5" />
-            {isFullscreen ? t.displayTest.exitFullscreen : t.displayTest.launchFullscreen}
+            {isFullscreen
+              ? t.displayTest.exitFullscreen
+              : startButtonLabel ?? t.displayTest.launchFullscreen}
           </button>
         </div>
       </div>

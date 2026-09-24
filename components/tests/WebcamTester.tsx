@@ -26,6 +26,8 @@ interface WebcamTesterProps {
    * hardware.
    */
   onPermissionBlocked?: (reason: 'denied' | 'unavailable') => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
@@ -37,6 +39,7 @@ export function WebcamTester({
   onRecordResult,
   onResultClear,
   onPermissionBlocked,
+  startButtonLabel,
   toolId,
   toolTitle,
   toolSlug,
@@ -388,7 +391,9 @@ export function WebcamTester({
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
               <Camera className="w-4 h-4" />
-              {permissionState === 'requesting' ? t.common.loading : t.common.startTest}
+              {permissionState === 'requesting'
+                ? t.common.loading
+                : startButtonLabel ?? t.common.startTest}
             </button>
           ) : (
             <button

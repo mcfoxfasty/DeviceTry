@@ -5,7 +5,9 @@
  * so these checks pin the properties that make a guided run trustworthy:
  *  - permissions are requested only when a step is started, one at a time;
  *  - a denied or absent device is BLOCKED, never a failed device;
- *  - steps transition independently and a rerun replaces rather than appends;
+ *  - checklist cards open step 1 directly and every step has an explicit start action;
+ *  - Previous/Next sit with the numbered steps and report navigation is truthful;
+ *  - steps transition independently, preserve prior results, and a rerun replaces rather than appends;
  *  - the report separates browser observations from user confirmations,
  *    names what stays unverified, and never promises another app will work.
  */
@@ -231,6 +233,86 @@ test('transitions - blocked steps do not stop the run', () => {
   assert.match(flowSource, /handleStepBlocked[\s\S]{0,600}setActiveStepIndex|handleStepBlocked/, 'blocking records state only');
   assert.match(flowSource, /id="btn-next-inspection-step"/, 'the user can always move to the next step');
   assert.match(flowSource, /id="btn-skip-inspection-step"|\{t\.inspection\.skipTest\}/, 'or skip it');
+});
+
+test('selection - a checklist card opens its first step immediately', () => {
+  assert.match(
+    flowSource,
+    /onClick=\{\(\) => startSuite\(k\)\}/,
+    'the card itself starts the chosen suite'
+  );
+  assert.match(
+    flowSource,
+    /const startSuite = \(key: string\)[\s\S]{0,220}setSelectedSuiteKey\(key\)[\s\S]{0,100}setActiveStepIndex\(0\)/,
+    'starting selects the card and opens step 1 in the same action'
+  );
+  assert.doesNotMatch(flowSource, /id="btn-start-inspection-flow"/, 'the separate start button is gone');
+  assert.doesNotMatch(
+    flowSource,
+    /t\.inspection\.presetComprehensive/,
+    'the old Full Comprehensive Hardware Audit button is gone'
+  );
+  assert.match(flowSource, /Start at step 1/, 'each card states what clicking it will do');
+});
+
+test('steps - Pre-Call start controls name the specific test, while speakers keep Play controls', () => {
+  assert.match(flowSource, /startButtonLabel="Start Microphone Test"/);
+  assert.match(flowSource, /startButtonLabel="Start Camera Test"/);
+  assert.match(flowSource, /Use the Play controls in the speaker test to begin/);
+  assert.match(speakerSource, /id="btn-play-left-speaker"/);
+  assert.match(speakerSource, /id="btn-play-both-speakers"/);
+  assert.match(speakerSource, /id="btn-play-right-speaker"/);
+  assert.match(micSource, /startButtonLabel \?\? t\.micTest\.grantPermission/);
+  assert.match(camSource, /startButtonLabel \?\? t\.common\.startTest/);
+});
+
+test('navigation - Previous, step numbers, and Next are together at the top', () => {
+  const topNavStart = flowSource.indexOf('aria-label="Inspection step navigation"');
+  const firstTester = flowSource.indexOf("activeStepKey === 'mic' &&");
+  const nextButton = flowSource.indexOf('id="btn-next-inspection-step"');
+  assert.ok(topNavStart >= 0 && firstTester > topNavStart, 'top navigation renders before the tester');
+  assert.ok(nextButton > topNavStart && nextButton < firstTester, 'Next is in the top navigation');
+
+  const topNavEnd = flowSource.indexOf('<details', topNavStart);
+  const topNav = flowSource.slice(topNavStart, topNavEnd);
+  assert.match(topNav, /Previous/);
+  assert.match(topNav, /suite\.steps\.map/);
+  assert.doesNotMatch(topNav, /t\.inspection\.skipTest/, 'Skip is not mixed into top navigation');
+});
+
+test('navigation - Next stays Next until the final step, where it becomes View Report', () => {
+  assert.match(
+    flowSource,
+    /activeStepIndex === suite\.steps\.length - 1 \? 'View Report' : t\.common\.next/,
+    'only the final step changes the Next action to report review'
+  );
+  assert.doesNotMatch(flowSource, /t\.inspection\.viewReport/, 'the old Generated Inspection Report label is not used');
+  assert.doesNotMatch(flowSource, /t\.inspection\.finishInspection/, 'the old finish label is not used');
+  assert.equal((flowSource.match(/'View Report'/g) ?? []).length, 1, 'View Report appears once as an action');
+});
+
+test('details - optional device and inspector fields stay available in every active step', () => {
+  assert.match(flowSource, /<details[\s\S]{0,500}Inspection details \(optional\)/);
+  assert.match(flowSource, /id="guided-device-label"[\s\S]{0,180}value=\{deviceLabel\}/);
+  assert.match(flowSource, /id="guided-operator-name"[\s\S]{0,180}value=\{operatorName\}/);
+  assert.match(flowSource, /deviceLabel: deviceLabel \|\| undefined/, 'device details remain connected to the report');
+  assert.match(flowSource, /operatorName: operatorName \|\| undefined/, 'inspector details remain connected to the report');
+});
+
+test('reruns - Previous/Next navigation preserves every recorded step result', () => {
+  const previousHandler = flowSource.match(/onClick=\{\(\) => setActiveStepIndex\(\(prev\) => Math\.max\(0, prev - 1\)\)\}/);
+  assert.ok(previousHandler, 'Previous only changes the step index');
+  assert.match(flowSource, /const nextStep = \(\)[\s\S]{0,600}\.\.\.resultsRef\.current/, 'Next starts from recorded results');
+  assert.match(
+    flowSource,
+    /if \(!currentResults\[activeStepKey\]\)/,
+    'an untouched step is the only step added while advancing'
+  );
+  // Full resets are limited to starting a checklist or explicitly starting a
+  // New Inspection; neither Previous nor Next performs one.
+  assert.equal((flowSource.match(/setResults\(\{\}\)/g) ?? []).length, 2);
+  assert.match(flowSource, /const startSuite[\s\S]{0,300}setResults\(\{\}\)/);
+  assert.match(flowSource, /setResults\(\{\}\)[\s\S]{0,180}setActiveStepIndex\(-1\)/);
 });
 
 /* ------------------------------------------------------------------ */

@@ -14,6 +14,8 @@ interface GamepadTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
@@ -40,7 +42,7 @@ const BUTTON_LABELS = [
   'Guide / Home (16)',
 ];
 
-export function GamepadTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: GamepadTesterProps) {
+export function GamepadTester({ t, onRecordResult, onResultClear, startButtonLabel, toolId, toolTitle, toolSlug }: GamepadTesterProps) {
   const { result, emitRunRich, clear, startRun, invalidate, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -333,7 +335,9 @@ export function GamepadTester({ t, onRecordResult, onResultClear, toolId, toolTi
                 className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#0D665F] text-white text-xs font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50"
               >
                 <Crosshair className="w-3.5 h-3.5" />
-                {isCalibratingNeutral ? 'Measuring Idle Rest...' : 'Run Neutral Check'}
+                {isCalibratingNeutral
+                  ? 'Measuring Idle Rest...'
+                  : startButtonLabel ?? 'Run Neutral Check'}
               </button>
             </div>
 

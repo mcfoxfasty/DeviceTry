@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mouse, RotateCcw, AlertTriangle, CheckCircle, ArrowUpDown } from 'lucide-react';
+import { Mouse, RotateCcw, AlertTriangle, CheckCircle, ArrowUpDown, Play } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 
@@ -9,13 +9,15 @@ interface MouseTesterProps {
   t: Translations;
   onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
   toolSlug?: string;
 }
 
-export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: MouseTesterProps) {
+export function MouseTester({ t, onRecordResult, onResultClear, startButtonLabel, toolId, toolTitle, toolSlug }: MouseTesterProps) {
   const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -34,6 +36,7 @@ export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitl
   const [lastClickTime, setLastClickTime] = useState<number | null>(null);
   const [lastIntervalMs, setLastIntervalMs] = useState<number | null>(null);
   const [fastDoubleClicks, setFastDoubleClicks] = useState<number>(0);
+  const interactiveSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   // Live click emissions go through the controller directly: it dedupes
   // identical verdicts, and reset()/startRun() invalidate everything captured
@@ -110,6 +113,11 @@ export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitl
     reset();
   };
 
+  const startMouseTest = () => {
+    resetMetrics();
+    interactiveSurfaceRef.current?.focus();
+  };
+
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#DFE5EB] dark:border-[#223043]">
@@ -121,14 +129,27 @@ export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitl
           <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">{t.mouseTest.shortDesc}</p>
         </div>
 
-        <button
-          id="btn-reset-mouse"
-          onClick={resetMetrics}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          {t.mouseTest.resetCounter}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {startButtonLabel && (
+            <button
+              id="btn-start-mouse-test"
+              type="button"
+              onClick={startMouseTest}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0F766E] hover:bg-[#0D665F] text-white font-semibold text-xs rounded-md transition-colors cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5" />
+              {startButtonLabel}
+            </button>
+          )}
+          <button
+            id="btn-reset-mouse"
+            onClick={resetMetrics}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#E6F4F2] text-[#142033] dark:text-[#E9EEF4] text-xs font-medium rounded-md border border-[#DFE5EB] dark:border-[#223043] transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            {t.mouseTest.resetCounter}
+          </button>
+        </div>
       </div>
 
       {/* Button State Indicators & Mouse Diagram */}
@@ -185,6 +206,10 @@ export function MouseTester({ t, onRecordResult, onResultClear, toolId, toolTitl
       {/* Interactive Click Surface */}
       <div
         id="mouse-interactive-surface"
+        ref={interactiveSurfaceRef}
+        tabIndex={0}
+        role="group"
+        aria-label="Mouse test interaction area"
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.preventDefault()}

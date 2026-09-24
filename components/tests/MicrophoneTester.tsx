@@ -29,6 +29,8 @@ interface MicrophoneTesterProps {
    * never reported as faulty hardware.
    */
   onPermissionBlocked?: (reason: 'denied' | 'unavailable') => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
@@ -40,6 +42,7 @@ export function MicrophoneTester({
   onRecordResult,
   onResultClear,
   onPermissionBlocked,
+  startButtonLabel,
   toolId,
   toolTitle,
   toolSlug,
@@ -511,7 +514,9 @@ export function MicrophoneTester({
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
               <Mic className="w-4 h-4" />
-              {permissionState === 'requesting' ? t.micTest.requesting : t.micTest.grantPermission}
+              {permissionState === 'requesting'
+                ? t.micTest.requesting
+                : startButtonLabel ?? t.micTest.grantPermission}
             </button>
           ) : (
             <button

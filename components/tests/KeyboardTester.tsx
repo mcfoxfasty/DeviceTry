@@ -14,6 +14,8 @@ interface KeyboardTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /** Guided-inspection label so the user knows exactly which test to start. */
+  startButtonLabel?: string;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
@@ -131,7 +133,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ];
 
-export function KeyboardTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: KeyboardTesterProps) {
+export function KeyboardTester({ t, onRecordResult, onResultClear, startButtonLabel, toolId, toolTitle, toolSlug }: KeyboardTesterProps) {
   const { result, emit, clear, reset, startRun, invalidate } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -288,7 +290,7 @@ export function KeyboardTester({ t, onRecordResult, onResultClear, toolId, toolT
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
             >
               <Play className="w-4 h-4" />
-              {t.common.startTest}
+              {startButtonLabel ?? t.common.startTest}
             </button>
           ) : (
             <button
