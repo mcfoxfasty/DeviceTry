@@ -191,11 +191,17 @@ test('speed progress - an unrecognized measurement type is dropped, never invent
   }
 });
 
-test('speed progress - the UI shows provisional values under a clearly-labeled heading', () => {
-  assert.match(speedTesterSource, /Provisional values \(measurement in progress/);
+test('speed progress - the UI shows live values under a short label, never a long disclaimer', () => {
+  // The long "Provisional values (measurement in progress — ...)" sentence
+  // was replaced by a compact "Live" chip plus the current phase.
+  assert.ok(
+    !/Provisional values \(measurement in progress/.test(speedTesterSource),
+    'the long provisional disclaimer is gone'
+  );
+  assert.match(speedTesterSource, /\{phaseLabel\}/, 'the current phase is shown with the live values');
   assert.ok(
     !/setInterval|fake|simulate/.test(speedTesterSource),
-    'provisional values must come from engine callbacks, not a timer or simulation'
+    'live values must come from engine callbacks, not a timer or simulation'
   );
 });
 

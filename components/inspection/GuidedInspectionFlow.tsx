@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import Link from 'next/link';
 import { MicrophoneTester } from '../tests/MicrophoneTester';
 import { WebcamTester } from '../tests/WebcamTester';
 import { SpeakersTester } from '../tests/SpeakersTester';
@@ -22,6 +23,19 @@ import { GamepadTester } from '../tests/GamepadTester';
 import { BatteryTester } from '../tests/BatteryTester';
 import { saveLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/localHistory';
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
+import { buildPdf, pdfBlob, reportLinesFromText } from '@/lib/testing/pdf';
+import { deliverOnce } from '@/lib/testing/deliver';
+import {
+  attentionRows,
+  buildInspectionReport,
+  guidanceFor,
+  inspectionReportText,
+  needsAttention,
+  OUTCOME_LABEL,
+  stepOutcome,
+  SCOPE_NOTICE,
+  unverifiedSteps,
+} from '@/lib/inspection/stepOutcomes';
 
 interface GuidedInspectionFlowProps {
   t: Translations;
@@ -112,6 +126,29 @@ export function GuidedInspectionFlow({
 
     setResults((prev) => {
       const next = { ...prev, [key]: updated };
+      resultsRef.current = next;
+      return next;
+    });
+  };
+
+  /**
+   * A microphone/camera permission was refused, or the device was absent.
+   *
+   * This is recorded as BLOCKED, never as a failed device: the browser
+   * simply never got to observe the hardware, so calling the microphone or
+   * camera faulty would be a claim this page cannot support. The step stays
+   * in the report, the user can retry it, and the guidance explains how.
+   */
+  const handleStepBlocked = (key: TestKey, reason: 'denied' | 'unavailable') => {
+    const details =
+      reason === 'denied'
+        ? 'This browser blocked access to this device. The hardware was never tested.'
+        : 'No device was available to this browser. The hardware was never tested.';
+    setResults((prev) => {
+      const next = {
+        ...prev,
+        [key]: { status: 'unsupported', classification: 'blocked', details } as unknown as TestResultItem,
+      };
       resultsRef.current = next;
       return next;
     });
@@ -220,6 +257,52 @@ export function GuidedInspectionFlow({
   };
 
   const overallStatus = calculateReportStatus(suite.steps, results);
+
+  /**
+   * The honest view of this run: one row per step, separating what the
+   * browser observed from what the user confirmed, and naming whatever is
+   * still unverified. The on-screen report and the exported PDF are both
+   * built from these rows so they cannot disagree.
+   */
+  const reportRows = buildInspectionReport(suite.steps, results);
+  const attention = attentionRows(reportRows);
+  const unverified = unverifiedSteps(reportRows);
+
+  /**
+   * Export the run as a real, locally generated PDF.
+   *
+   * Deliberately not window.print(): printing is unreliable on iOS Safari
+   * and, when it is coerced into a blob navigation, it discards the report
+   * the user is reading. Generating the file keeps the same guarantees as
+   * the per-test export.
+   */
+  const downloadInspectionPdf = async () => {
+    const text = inspectionReportText({
+      suiteTitle: suite.title,
+      deviceLabel: deviceLabel || undefined,
+      operatorName: operatorName || undefined,
+      dateLabel: new Date().toLocaleDateString('en', { dateStyle: 'full' }),
+      rows: reportRows,
+    });
+    const model = reportLinesFromText(text);
+    const blob = pdfBlob(buildPdf({ title: model.title, lines: model.lines }), model.title);
+    const filename = `devicetry-inspection-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    await deliverOnce(blob, filename, {
+      share: typeof nav.share === 'function' ? nav.share.bind(nav) : undefined,
+      canShare: typeof nav.canShare === 'function' ? nav.canShare.bind(nav) : undefined,
+      createObjectURL: (b) => URL.createObjectURL(b),
+      startDownload: (url, name) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      },
+    });
+  };
 
   return (
     <div className="w-full">
@@ -382,11 +465,34 @@ export function GuidedInspectionFlow({
                 This step already has a recorded result ({results[activeStepKey].status}). Running it again replaces that result — the report always keeps only the latest observation.
               </p>
             )}
+            {/* A blocked or unfinished step explains itself where the user is,
+                with the concrete way forward and the site's own guide. The
+                user can always retry this step or move on — neither is a
+                dead end, and neither is recorded as a hardware failure. */}
+            {(() => {
+              const outcome = stepOutcome(results[activeStepKey]);
+              const guide = guidanceFor(activeStepKey, outcome);
+              if (!guide) return null;
+              return (
+                <div role="status" className="mb-4 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                  <p className="font-semibold">
+                    This check is {OUTCOME_LABEL[outcome].toLowerCase()} — it has not verified anything yet.
+                  </p>
+                  <p className="mt-1">{guide.nextStep}</p>
+                  {guide.guideHref && (
+                    <Link href={guide.guideHref} className="inline-block mt-1.5 underline underline-offset-2">
+                      {guide.guideLabel}
+                    </Link>
+                  )}
+                </div>
+              );
+            })()}
             {activeStepKey === 'mic' && (
               <MicrophoneTester
                 t={t}
                 onRecordResult={(res) => handleStepResult('mic', res)}
                 onResultClear={() => clearStepResult('mic')}
+                onPermissionBlocked={(reason) => handleStepBlocked('mic', reason)}
               />
             )}
             {activeStepKey === 'webcam' && (
@@ -394,6 +500,7 @@ export function GuidedInspectionFlow({
                 t={t}
                 onRecordResult={(res) => handleStepResult('webcam', res)}
                 onResultClear={() => clearStepResult('webcam')}
+                onPermissionBlocked={(reason) => handleStepBlocked('webcam', reason)}
               />
             )}
             {activeStepKey === 'speakers' && (
@@ -492,11 +599,11 @@ export function GuidedInspectionFlow({
             <div className="flex items-center gap-3">
               <button
                 id="btn-print-report"
-                onClick={() => window.print()}
+                onClick={() => void downloadInspectionPdf()}
                 className="px-4 py-2 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-xs"
               >
                 <Printer className="w-4 h-4" />
-                {t.report.printReport}
+                Download PDF report
               </button>
             </div>
 
@@ -611,6 +718,70 @@ export function GuidedInspectionFlow({
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Honest summary: what the browser saw, what the user confirmed,
+                and what is still unverified — kept apart on purpose. */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  label: 'Browser observations',
+                  value: reportRows.filter((r) => r.source === 'browser').length,
+                  hint: 'Signals this browser measured directly.',
+                },
+                {
+                  label: 'Your confirmations',
+                  value: reportRows.filter((r) => r.source === 'user').length,
+                  hint: 'What you reported hearing or seeing.',
+                },
+                {
+                  label: 'Still unverified',
+                  value: unverified.length,
+                  hint: 'Blocked, skipped, or left unfinished.',
+                },
+              ].map((card) => (
+                <div
+                  key={card.label}
+                  className="p-3 rounded-lg bg-[#F6F8FB] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]"
+                >
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]">
+                    {card.label}
+                  </p>
+                  <p className="text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] mt-0.5">{card.value}</p>
+                  <p className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] mt-0.5">{card.hint}</p>
+                </div>
+              ))}
+            </div>
+
+            {attention.length > 0 && (
+              <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800">
+                <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  {attention.length} check{attention.length === 1 ? '' : 's'} need attention
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {attention.map((row) => (
+                    <li key={row.step} className="text-[11px] text-amber-900 dark:text-amber-200">
+                      <span className="font-semibold">{row.label}</span> — {row.outcomeLabel.toLowerCase()}.
+                      {row.guidance?.nextStep && <> {row.guidance.nextStep}</>}
+                      {row.guidance?.guideHref && (
+                        <>
+                          {' '}
+                          <Link href={row.guidance.guideHref} className="underline underline-offset-2">
+                            {row.guidance.guideLabel}
+                          </Link>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Scope limit stated in the report itself, not buried in a guide:
+                a browser cannot observe any other application. */}
+            <div className="mt-4 p-4 rounded-lg bg-[#F6F8FB] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]">
+              <p className="text-xs font-bold text-[#142033] dark:text-[#E9EEF4]">What this report does not cover</p>
+              <p className="text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 leading-relaxed">{SCOPE_NOTICE}</p>
             </div>
 
             {/* Notes Section */}

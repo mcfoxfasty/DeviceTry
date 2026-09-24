@@ -22,13 +22,28 @@ interface MicrophoneTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /**
+   * Guided inspection only: fired when the browser refused microphone
+   * access or reported no input device. Lets the host record a BLOCKED
+   * step — distinct from a failed microphone — so a denied permission is
+   * never reported as faulty hardware.
+   */
+  onPermissionBlocked?: (reason: 'denied' | 'unavailable') => void;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
   toolSlug?: string;
 }
 
-export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: MicrophoneTesterProps) {
+export function MicrophoneTester({
+  t,
+  onRecordResult,
+  onResultClear,
+  onPermissionBlocked,
+  toolId,
+  toolTitle,
+  toolSlug,
+}: MicrophoneTesterProps) {
   const { result, emitRunRich, clear, reset, startRun, invalidate, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -40,6 +55,11 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, too
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [inputLevel, setInputLevel] = useState<number>(0);
   const [peakLevel, setPeakLevel] = useState<number>(0);
+  // Read at event time so the permission path never closes over a stale prop.
+  const onBlockedRef = useRef(onPermissionBlocked);
+  useEffect(() => {
+    onBlockedRef.current = onPermissionBlocked;
+  }, [onPermissionBlocked]);
 
   // Recording sample state
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -229,9 +249,13 @@ export function MicrophoneTester({ t, onRecordResult, onResultClear, toolId, too
         setPermissionState('denied');
         setErrorMessage(t.micTest.deniedMessage);
         setShowDeniedModal(true);
+        // Guided inspection needs to distinguish "the browser refused access"
+        // from "the microphone is faulty" — only the host can say that.
+        onBlockedRef.current?.('denied');
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setPermissionState('error');
         setErrorMessage(t.common.deviceUnavailable);
+        onBlockedRef.current?.('unavailable');
       } else {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);

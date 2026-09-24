@@ -234,16 +234,24 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
           <Metric label="Jitter" value={summary.jitterMs} unit="ms" />
         </div>
       )}
-      {/* Defect 2: during the run, show the engine's REAL current values as
-          clearly-labelled provisional readings. These are the same numbers
-          the engine reports via onResultsChange — nothing is animated,
-          extrapolated, or fabricated. A metric the engine has not produced
-          yet renders as "—". */}
+      {/* During the run, the engine's REAL current values are shown as live
+          readings. These are the same numbers onResultsChange reports —
+          nothing is animated, extrapolated, or fabricated. A metric the
+          engine has not produced yet renders as "—".
+
+          The short "Live" chip plus the toolbar's "Measuring… <phase>" label
+          is all the distinction these need from the finished grid below:
+          two words instead of a disclaimer sentence. The finished grid is
+          still the only one that counts as a result. */}
       {running && (
         <div>
-          <p className="text-[11px] font-semibold text-[#59677D] dark:text-[#9AA6B8] mb-1.5">
-            Provisional values (measurement in progress — final numbers may differ)
-          </p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-[#EAF4F2] dark:bg-[#0E1B1A] text-[#0F766E] dark:text-[#14B8A6]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E] dark:text-[#14B8A6] animate-pulse" />
+              Live
+            </span>
+            <span className="text-[11px] text-[#59677D] dark:text-[#9AA6B8]">{phaseLabel}</span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Metric label="Download" value={summary.downloadMbps} unit="Mbps" />
             <Metric label="Upload" value={summary.uploadMbps} unit="Mbps" />

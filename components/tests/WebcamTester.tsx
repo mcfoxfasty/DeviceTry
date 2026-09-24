@@ -19,13 +19,28 @@ interface WebcamTesterProps {
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
+  /**
+   * Guided inspection only: fired when the browser refused camera access or
+   * reported no camera. Lets the host record a BLOCKED step — distinct from
+   * a failed camera — so a denied permission is never reported as faulty
+   * hardware.
+   */
+  onPermissionBlocked?: (reason: 'denied' | 'unavailable') => void;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
   toolTitle?: string;
   toolSlug?: string;
 }
 
-export function WebcamTester({ t, onRecordResult, onResultClear, toolId, toolTitle, toolSlug }: WebcamTesterProps) {
+export function WebcamTester({
+  t,
+  onRecordResult,
+  onResultClear,
+  onPermissionBlocked,
+  toolId,
+  toolTitle,
+  toolSlug,
+}: WebcamTesterProps) {
   const { result, emitRunRich, clear, invalidate, startRun, currentRun } = useTestResult({
     onRecordResult,
     onResultClear,
@@ -35,6 +50,11 @@ export function WebcamTester({ t, onRecordResult, onResultClear, toolId, toolTit
   const [showDeniedModal, setShowDeniedModal] = useState<boolean>(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  // Read at event time so the permission path never closes over a stale prop.
+  const onBlockedRef = useRef(onPermissionBlocked);
+  useEffect(() => {
+    onBlockedRef.current = onPermissionBlocked;
+  }, [onPermissionBlocked]);
 
   // Video stream metrics
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null);
@@ -283,9 +303,12 @@ export function WebcamTester({ t, onRecordResult, onResultClear, toolId, toolTit
           setPermissionState('denied');
           setErrorMessage(t.common.permissionDenied);
           setShowDeniedModal(true);
+          // Guided inspection records a BLOCKED step, not a failed camera.
+          onBlockedRef.current?.('denied');
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
           setPermissionState('error');
           setErrorMessage(t.common.deviceUnavailable);
+          onBlockedRef.current?.('unavailable');
         } else {
           setPermissionState('error');
           setErrorMessage(error.message || t.common.error);
