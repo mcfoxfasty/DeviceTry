@@ -25,7 +25,11 @@ import type { TestResultPayload } from '@/components/TestResultBanner';
  * allowing a real metrics change through.
  */
 export interface ResultSink {
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
   onRecordResult?: (result: { status: ForwardableStatus; details: string; metrics?: Record<string, unknown> }) => void;
   /** Optional: host must drop the recorded result for this run (explicit reset, retest, device change). */
   onResultClear?: () => void;

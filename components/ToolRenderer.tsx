@@ -43,7 +43,7 @@ const LazyInternetSpeedTester = dynamic(() => import('./tests/InternetSpeedTeste
   ),
 });
 
-export type ToolResultStatus = 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
+export type ToolResultStatus = 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported';
 
 export interface ToolResultPayload {
   status: ToolResultStatus;

@@ -3,6 +3,7 @@ export type TestResultStatus =
   | 'warning'
   | 'failed'
   | 'inconclusive'
+  | 'measured'
   | 'unsupported'
   | 'skipped';
 
@@ -50,6 +51,7 @@ export function calculateReportStatus(
   }
 
   // 2. Any skipped, unsupported, or inconclusive test results in inconclusive
+  //    ('measured' is a COMPLETED observation — it does not degrade the report)
   if (statuses.some((s) => s === 'skipped' || s === 'unsupported' || s === 'inconclusive')) {
     return 'inconclusive';
   }
@@ -59,8 +61,9 @@ export function calculateReportStatus(
     return 'warning';
   }
 
-  // 4. Passed only if 100% of required tests explicitly passed
-  if (statuses.every((s) => s === 'passed')) {
+  // 4. Passed only if 100% of required tests explicitly passed ('measured'
+  //    steps are complete-but-neutral observations, not pass/fail claims)
+  if (statuses.every((s) => s === 'passed' || s === 'measured')) {
     return 'passed';
   }
 

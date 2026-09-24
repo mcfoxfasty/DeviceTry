@@ -14,7 +14,7 @@ import {
 
 interface SpeakersTesterProps {
   t: Translations;
-  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) => void;
+  onRecordResult?: (result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured'; details: string; metrics?: Record<string, unknown> }) => void;
   onResultClear?: () => void;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;

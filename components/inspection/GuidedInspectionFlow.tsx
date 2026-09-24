@@ -99,7 +99,7 @@ export function GuidedInspectionFlow({
   const handleStepResult = (
     key: TestKey,
     res: {
-      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
+      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported';
       details: string;
       metrics?: Record<string, unknown>;
     }
@@ -346,9 +346,15 @@ export function GuidedInspectionFlow({
                         ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                         : stepResult?.status === 'failed'
                           ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
-                          : stepResult?.status === 'skipped' || stepResult?.status === 'inconclusive'
-                            ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 line-through'
-                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+                          : // 'measured' is a COMPLETED, neutral observation —
+                            // it gets its own completed marker and is never
+                            // confused with skipped/inconclusive (nothing
+                            // usable) or with an unevaluated step.
+                            stepResult?.status === 'measured'
+                              ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
+                              : stepResult?.status === 'skipped' || stepResult?.status === 'inconclusive'
+                                ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 line-through'
+                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
                 return (
                   <div
                     key={st}
@@ -581,6 +587,9 @@ export function GuidedInspectionFlow({
                                 ? 'bg-amber-100 text-amber-800'
                                 : res.status === 'failed'
                                 ? 'bg-red-100 text-red-800'
+                                : // A completed measurement is neutral, not a pass.
+                                res.status === 'measured'
+                                ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
                                 : 'bg-slate-100 text-slate-700'
                             }`}
                           >

@@ -8,7 +8,7 @@ interface ToolComponentProps {
   t: Translations;
   locale?: string;
   onResultUpdate?: (
-    status: 'passed' | 'warning' | 'failed' | 'inconclusive',
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured',
     details?: string,
     metrics?: Record<string, unknown>
   ) => void;
@@ -66,13 +66,13 @@ export function ClickCounterTester({ onResultUpdate }: ToolComponentProps) {
     const computedCps = elapsedSecs > 0 ? parseFloat((finalCount / elapsedSecs).toFixed(2)) : 0;
     setCps(computedCps);
     if (onResultUpdate && elapsedSecs > 0) {
-      // A CPS number is a score, not a verdict: report it neutrally
-      // ("inconclusive") so an incomplete/zero run can never be presented
-      // as a hardware "pass". The share layer may include the CPS score;
-      // the status itself never claims success. Numeric metrics ride along
-      // for Phase 3 rerun comparison (previous run vs this one) — only the
-      // actually counted values, never inferred or ranked.
-      onResultUpdate('inconclusive', `Result: ${finalCount} clicks (${computedCps} CPS)`, {
+      // A completed bounded run produced a real counted value → 'measured'
+      // (defect 1). It is a neutral completed observation, NOT inconclusive
+      // (that now means genuinely unusable/incomplete) and never a pass/fail
+      // skill rating. The share layer may include the CPS score; the status
+      // itself claims neither success nor failure. Numeric metrics ride along
+      // for rerun comparison — only the actually counted values.
+      onResultUpdate('measured', `Result: ${finalCount} clicks (${computedCps} CPS)`, {
         clicks: finalCount,
         cps: computedCps,
         durationSeconds: elapsedSecs,

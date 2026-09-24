@@ -9,7 +9,7 @@ import { CalibrationTracker, DRIFT_THRESHOLD, DriftVerdict } from '@/lib/testing
 interface GamepadTesterProps {
   t: Translations;
   onRecordResult?: (result: {
-    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured';
     details: string;
     metrics?: Record<string, unknown>;
   }) => void;

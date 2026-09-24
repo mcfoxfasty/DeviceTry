@@ -24,10 +24,17 @@ function createRecorder(): ResultSink & {
     updates: [] as Array<{ status: string; details?: string }>,
     records: [] as Array<{ status: string; details: string; metrics?: Record<string, unknown> }>,
     clears: 0,
-    onResultUpdate(status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) {
+    onResultUpdate(
+      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+      details?: string
+    ) {
       recorder.updates.push({ status, details });
     },
-    onRecordResult(result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string; metrics?: Record<string, unknown> }) {
+    onRecordResult(result: {
+      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured';
+      details: string;
+      metrics?: Record<string, unknown>;
+    }) {
       recorder.records.push({ status: result.status, details: result.details, metrics: result.metrics });
     },
     onResultClear() {

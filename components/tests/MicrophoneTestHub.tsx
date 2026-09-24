@@ -11,13 +11,13 @@ interface MicrophoneTestHubProps {
   t: Translations;
   /** Rich payload hook used by the Level & Waveform tab. */
   onRecordResult?: (result: {
-    status: 'passed' | 'warning' | 'failed' | 'inconclusive';
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured';
     details: string;
     metrics?: Record<string, unknown>;
   }) => void;
   onResultClear?: () => void;
   /** Telemetry hook for the Pitch Detector and Recorder tabs. */
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported', details?: string) => void;
   /** Initial tab (migration deep links use ?tab=pitch etc.). */
   initialTab?: string;
   /** Registry identity forwarded to the in-card banner (safe share + history). */

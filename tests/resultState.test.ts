@@ -16,10 +16,16 @@ function createRecorder(): ResultSink & {
   const recorder = {
     updates: [] as Array<{ status: string; details?: string }>,
     records: [] as Array<{ status: string; details: string }>,
-    onResultUpdate(status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) {
+    onResultUpdate(
+      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+      details?: string
+    ) {
       recorder.updates.push({ status, details });
     },
-    onRecordResult(result: { status: 'passed' | 'warning' | 'failed' | 'inconclusive'; details: string }) {
+    onRecordResult(result: {
+      status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured';
+      details: string;
+    }) {
       recorder.records.push({ status: result.status, details: result.details });
     },
   };

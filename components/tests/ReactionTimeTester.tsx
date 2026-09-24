@@ -13,8 +13,9 @@ import {
 interface ReactionTimeTesterProps {
   t?: Translations;
   onResultUpdate?: (
-    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported',
-    details?: string
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
   ) => void;
   /** Registry identity for the in-card banner's safe share + history. */
   toolId?: string;
@@ -68,10 +69,10 @@ export function ReactionTimeTester({ onResultUpdate, toolId, toolTitle, toolSlug
   const publishSession = useCallback(
     (s: ReactionSummary) => {
       if (s.median !== null) {
-        // Honest, neutral reporting: descriptive stats only. Numeric metrics
-        // ride along for Phase 3 rerun comparison (previous session vs this
-        // one) and CSV export — nothing invented, only measured times.
-        emit('inconclusive', `Session complete — best ${Math.round(s.best ?? 0)} ms, median ${Math.round(s.median)} ms over ${ATTEMPTS_PER_SESSION} valid attempts.`, {
+        // Honest, neutral reporting: descriptive stats only. A completed
+        // session with real times is 'measured' (defect 1) — not a pass/fail
+        // rating and not "inconclusive" (reserved for unusable runs).
+        emit('measured', `Session complete — best ${Math.round(s.best ?? 0)} ms, median ${Math.round(s.median)} ms over ${ATTEMPTS_PER_SESSION} valid attempts.`, {
           bestMs: s.best ?? 0,
           medianMs: Math.round(s.median * 100) / 100,
           validAttempts: s.times.length,

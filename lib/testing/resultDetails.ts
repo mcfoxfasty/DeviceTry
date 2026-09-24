@@ -52,6 +52,8 @@ function statusLabel(status: BannerStatus): string {
       return 'failed';
     case 'warning':
       return 'passed with caveats';
+    case 'measured':
+      return 'completed with a measured value';
     case 'inconclusive':
       return 'inconclusive';
     case 'unsupported':
@@ -98,6 +100,11 @@ export function buildResultDetails(
   if (status === 'inconclusive' || status === 'skipped') {
     meaning.push(
       'No usable measurement was captured this run, so no pass or fail is claimed.'
+    );
+  }
+  if (status === 'measured') {
+    meaning.push(
+      'The run completed and produced a real measured value. It is a neutral observation — not a pass/fail rating of your hardware or skill.'
     );
   }
   if (status === 'unsupported') {

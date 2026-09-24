@@ -18,7 +18,7 @@ export interface TestHistoryEntry {
   slug: string;
   /** Human title, e.g. "Webcam Test". */
   title: string;
-  status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
+  status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported';
   /** One safe sentence — sanitized (see sanitizeSummary). */
   summary: string;
   /** Epoch ms. */

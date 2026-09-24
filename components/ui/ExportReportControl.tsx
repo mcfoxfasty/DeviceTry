@@ -40,6 +40,12 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
   const [includeSensitive, setIncludeSensitive] = useState(false);
   /** Observation time captured when the dialog opens (event-time, not render-time). */
   const [observedAt, setObservedAt] = useState<number | null>(null);
+  /**
+   * Set when the browser blocked the print window and a plain-text report
+   * was downloaded instead. The dialog then says so plainly — a .txt file
+   * is NOT a PDF, and the user must not be told otherwise.
+   */
+  const [txtFallback, setTxtFallback] = useState(false);
 
   const data: ExportReportData = useMemo(
     () =>
@@ -63,13 +69,21 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
   }, [open]);
 
   const openPrintWindow = useCallback(() => {
-    // SITE_URL is a build-time constant; resolving it at event time (not
-    // during render) keeps the component pure and avoids hydration drift.
-    const report = buildPrintReport(data, SITE_URL || undefined);
+    // Prefer the origin the test actually ran on: it is always the public
+    // page the user is looking at, so a production report can never claim a
+    // localhost URL. SITE_URL (a build-time constant that falls back to
+    // http://localhost:3000 when NEXT_PUBLIC_SITE_URL is unset) is only the
+    // fallback for non-browser callers.
+    const origin =
+      typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
+        ? window.location.origin
+        : SITE_URL;
+    const report = buildPrintReport(data, origin || undefined);
     const win = window.open('', '_blank', 'noopener,noreferrer');
     if (!win) {
-      // Popup blocked: fall back to the browser print dialog on this page —
-      // the report is still produced, only less pretty. Honest fallback.
+      // Popup blocked (common on iOS Safari): a plain-text report is
+      // downloaded instead. This is a TEXT file, not a PDF — the dialog
+      // states that explicitly rather than implying a PDF was produced.
       const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -77,8 +91,10 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
       a.download = `devicetry-${data.toolSlug}-report.txt`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTxtFallback(true);
       return;
     }
+    setTxtFallback(false);
     win.document.write(
       '<!doctype html><html><head><meta charset="utf-8"><title>' +
         'DeviceTry — Local Test Report</title>' +
@@ -216,6 +232,13 @@ export function ExportReportControl({ tool, result }: ExportReportControlProps) 
                   <FileText className="w-4 h-4" />
                   Open print report (save as PDF)
                 </button>
+                {txtFallback && (
+                  <p role="status" className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+                    Your browser blocked the print window, so a plain-text (.txt) copy of this
+                    report was downloaded instead — it is not a PDF. Open the file, then use your
+                    device&apos;s Share or Print action to save it as a PDF if you need one.
+                  </p>
+                )}
                 {csvAvailable && (
                   <button
                     type="button"

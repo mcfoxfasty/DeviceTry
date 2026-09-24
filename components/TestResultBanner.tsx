@@ -49,6 +49,13 @@ const STATUS_STYLES: Record<BannerStatus, { wrap: string; pill: string; icon: st
     pill: 'bg-amber-500 text-white',
     icon: 'text-amber-600 dark:text-amber-400',
   },
+  measured: {
+    // Completed, neutral measurement — distinct hue from inconclusive (slate):
+    // teal matches the site's "informational, no judgement" accent.
+    wrap: 'bg-[#EAF4F2] dark:bg-[#0E1B1A] border-[#0F766E]/30 dark:border-[#14B8A6]/30',
+    pill: 'bg-[#0F766E] text-white',
+    icon: 'text-[#0F766E] dark:text-[#14B8A6]',
+  },
   inconclusive: {
     wrap: 'bg-slate-50 dark:bg-[#192332] border-[#DFE5EB] dark:border-[#223043]',
     pill: 'bg-slate-500 text-white',
@@ -180,7 +187,7 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
           <ClipboardCheck className={`w-5 h-5 shrink-0 ${styles.icon}`} />
           <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] min-w-0">
             Test result
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${styles.pill}`}>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${styles.pill}`}>
               {result.status}
             </span>
           </p>
@@ -248,11 +255,11 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
       {/* Result details as a responsive grid: full width on all screens,
           2 columns on phones, 3/4 as space allows. */}
       {metrics.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
           {metrics.map(([key, value]) => (
             <span
               key={key}
-              className="font-mono-num text-[10px] font-semibold bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-2 py-1 text-[#142033] dark:text-[#E9EEF4] break-all"
+              className="font-mono-num text-[10px] font-semibold bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] rounded-md px-2 py-1 text-[#142033] dark:text-[#E9EEF4] break-words min-w-0 [overflow-wrap:anywhere]"
             >
               {key}: {String(value)}
             </span>
@@ -387,7 +394,11 @@ interface TesterWithBannerProps {
   /** Props to pass through to the tester (t, locale, etc). */
   testerProps: Record<string, unknown>;
   /** Host-page telemetry hook, forwarded untouched. */
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
   /** Host hook notified when the user clears/resets this tester's result. */
   onResultClear?: () => void;
   /** Forwarded to the banner to enable privacy-safe share + local history. */

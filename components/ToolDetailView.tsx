@@ -12,7 +12,11 @@ import { PermissionPromptCard } from '@/components/PermissionPromptCard';
 interface ToolDetailViewProps {
   tool: ToolDefinition;
   t: Translations;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
   /** Compact chrome for embedding. */
   compact?: boolean;
   /** Heading level for the tool title (h1 on dedicated pages, h2 elsewhere). */

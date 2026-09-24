@@ -16,7 +16,7 @@ import { sharePolicyForTool as registrySharePolicy } from './tools/registry';
 /** Raw result values a tester may hand to the share builder. */
 export interface ShareResultInput {
   /** Generic verdict bucket. */
-  status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported';
+  status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported';
   /** Numeric score; ONLY honored for numeric-score policy tools. */
   score?: number | null;
   /** Optional unit for the score ("CPS", "ms"). */
@@ -29,6 +29,7 @@ const GENERIC_SENTENCE: Record<ShareResultInput['status'], string> = {
   passed: 'all checks passed',
   warning: 'works, with a couple of things worth checking',
   failed: 'needs attention',
+  measured: 'ran a real measurement',
   inconclusive: 'could not be fully verified',
   unsupported: 'is not supported by this browser',
 };

@@ -31,9 +31,30 @@ export interface SpeedSummary {
 
 export type SpeedPhase = 'idle' | 'running' | 'finished' | 'error' | 'aborted';
 
+/**
+ * Real, engine-provided progress: the measurement step currently running
+ * (from the engine's own onPhaseChange) — never a fabricated or extrapolated
+ * value. `bytes`/`count` come from the step config; a human label is derived
+ * in the UI, not invented here.
+ */
+export interface SpeedPhaseInfo {
+  /** Engine measurement type of the ACTIVE step. */
+  type: 'latency' | 'download' | 'upload';
+  /** Step payload size in bytes (bandwidth steps only; undefined for latency). */
+  bytes?: number;
+  /** Number of requests in this step (bandwidth steps only). */
+  count?: number;
+  /** 1-based step index within the configured sequence. */
+  step: number;
+  /** Total number of configured steps. */
+  totalSteps: number;
+}
+
 export interface SpeedTestEvents {
   onPhase(phase: SpeedPhase, error?: string): void;
   onProgress(summary: SpeedSummary): void;
+  /** Engine-reported active measurement step (real progress, no invention). */
+  onPhaseInfo?(info: SpeedPhaseInfo): void;
 }
 
 /**
@@ -71,6 +92,8 @@ interface CloudflareSpeedTestEngineLike {
   restart(): void;
   onRunningChange: ((running: boolean) => void) | null;
   onResultsChange: ((info: { type: string }) => void) | null;
+  /** Engine hook: fires when a new measurement step begins. */
+  onPhaseChange: ((info: { measurementId: number; measurement: { type: string; bytes?: number; count?: number } }) => void) | null;
   onFinish: ((results: unknown) => void) | null;
   onError: ((error: string) => void) | null;
 }
@@ -156,6 +179,18 @@ export class CloudflareSpeedTestController {
         if (gen !== this.generation) return;
         this.events.onProgress(this.readSummary(engine));
       };
+      engine.onPhaseChange = (info) => {
+        if (gen !== this.generation) return;
+        const type = info?.measurement?.type;
+        if (type !== 'latency' && type !== 'download' && type !== 'upload') return;
+        this.events.onPhaseInfo?.({
+          type,
+          bytes: info.measurement.bytes,
+          count: info.measurement.count,
+          step: (info.measurementId ?? 0) + 1,
+          totalSteps: MEASUREMENTS.length,
+        });
+      };
       engine.onError = (error) => {
         if (gen !== this.generation) return;
         this.setPhase('error', error);
@@ -196,6 +231,7 @@ export class CloudflareSpeedTestController {
     if (engine) {
       engine.onRunningChange = null;
       engine.onResultsChange = null;
+      engine.onPhaseChange = null;
       engine.onFinish = null;
       engine.onError = null;
     }

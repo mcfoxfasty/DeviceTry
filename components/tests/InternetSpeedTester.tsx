@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Gauge, Play, Square, RotateCcw, AlertCircle, Info } from 'lucide-react';
 import {
   CloudflareSpeedTestController,
@@ -8,10 +8,15 @@ import {
   SpeedPhase,
 } from '@/lib/testing/speedProvider';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
+import type { SpeedPhaseInfo } from '@/lib/testing/speedProvider';
 
 interface InternetSpeedTesterProps {
   /** Host telemetry sink — also feeds the shared banner (history + safe share). */
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  onResultUpdate?: (
+    status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'measured' | 'unsupported',
+    details?: string,
+    metrics?: Record<string, unknown>
+  ) => void;
   /** Host hook notified when the user clears/resets this tester's result. */
   onResultClear?: () => void;
   /** Forwarded to the banner to enable privacy-safe share + local history. */
@@ -36,11 +41,14 @@ const EMPTY_SUMMARY: SpeedSummary = {
 
 function Metric({ label, value, unit }: { label: string; value: number | null; unit: string }) {
   return (
-    <div className="p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043]">
-      <p className="text-[10px] uppercase tracking-wider font-semibold text-[#8996A6]">{label}</p>
-      <p className="mt-1 text-2xl font-mono-num font-bold text-[#142033] dark:text-[#E9EEF4]">
+    <div className="p-4 rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] min-w-0">
+      {/* min-w-0 + break-words: without a min-width floor these cards let the
+          grid column collapse on narrow phones and the label wrapped one
+          character per line. Words wrap; characters do not. */}
+      <p className="text-[10px] uppercase tracking-wider font-semibold text-[#8996A6] break-words">{label}</p>
+      <p className="mt-1 text-2xl font-mono-num font-bold text-[#142033] dark:text-[#E9EEF4] break-words">
         {value === null ? '—' : value.toLocaleString('en-US')}
-        <span className="text-xs font-semibold text-[#59677D] dark:text-[#9AA6B8] ml-1.5">{unit}</span>
+        <span className="text-xs font-semibold text-[#59677D] dark:text-[#9AA6B8] ml-1.5 whitespace-nowrap">{unit}</span>
       </p>
     </div>
   );
@@ -62,6 +70,8 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
   }, [onResultUpdate]);
   const [state, setState] = useState<SpeedState>({ phase: 'idle' });
   const [summary, setSummary] = useState<SpeedSummary>(EMPTY_SUMMARY);
+  /** Real engine-reported progress during the run (defect 2: live values). */
+  const [phaseInfo, setPhaseInfo] = useState<SpeedPhaseInfo | null>(null);
   const controllerRef = useRef<CloudflareSpeedTestController | null>(null);
   /** Latest progress values, readable synchronously at the finish transition. */
   const summaryRef = useRef<SpeedSummary>(EMPTY_SUMMARY);
@@ -82,11 +92,14 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
 
   const handlePhase = useCallback((phase: SpeedPhase, error?: string) => {
     setState({ phase, error });
+    if (phase !== 'running') setPhaseInfo(null);
     // Result plumbing (post-deployment pass): the run's outcome reaches the
-    // shared banner → browser-local history → privacy-safe share. A completed
-    // measurement is reported NEUTRALLY ('inconclusive' = observation, not a
-    // verdict); 'aborted' deliberately emits nothing — a cancelled run records
-    // no result, so partial values can never be presented as a success.
+    // shared banner → browser-local history → privacy-safe share. A COMPLETED
+    // measurement is emitted as 'measured' (defect 1): a real value from a
+    // finished run is not an "inconclusive" result — inconclusive now only
+    // covers runs that produced nothing usable. It still never claims
+    // pass/fail. 'aborted' deliberately emits nothing — a cancelled run
+    // records no result, so partial values can never be presented as success.
     if (phase === 'finished') {
       const s = summaryRef.current;
       const parts = [
@@ -95,28 +108,32 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
         s.latencyMs !== null ? `latency ${s.latencyMs} ms` : null,
         s.jitterMs !== null ? `jitter ${s.jitterMs} ms` : null,
       ].filter(Boolean);
-      const text =
-        parts.length > 0
-          ? `Measurement complete — ${parts.join(', ')}.`
-          : 'Measurement completed, but the engine returned no usable values.';
+      const hasUsable = parts.length > 0;
+      const text = hasUsable
+        ? `Measurement complete — ${parts.join(', ')}.`
+        : 'Measurement completed, but the engine returned no usable values.';
       // Phase 3: the completed measurement is emitted with ONLY the real
       // numeric values, so the banner can offer rerun comparison and an
       // honest CSV export. 'measurement' documents how values were obtained
-      // (text, so both features skip it). Status stays NEUTRAL — a finished
-      // download number is an observation, never a pass/fail verdict.
+      // (text, so both features skip it).
       const metrics: Record<string, unknown> = {};
       if (s.downloadMbps !== null) metrics.downloadMbps = s.downloadMbps;
       if (s.uploadMbps !== null) metrics.uploadMbps = s.uploadMbps;
       if (s.latencyMs !== null) metrics.latencyMs = s.latencyMs;
       if (s.jitterMs !== null) metrics.jitterMs = s.jitterMs;
       metrics.measurement = 'HTTP transfers via the Cloudflare measurement engine';
-      emitRich({ status: 'inconclusive', details: text, metrics });
-      recordResultRef.current?.('inconclusive', text);
+      emitRich({ status: hasUsable ? 'measured' : 'inconclusive', details: text, metrics });
+      recordResultRef.current?.(hasUsable ? 'measured' : 'inconclusive', text);
     } else if (phase === 'error') {
       emitRich({ status: 'failed', details: 'The measurement failed before completion — see the error above.' });
       recordResultRef.current?.('failed', 'The measurement failed before completion — see the error above.');
     }
   }, [emitRich]);
+
+  /** Real step progress from the engine — displayed verbatim, never invented. */
+  const handlePhaseInfo = useCallback((info: SpeedPhaseInfo) => {
+    setPhaseInfo(info);
+  }, []);
 
   const start = useCallback(() => {
     if (state.phase === 'running') return;
@@ -126,10 +143,11 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
     const controller = new CloudflareSpeedTestController({
       onPhase: handlePhase,
       onProgress: handleProgress,
+      onPhaseInfo: handlePhaseInfo,
     });
     controllerRef.current = controller;
     void controller.start();
-  }, [state.phase, handlePhase, handleProgress]);
+  }, [state.phase, handlePhase, handleProgress, handlePhaseInfo]);
 
   const cancel = useCallback(() => {
     controllerRef.current?.cancel();
@@ -137,6 +155,23 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
   }, []);
 
   const running = state.phase === 'running';
+
+  /**
+   * Defect 2: active-phase label derived ONLY from the engine's own
+   * onPhaseChange payload — a real step type, size, and position. When the
+   * engine has not reported a step (brief startup window), fall back to the
+   * neutral "Measuring…" text. Nothing here is fabricated or animated.
+   */
+  const phaseLabel = useMemo(() => {
+    if (!running) return '';
+    if (!phaseInfo) return 'Measuring… stay on this tab';
+    const sizeMb = phaseInfo.bytes ? phaseInfo.bytes / 1_000_000 : null;
+    const what =
+      phaseInfo.type === 'latency'
+        ? 'latency'
+        : `${phaseInfo.type}${sizeMb !== null && sizeMb >= 1 ? ` (${Math.round(sizeMb)} MB per request)` : ''}`;
+    return `Measuring ${what} — step ${phaseInfo.step}/${phaseInfo.totalSteps}`;
+  }, [running, phaseInfo]);
 
   return (
     <div className="space-y-4">
@@ -169,9 +204,9 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
           </button>
         )}
         {running && (
-          <span className="text-xs font-semibold text-[#0F766E] dark:text-[#14B8A6] flex items-center gap-2">
+          <span className="text-xs font-semibold text-[#0F766E] dark:text-[#14B8A6] flex items-center gap-2 min-w-0 break-words">
             <span className="w-2 h-2 rounded-full bg-[#0F766E] dark:bg-[#14B8A6] animate-pulse" />
-            Measuring… stay on this tab
+            {phaseLabel}
           </span>
         )}
       </div>
@@ -197,8 +232,8 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
       )}
 
       {/* Correction B: a failed or cancelled measurement must never leave
-          incomplete values on screen as if they were a result. The metrics
-          grid renders ONLY when the engine finished every phase. */}
+          incomplete values on screen as if they were a result. The final
+          metrics grid renders ONLY when the engine finished every phase. */}
       {state.phase === 'finished' && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Metric label="Download" value={summary.downloadMbps} unit="Mbps" />
@@ -207,12 +242,22 @@ export function InternetSpeedTester({ onResultUpdate, onResultClear, toolId, too
           <Metric label="Jitter" value={summary.jitterMs} unit="ms" />
         </div>
       )}
+      {/* Defect 2: during the run, show the engine's REAL current values as
+          clearly-labelled provisional readings. These are the same numbers
+          the engine reports via onResultsChange — nothing is animated,
+          extrapolated, or fabricated. A metric the engine has not produced
+          yet renders as "—". */}
       {running && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-hidden="true">
-          <Metric label="Download" value={null} unit="Mbps" />
-          <Metric label="Upload" value={null} unit="Mbps" />
-          <Metric label="Latency" value={null} unit="ms" />
-          <Metric label="Jitter" value={null} unit="ms" />
+        <div>
+          <p className="text-[11px] font-semibold text-[#59677D] dark:text-[#9AA6B8] mb-1.5">
+            Provisional values (measurement in progress — final numbers may differ)
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Metric label="Download" value={summary.downloadMbps} unit="Mbps" />
+            <Metric label="Upload" value={summary.uploadMbps} unit="Mbps" />
+            <Metric label="Latency" value={summary.latencyMs} unit="ms" />
+            <Metric label="Jitter" value={summary.jitterMs} unit="ms" />
+          </div>
         </div>
       )}
 

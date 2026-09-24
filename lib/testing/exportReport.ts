@@ -60,6 +60,7 @@ export const STATUS_LABEL: Record<BannerStatus, string> = {
   passed: 'Passed',
   failed: 'Failed',
   warning: 'Warning',
+  measured: 'Measured (completed, neutral)',
   inconclusive: 'Inconclusive',
   unsupported: 'Not supported by this browser',
   skipped: 'Not run',
