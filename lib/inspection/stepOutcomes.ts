@@ -34,6 +34,7 @@ export type InspectionStep =
   | 'battery';
 
 export type StepOutcome = 'completed' | 'confirmed' | 'skipped' | 'blocked' | 'incomplete';
+export type BlockedReason = 'denied' | 'unavailable';
 
 /** Human label for each outcome, used in the UI and the report. */
 export const OUTCOME_LABEL: Record<StepOutcome, string> = {
@@ -52,6 +53,8 @@ export interface StepResult {
   status: string;
   /** 'browser' = observed by this browser, 'user' = the user said so. */
   classification?: 'browser' | 'user' | 'inconclusive' | 'unsupported' | 'skipped' | 'blocked';
+  /** Why a device was blocked, when the browser can distinguish the cases. */
+  blockedReason?: BlockedReason;
   details?: string;
   metrics?: Record<string, unknown>;
   [key: string]: unknown;
@@ -144,13 +147,29 @@ const GENERIC_GUIDANCE: Record<InspectionStep, string> = {
  * Guidance for a step that is not a clean completion: blocked, incomplete,
  * or skipped. A clean completion needs no next step.
  */
-export function guidanceFor(step: InspectionStep, outcome: StepOutcome): StepGuidance | null {
+export function guidanceFor(
+  step: InspectionStep,
+  outcome: StepOutcome,
+  blockedReason?: BlockedReason
+): StepGuidance | null {
   if (outcome === 'completed' || outcome === 'confirmed') return null;
 
   const guide = GUIDE_BY_STEP[step];
   const base = { guideHref: guide?.href, guideLabel: guide?.label };
 
   if (outcome === 'blocked') {
+    if (step === 'mic' && blockedReason === 'unavailable') {
+      return {
+        ...base,
+        nextStep: 'No microphone device was found. Connect or enable a microphone, then re-run this check — or skip it and continue.',
+      };
+    }
+    if (step === 'mic' && blockedReason === 'denied') {
+      return {
+        ...base,
+        nextStep: 'Microphone permission was denied. Allow it for this site in the address bar, then re-run this check — or skip it and continue.',
+      };
+    }
     return {
       ...base,
       nextStep:
@@ -225,7 +244,7 @@ export function buildInspectionReport(
       sourceLabel:
         source === 'browser' ? 'Browser observation' : source === 'user' ? 'Your confirmation' : 'No observation',
       details: result?.details ?? 'This check was not completed.',
-      guidance: guidanceFor(step, outcome),
+      guidance: guidanceFor(step, outcome, result?.blockedReason),
     };
   });
 }

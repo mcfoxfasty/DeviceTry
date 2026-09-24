@@ -11,7 +11,8 @@ export type ReportSummaryStatus = 'passed' | 'warning' | 'failed' | 'inconclusiv
 
 export interface TestResultItem {
   status: TestResultStatus;
-  classification?: 'browser' | 'user' | 'inconclusive' | 'unsupported' | 'skipped';
+  classification?: 'browser' | 'user' | 'inconclusive' | 'unsupported' | 'skipped' | 'blocked';
+  blockedReason?: 'denied' | 'unavailable';
   details?: string;
   metrics?: Record<string, unknown>;
   [key: string]: unknown;

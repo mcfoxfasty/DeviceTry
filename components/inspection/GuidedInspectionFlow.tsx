@@ -159,7 +159,12 @@ export function GuidedInspectionFlow({
     setResults((prev) => {
       const next = {
         ...prev,
-        [key]: { status: 'unsupported', classification: 'blocked', details } as unknown as TestResultItem,
+        [key]: {
+          status: 'unsupported',
+          classification: 'blocked',
+          blockedReason: reason,
+          details,
+        } as unknown as TestResultItem,
       };
       resultsRef.current = next;
       return next;
@@ -509,7 +514,7 @@ export function GuidedInspectionFlow({
                 dead end, and neither is recorded as a hardware failure. */}
             {(() => {
               const outcome = stepOutcome(results[activeStepKey]);
-              const guide = guidanceFor(activeStepKey, outcome);
+              const guide = guidanceFor(activeStepKey, outcome, results[activeStepKey]?.blockedReason);
               if (!guide) return null;
               return (
                 <div role="status" className="mb-4 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">

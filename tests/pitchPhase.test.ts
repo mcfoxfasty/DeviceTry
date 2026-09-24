@@ -7,6 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   semitonesFromA4,
@@ -15,6 +16,8 @@ import {
   centsOffFromNote,
   noteLabel,
   deriveChromaticReading,
+  buildPitchMeasurement,
+  classifyPitchStartError,
   isSignalReliable,
   rmsOf,
   autoCorrelate,
@@ -23,6 +26,8 @@ import {
   PITCH_RANGE_MAX_HZ,
   A4_HZ,
 } from '../lib/testing/pitchMath';
+
+const pitchDetectorSource = readFileSync('components/tests/PitchDetectorTester.tsx', 'utf8');
 
 // ------------------------- note selection / target frequency / cents
 
@@ -101,6 +106,35 @@ test('chromatic mode - off-pitch input reports cents relative to the NEAREST not
 });
 
 // ------------------------- signal gating / stale clearing
+
+test('pitch detector - a confident reading produces a measured, safe summary with limitations', () => {
+  const measurement = buildPitchMeasurement(440, 0.91);
+  assert.equal(measurement.frequencyHz, 440);
+  assert.equal(measurement.note, 'A4');
+  assert.equal(measurement.cents, 0);
+  assert.match(measurement.details, /Detected A4 at 440\.0 Hz/);
+  assert.match(measurement.details, /not a calibrated tuner/i);
+  assert.equal(measurement.metrics.frequencyHz, 440);
+  assert.equal(measurement.metrics.note, 'A4');
+  assert.equal(measurement.metrics.algorithm, 'autocorrelation');
+});
+
+test('pitch detector - start errors distinguish denied permission from absent device', () => {
+  assert.equal(classifyPitchStartError({ name: 'NotAllowedError' }), 'denied');
+  assert.equal(classifyPitchStartError({ name: 'PermissionDeniedError' }), 'denied');
+  assert.equal(classifyPitchStartError({ name: 'NotFoundError' }), 'unavailable');
+  assert.equal(classifyPitchStartError({ name: 'DevicesNotFoundError' }), 'unavailable');
+  assert.equal(classifyPitchStartError({ name: 'AbortError' }), 'unknown');
+});
+
+test('pitch detector lifecycle - Stop preserves the shared verdict and blocks never fail hardware', () => {
+  assert.match(pitchDetectorSource, /useTestResult\(\{[\s\S]*onRecordResult[\s\S]*onResultClear/);
+  assert.match(pitchDetectorSource, /<TestResultBanner[\s\S]*toolId=\{toolId\}[\s\S]*toolSlug=\{toolSlug\}/);
+  assert.match(pitchDetectorSource, /emitRunRich\(runToken, \{ status: 'unsupported', details \}\)/);
+  assert.match(pitchDetectorSource, /onPermissionBlocked\?\.\(block\)/);
+  assert.match(pitchDetectorSource, /const stopListening = useCallback\(\(\) => \{[\s\S]*invalidate\(\)/);
+  assert.doesNotMatch(pitchDetectorSource, /status: 'failed'/, 'Pitch Detector must not report blocked input as hardware failure');
+});
 
 test('signal gate - silence (RMS below threshold) is unreliable', () => {
   const silence = new Float32Array(2048); // all zeros

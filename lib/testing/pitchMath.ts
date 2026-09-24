@@ -78,6 +78,60 @@ export function deriveChromaticReading(frequency: number): ChromaticReading {
   };
 }
 
+/** Honest scope for a browser microphone reading; never presented as calibrated tuning. */
+export const PITCH_DETECTOR_LIMITATION =
+  'Browser-estimated fundamental via autocorrelation, not a calibrated tuner. Harmonics, room noise, and short or quiet buffers can misidentify the note. Reliable range is 47–2,500 Hz.';
+
+export interface PitchMeasurement {
+  frequencyHz: number;
+  note: string;
+  cents: number;
+  confidence: number;
+  details: string;
+  metrics: Record<string, number | string>;
+}
+
+/**
+ * Build the same safe measurement summary for the in-card banner, host report,
+ * and browser-local history. The caller must have already passed the signal and
+ * confidence gates; this function never invents a frequency.
+ */
+export function buildPitchMeasurement(frequencyHz: number, confidence: number): PitchMeasurement {
+  const reading = deriveChromaticReading(frequencyHz);
+  const roundedFrequency = Math.round(frequencyHz * 10) / 10;
+  const roundedCents = Math.max(-50, Math.min(50, Math.round(reading.cents)));
+  const roundedConfidence = Math.round(confidence * 100) / 100;
+  const note = `${reading.name}${reading.octave}`;
+
+  return {
+    frequencyHz: roundedFrequency,
+    note,
+    cents: roundedCents,
+    confidence: roundedConfidence,
+    details:
+      `Detected ${note} at ${roundedFrequency.toFixed(1)} Hz (${roundedCents >= 0 ? '+' : ''}${roundedCents} cents, ` +
+      `${Math.round(roundedConfidence * 100)}% confidence). ${PITCH_DETECTOR_LIMITATION}`,
+    metrics: {
+      frequencyHz: roundedFrequency,
+      note,
+      cents: roundedCents,
+      confidence: roundedConfidence,
+      algorithm: 'autocorrelation',
+      reliableMinHz: PITCH_RANGE_MIN_HZ,
+      reliableMaxHz: PITCH_RANGE_MAX_HZ,
+    },
+  };
+}
+
+export type PitchStartBlock = 'denied' | 'unavailable' | 'unknown';
+
+/** Classify getUserMedia failures without turning a missing device into hardware failure. */
+export function classifyPitchStartError(error: { name?: string }): PitchStartBlock {
+  if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') return 'denied';
+  if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') return 'unavailable';
+  return 'unknown';
+}
+
 /**
  * Signal-reliability gate for live readings.
  *

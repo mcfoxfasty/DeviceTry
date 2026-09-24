@@ -72,7 +72,17 @@ export function MicrophoneTestHub({ t, onRecordResult, onResultClear, onResultUp
           which stops its stream, audio graph, timers, and listeners. */}
       <div role="tabpanel">
         {tab === 'level' && <MicrophoneTester t={t} onRecordResult={onRecordResult} onResultClear={onResultClear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />}
-        {tab === 'pitch' && <PitchDetectorTester t={t} onResultUpdate={onResultUpdate} />}
+        {tab === 'pitch' && (
+          <PitchDetectorTester
+            t={t}
+            onResultUpdate={onResultUpdate}
+            onRecordResult={onRecordResult}
+            onResultClear={onResultClear}
+            toolId={toolId}
+            toolTitle={toolTitle}
+            toolSlug={toolSlug}
+          />
+        )}
         {tab === 'recorder' && <VoiceRecorderTester t={t} onResultUpdate={onResultUpdate} />}
       </div>
     </div>

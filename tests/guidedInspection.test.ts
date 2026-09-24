@@ -149,6 +149,27 @@ test('blocked - a blocked step explains itself and offers a way forward', () => 
   assert.equal(g!.guideHref, '/guides/microphone-not-working', 'a real, existing guide is linked');
 });
 
+test('blocked - microphone guidance distinguishes no device from denied permission', () => {
+  const noDevice = guidanceFor('mic', 'blocked', 'unavailable');
+  const denied = guidanceFor('mic', 'blocked', 'denied');
+  assert.match(noDevice!.nextStep, /No microphone device was found/i);
+  assert.match(noDevice!.nextStep, /connect|enable/i);
+  assert.doesNotMatch(noDevice!.nextStep, /permission/i);
+  assert.match(denied!.nextStep, /permission was denied/i);
+  assert.match(denied!.nextStep, /allow/i);
+  assert.doesNotMatch(denied!.nextStep, /No microphone device was found/i);
+
+  const rows = buildInspectionReport(['mic'], {
+    mic: {
+      status: 'unsupported',
+      classification: 'blocked',
+      blockedReason: 'unavailable',
+      details: 'No device was available to this browser.',
+    },
+  });
+  assert.match(rows[0].guidance!.nextStep, /No microphone device was found/i);
+});
+
 /* ------------------------------------------------------------------ */
 /* The five outcomes are shown accurately                              */
 /* ------------------------------------------------------------------ */
