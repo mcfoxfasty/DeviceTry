@@ -173,6 +173,62 @@ export function rmsOf(buffer: Float32Array | number[]): number {
 export const PITCH_RANGE_MIN_HZ = 47;
 export const PITCH_RANGE_MAX_HZ = 2500;
 
+export interface PitchObservation {
+  freq: number;
+  confidence: number;
+}
+
+/**
+ * Per-run pitch memory. A later weak/silent frame cannot erase a valid
+ * reading; it only means there is no new measurement to emit yet.
+ */
+export class PitchRunObserver {
+  private observed = false;
+  private lastFrequencyHzValue: number | null = null;
+  private lastNoteValue: string | null = null;
+
+  reset(): void {
+    this.observed = false;
+    this.lastFrequencyHzValue = null;
+    this.lastNoteValue = null;
+  }
+
+  /** Observe a frame; return whether this frame itself produced a valid pitch. */
+  observe(observation: PitchObservation | null): boolean {
+    if (
+      !observation ||
+      observation.freq <= PITCH_RANGE_MIN_HZ ||
+      observation.freq >= PITCH_RANGE_MAX_HZ ||
+      observation.confidence <= 0.85
+    ) {
+      return false;
+    }
+
+    const reading = deriveChromaticReading(observation.freq);
+    this.observed = true;
+    this.lastFrequencyHzValue = Math.round(observation.freq * 10) / 10;
+    this.lastNoteValue = `${reading.name}${reading.octave}`;
+    return true;
+  }
+
+  get hasValidPitch(): boolean {
+    return this.observed;
+  }
+
+  get lastFrequencyHz(): number | null {
+    return this.lastFrequencyHzValue;
+  }
+
+  get lastNote(): string | null {
+    return this.lastNoteValue;
+  }
+
+  /** A run without any valid pitch is incomplete; a measured run is preserved. */
+  get finalStatus(): 'measured' | 'inconclusive' {
+    return this.observed ? 'measured' : 'inconclusive';
+  }
+}
+
 /**
  * Generate a sine-wave test buffer for algorithm verification (SYNTHETIC —
  * used only by tests, never presented as a physical measurement).

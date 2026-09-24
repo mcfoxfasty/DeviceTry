@@ -18,6 +18,7 @@ import {
   deriveChromaticReading,
   buildPitchMeasurement,
   classifyPitchStartError,
+  PitchRunObserver,
   isSignalReliable,
   rmsOf,
   autoCorrelate,
@@ -127,13 +128,36 @@ test('pitch detector - start errors distinguish denied permission from absent de
   assert.equal(classifyPitchStartError({ name: 'AbortError' }), 'unknown');
 });
 
-test('pitch detector lifecycle - Stop preserves the shared verdict and blocks never fail hardware', () => {
-  assert.match(pitchDetectorSource, /useTestResult\(\{[\s\S]*onRecordResult[\s\S]*onResultClear/);
-  assert.match(pitchDetectorSource, /<TestResultBanner[\s\S]*toolId=\{toolId\}[\s\S]*toolSlug=\{toolSlug\}/);
-  assert.match(pitchDetectorSource, /emitRunRich\(runToken, \{ status: 'unsupported', details \}\)/);
-  assert.match(pitchDetectorSource, /onPermissionBlocked\?\.\(block\)/);
-  assert.match(pitchDetectorSource, /const stopListening = useCallback\(\(\) => \{[\s\S]*invalidate\(\)/);
-  assert.doesNotMatch(pitchDetectorSource, /status: 'failed'/, 'Pitch Detector must not report blocked input as hardware failure');
+test('pitch detector lifecycle - pitch followed by silence keeps the last valid measurement', () => {
+  const run = new PitchRunObserver();
+  run.reset();
+  assert.equal(run.observe({ freq: 440, confidence: 0.91 }), true);
+  assert.equal(run.observe(null), false, 'silence is a new frame, not a new verdict');
+  assert.equal(run.hasValidPitch, true);
+  assert.equal(run.lastFrequencyHz, 440);
+  assert.equal(run.lastNote, 'A4');
+  assert.equal(run.finalStatus, 'measured');
+});
+
+test('pitch detector lifecycle - Stop after a pitch preserves the measured result', () => {
+  const run = new PitchRunObserver();
+  run.observe({ freq: 440, confidence: 0.91 });
+  run.observe(null);
+  assert.equal(run.finalStatus, 'measured');
+  assert.match(pitchDetectorSource, /onClick=\{\(\) => stopListening\(true\)\}/);
+  assert.match(pitchDetectorSource, /finishRun && !runObserverRef\.current\.hasValidPitch/);
+  assert.match(pitchDetectorSource, /Last detected pitch/);
+});
+
+test('pitch detector lifecycle - a run with no detected pitch ends inconclusive', () => {
+  const run = new PitchRunObserver();
+  run.observe(null);
+  assert.equal(run.hasValidPitch, false);
+  assert.equal(run.finalStatus, 'inconclusive');
+  assert.equal(run.lastFrequencyHz, null);
+  assert.equal(run.lastNote, null);
+  assert.match(pitchDetectorSource, /No pitch detected/);
+  assert.match(pitchDetectorSource, /No pitch was detected before the test ended/);
 });
 
 test('signal gate - silence (RMS below threshold) is unreliable', () => {

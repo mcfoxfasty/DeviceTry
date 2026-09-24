@@ -9,8 +9,7 @@ import {
   buildPitchMeasurement,
   classifyPitchStartError,
   deriveChromaticReading,
-  PITCH_RANGE_MIN_HZ,
-  PITCH_RANGE_MAX_HZ,
+  PitchRunObserver,
 } from '@/lib/testing/pitchMath';
 
 interface ToolComponentProps {
@@ -60,10 +59,18 @@ export function PitchDetectorTester({
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const unmountedRef = useRef<boolean>(false);
-  const lastSignalStateRef = useRef<'none' | 'usable' | 'stale'>('none');
+  const runObserverRef = useRef(new PitchRunObserver());
   const lastEmissionAtRef = useRef<number>(0);
 
-  const stopListening = useCallback(() => {
+  const stopListening = useCallback((finishRun = false) => {
+    // A no-pitch run is inconclusive only when the user explicitly ends it.
+    // A valid measurement is never downgraded by subsequent silence.
+    if (finishRun && !runObserverRef.current.hasValidPitch) {
+      emitRunRich(currentRun(), {
+        status: 'inconclusive',
+        details: 'No pitch was detected before the test ended. Play or sing a clear, sustained note and run the test again.',
+      });
+    }
     invalidate();
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -79,7 +86,7 @@ export function PitchDetectorTester({
     }
     analyserRef.current = null;
     setIsListening(false);
-  }, [invalidate]);
+  }, [currentRun, emitRunRich, invalidate]);
 
   // Function declaration keeps the animation loop self-reference valid. The
   // run token travels with the callback so a late frame cannot restore a
@@ -91,11 +98,7 @@ export function PitchDetectorTester({
 
     const detected = autoCorrelate(buf, audioCtxRef.current.sampleRate);
     const now = Date.now();
-    const isUsable =
-      detected !== null &&
-      detected.freq > PITCH_RANGE_MIN_HZ &&
-      detected.freq < PITCH_RANGE_MAX_HZ &&
-      detected.confidence > 0.85;
+    const isUsable = runObserverRef.current.observe(detected);
 
     if (isUsable && detected) {
       const reading = deriveChromaticReading(detected.freq);
@@ -107,26 +110,21 @@ export function PitchDetectorTester({
 
       // The live dial updates every frame, but the shared verdict is throttled
       // so normal pitch jitter does not create an unbounded result stream.
-      if (lastSignalStateRef.current !== 'usable' || now - lastEmissionAtRef.current >= 250) {
+      if (now - lastEmissionAtRef.current >= 250) {
         const measurement = buildPitchMeasurement(detected.freq, detected.confidence);
         emitRunRich(runToken, { status: 'measured', ...measurement });
         lastEmissionAtRef.current = now;
       }
-      lastSignalStateRef.current = 'usable';
     } else {
-      setPitch(null);
-      setNoteName('--');
-      setOctave(null);
-      setCents(0);
       setStale(true);
-      if (lastSignalStateRef.current !== 'stale') {
-        emitRunRich(runToken, {
-          status: 'inconclusive',
-          details:
-            'No usable pitch signal was detected. Play or sing a clear, sustained note near the microphone; silence or an unclear signal cannot verify a pitch.',
-        });
+      // Before the first valid frame, show the live no-pitch state. After a
+      // valid frame, deliberately retain the note/frequency through silence.
+      if (!runObserverRef.current.hasValidPitch) {
+        setPitch(null);
+        setNoteName('--');
+        setOctave(null);
+        setCents(0);
       }
-      lastSignalStateRef.current = 'stale';
     }
     rafRef.current = requestAnimationFrame(() => updatePitch(runToken));
   }
@@ -135,16 +133,13 @@ export function PitchDetectorTester({
     stopListening();
     const runToken = startRun();
     setErrorMsg(null);
-    setStale(false);
-    lastSignalStateRef.current = 'none';
+    setStale(true);
+    setPitch(null);
+    setNoteName('--');
+    setOctave(null);
+    setCents(0);
+    runObserverRef.current.reset();
     lastEmissionAtRef.current = 0;
-
-    // Starting a new attempt is itself an honest incomplete observation until
-    // a confident, in-range frequency arrives.
-    emitRunRich(runToken, {
-      status: 'inconclusive',
-      details: 'Pitch detector is listening. Play or sing a clear, sustained note to produce a measurement.',
-    });
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -214,6 +209,26 @@ export function PitchDetectorTester({
       {/* Main Pitch Dial Board */}
       <div className="p-8 rounded-2xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] flex flex-col items-center justify-center text-center space-y-6">
         {!isListening ? (
+          pitch !== null ? (
+            <div className="space-y-4 max-w-sm">
+              <div className="w-16 h-16 rounded-2xl bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] flex items-center justify-center mx-auto">
+                <Mic className="w-8 h-8" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8996A6] dark:text-[#677589]">Last detected pitch</p>
+                <p className="mt-1 text-3xl font-extrabold text-[#172033] dark:text-[#E9EEF4]">
+                  {noteName}{octave !== null ? octave : ''} <span className="text-xl text-[#0F766E] dark:text-[#14B8A6]">{pitch.toFixed(1)} Hz</span>
+                </p>
+                <p className="mt-1 text-xs text-[#59677D] dark:text-[#9AA6B8]">The measured result is retained after Stop.</p>
+              </div>
+              <button
+                onClick={startListening}
+                className="px-6 py-3 bg-[#0F766E] hover:bg-[#0D665F] text-white rounded-xl text-sm font-bold transition-all cursor-pointer shadow-sm"
+              >
+                Run Again
+              </button>
+            </div>
+          ) : (
           <div className="space-y-4 max-w-sm">
             <div className="w-16 h-16 rounded-2xl bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] flex items-center justify-center mx-auto">
               <Mic className="w-8 h-8" />
@@ -231,6 +246,7 @@ export function PitchDetectorTester({
               Start Listening
             </button>
           </div>
+          )
         ) : (
           <div className="space-y-6 w-full max-w-md">
             <div className="flex flex-col items-center">
@@ -239,7 +255,7 @@ export function PitchDetectorTester({
                 {octave !== null && <span className="text-3xl text-[#0F766E]">{octave}</span>}
               </div>
               <div className="font-mono text-sm text-[#59677D] dark:text-[#9AA6B8] mt-1">
-                {pitch !== null && !stale ? `${pitch.toFixed(1)} Hz` : stale ? 'Signal lost — awaiting reliable audio…' : 'Listening for audio signal...'}
+                {pitch !== null ? `${pitch.toFixed(1)} Hz` : stale ? 'No pitch detected' : 'Listening for audio signal...'}
               </div>
             </div>
 
@@ -265,7 +281,7 @@ export function PitchDetectorTester({
             </p>
 
             <button
-              onClick={stopListening}
+              onClick={() => stopListening(true)}
               className="px-5 py-2.5 bg-[#F6F8FB] dark:bg-[#192332] text-[#172033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] hover:border-red-500 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
             >
               <MicOff className="w-3.5 h-3.5 text-red-500" />
@@ -275,7 +291,22 @@ export function PitchDetectorTester({
         )}
       </div>
 
-      <TestResultBanner result={result} onClear={clear} toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
+      <TestResultBanner
+        result={result}
+        onClear={() => {
+          clear();
+          runObserverRef.current.reset();
+          setPitch(null);
+          setNoteName('--');
+          setOctave(null);
+          setCents(0);
+          setStale(true);
+          setErrorMsg(null);
+        }}
+        toolId={toolId}
+        toolTitle={toolTitle}
+        toolSlug={toolSlug}
+      />
     </div>
   );
 }
