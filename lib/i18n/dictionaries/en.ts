@@ -124,8 +124,8 @@ export const enTranslations: Translations = {
   micTest: {
     title: 'Microphone Input Tester',
     shortDesc: 'Inspect real-time microphone volume, live frequency waveform, and record a 5-second playback clip to check for background noise and clarity.',
-    startPrompt: 'Click "Enable Microphone" to grant temporary browser access and measure sound input.',
-    grantPermission: 'Enable Microphone',
+    startPrompt: 'Click "Start Microphone Test" to grant temporary browser access and measure sound input.',
+    grantPermission: 'Start Microphone Test',
     requesting: 'Awaiting permission in browser prompt...',
     deniedMessage: 'Microphone access was blocked or denied. Please check your browser address bar permissions or operating system privacy settings.',
     selectDevice: 'Select Microphone Input:',

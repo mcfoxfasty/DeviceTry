@@ -255,10 +255,14 @@ export function MicrophoneTester({
         // Guided inspection needs to distinguish "the browser refused access"
         // from "the microphone is faulty" — only the host can say that.
         onBlockedRef.current?.('denied');
+        // A refused permission is not a completed microphone measurement.
+        return;
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setPermissionState('error');
         setErrorMessage(t.common.deviceUnavailable);
         onBlockedRef.current?.('unavailable');
+        // No device is an environment/blocked state, not a failed measurement.
+        return;
       } else {
         setPermissionState('error');
         setErrorMessage(error.message || t.common.error);

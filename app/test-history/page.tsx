@@ -8,6 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import {
   getTestHistory,
+  subscribeTestHistory,
   deleteTestHistoryEntry,
   clearAllTestHistory,
   TestHistoryEntry,
@@ -27,8 +28,13 @@ export default function TestHistoryPage() {
   // Defer the first read to a macrotask so nothing touches localStorage
   // during hydration; the page is client-rendered only.
   useEffect(() => {
-    const timer = setTimeout(() => setEntries(getTestHistory()), 0);
-    return () => clearTimeout(timer);
+    const refresh = () => setEntries(getTestHistory());
+    const timer = setTimeout(refresh, 0);
+    const unsubscribe = subscribeTestHistory(refresh);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   const removeOne = (id: string) => {

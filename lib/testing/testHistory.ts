@@ -26,6 +26,8 @@ export interface TestHistoryEntry {
 }
 
 const HISTORY_KEY = 'devicetry_test_history';
+/** Same-tab notification used because localStorage changes do not emit storage in their own tab. */
+export const TEST_HISTORY_CHANGE_EVENT = 'devicetry:test-history-change';
 /** Reasonable entry cap; oldest entries are dropped first. */
 const MAX_ENTRIES = 50;
 
@@ -84,6 +86,26 @@ function isEntry(v: unknown): v is TestHistoryEntry {
   );
 }
 
+function notifyTestHistoryChanged(): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  window.dispatchEvent(new Event(TEST_HISTORY_CHANGE_EVENT));
+}
+
+/** Subscribe to same-tab writes and cross-tab storage events. */
+export function subscribeTestHistory(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === HISTORY_KEY) listener();
+  };
+  const onSameTabChange = () => listener();
+  window.addEventListener('storage', onStorage);
+  window.addEventListener(TEST_HISTORY_CHANGE_EVENT, onSameTabChange);
+  return () => {
+    window.removeEventListener('storage', onStorage);
+    window.removeEventListener(TEST_HISTORY_CHANGE_EVENT, onSameTabChange);
+  };
+}
+
 /** Most recent first. Empty when storage is unavailable (SSR, blocked). */
 export function getTestHistory(): TestHistoryEntry[] {
   return readAll().sort((a, b) => b.timestamp - a.timestamp);
@@ -117,6 +139,7 @@ export function recordTestResult(input: RecordTestInput): boolean {
       .filter((e, i) => i === 0 || e.slug !== entry.slug)
       .slice(0, MAX_ENTRIES);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+    notifyTestHistoryChanged();
     return true;
   } catch {
     // Quota exceeded / storage disabled — never throw into the UI.
@@ -128,6 +151,7 @@ export function deleteTestHistoryEntry(id: string): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(readAll().filter((e) => e.id !== id)));
+    notifyTestHistoryChanged();
   } catch {
     /* ignore */
   }
@@ -137,6 +161,7 @@ export function clearAllTestHistory(): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.removeItem(HISTORY_KEY);
+    notifyTestHistoryChanged();
   } catch {
     /* ignore */
   }
