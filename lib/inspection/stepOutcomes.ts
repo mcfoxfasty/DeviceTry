@@ -30,8 +30,7 @@ export type InspectionStep =
   | 'keyboard'
   | 'mouse'
   | 'display'
-  | 'gamepad'
-  | 'battery';
+  | 'gamepad';
 
 export type StepOutcome = 'completed' | 'confirmed' | 'skipped' | 'blocked' | 'incomplete';
 export type BlockedReason = 'denied' | 'unavailable';
@@ -140,7 +139,6 @@ const GENERIC_GUIDANCE: Record<InspectionStep, string> = {
   mouse: 'Re-run the mouse check and move the pointer to every edge of the area.',
   display: 'Re-run the display check and inspect each solid colour at fullscreen.',
   gamepad: 'Re-run the controller check and press each button the panel lists.',
-  battery: 'Re-run the battery check and wait for a fresh reading.',
 };
 
 /**
@@ -208,7 +206,6 @@ const STEP_LABEL: Record<InspectionStep, string> = {
   mouse: 'Mouse',
   display: 'Display',
   gamepad: 'Controller',
-  battery: 'Battery',
 };
 
 /**

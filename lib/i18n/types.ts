@@ -85,7 +85,6 @@ export interface Translations {
     speakers: string;
     display: string;
     gamepad: string;
-    battery: string;
     guidedInspection: string;
     testHistory: string;
     help: string;

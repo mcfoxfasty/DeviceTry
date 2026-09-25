@@ -47,9 +47,9 @@ test('guided aggregation - warning only yields warning', () => {
 });
 
 test('guided aggregation - unsupported step yields inconclusive, not passed', () => {
-  const steps = ['mic', 'battery'];
+  const steps = ['mic', 'gamepad'];
   const results: StepResult = completeResults(steps, 'passed');
-  results['battery'] = { status: 'unsupported', classification: 'unsupported' };
+  results['gamepad'] = { status: 'unsupported', classification: 'unsupported' };
   assert.equal(calculateReportStatus(steps, results), 'inconclusive');
 });
 

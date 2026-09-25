@@ -169,31 +169,6 @@ export function DeviceIllustration({ type, className = '', size = 64 }: DeviceIl
         </svg>
       );
 
-    case 'battery':
-      return (
-        <svg
-          width={s}
-          height={s}
-          viewBox="0 0 64 64"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className={className}
-          aria-hidden="true"
-        >
-          <rect x="8" y="8" width="48" height="48" rx="12" className="fill-[#D97706]/10 dark:fill-[#F59E0B]/15" />
-          {/* Battery body */}
-          <rect x="14" y="22" width="34" height="20" rx="4" stroke="#D97706" strokeWidth="2.5" fill="#FFFFFF" className="dark:fill-[#111D30]" />
-          {/* Battery terminal tip */}
-          <path d="M50 28C51.5 28 52 29 52 32C52 35 51.5 36 50 36" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round" />
-          {/* Charge bars */}
-          <rect x="18" y="26" width="6" height="12" rx="1.5" fill="#10B981" />
-          <rect x="26" y="26" width="6" height="12" rx="1.5" fill="#10B981" />
-          <rect x="34" y="26" width="6" height="12" rx="1.5" fill="#10B981" />
-          {/* Bolt lightning */}
-          <path d="M30 18L26 31H32L28 44" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-        </svg>
-      );
-
     case 'gamepad':
       return (
         <svg

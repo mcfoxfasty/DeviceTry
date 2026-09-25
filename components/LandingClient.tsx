@@ -190,15 +190,15 @@ const GUIDED_INSPECTION_OPTIONS = [
     description: 'Verifies microphone audio input, webcam video, and speaker clarity before an interview or video conference.',
   },
   {
-    title: 'Used Computer Hardware Inspection (7 Mins)',
-    description: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, video, battery.',
+    title: 'Used Computer Hardware Inspection (6 Mins)',
+    description: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
   },
   {
     title: 'Classroom / Lab Kiosk Verification (4 Mins)',
     description: 'Rapid diagnostic run for school lab workstations or shared kiosks: keyboard, mouse, audio, display.',
   },
   {
-    title: 'Full Diagnostic Check (All 8 Tests)',
+    title: 'Full Diagnostic Check (All 7 Tests)',
     description: 'Complete inspection evaluating all available browser device APIs.',
   },
 ] as const;

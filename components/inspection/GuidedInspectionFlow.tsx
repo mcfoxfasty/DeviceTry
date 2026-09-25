@@ -20,7 +20,6 @@ import { KeyboardTester } from '../tests/KeyboardTester';
 import { MouseTester } from '../tests/MouseTester';
 import { DisplayTester } from '../tests/DisplayTester';
 import { GamepadTester } from '../tests/GamepadTester';
-import { BatteryTester } from '../tests/BatteryTester';
 import { saveLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/localHistory';
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
 import { buildPdf, pdfBlob, reportLinesFromText } from '@/lib/testing/pdf';
@@ -44,7 +43,7 @@ interface GuidedInspectionFlowProps {
   companyName?: string;
 }
 
-type TestKey = 'mic' | 'webcam' | 'speakers' | 'keyboard' | 'mouse' | 'display' | 'gamepad' | 'battery';
+type TestKey = 'mic' | 'webcam' | 'speakers' | 'keyboard' | 'mouse' | 'display' | 'gamepad';
 
 const TEST_LABELS: Record<TestKey, string> = {
   mic: 'Microphone',
@@ -54,7 +53,6 @@ const TEST_LABELS: Record<TestKey, string> = {
   mouse: 'Mouse',
   display: 'Display',
   gamepad: 'Gamepad',
-  battery: 'Battery',
 };
 
 const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKey[] }> = {
@@ -64,9 +62,9 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
     steps: ['mic', 'webcam', 'speakers'],
   },
   used_hardware: {
-    title: 'Used Computer Hardware Inspection (7 Mins)',
-    desc: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, video, battery.',
-    steps: ['display', 'keyboard', 'mouse', 'speakers', 'mic', 'webcam', 'battery'],
+    title: 'Used Computer Hardware Inspection (6 Mins)',
+    desc: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
+    steps: ['display', 'keyboard', 'mouse', 'speakers', 'mic', 'webcam'],
   },
   classroom: {
     title: 'Classroom / Lab Kiosk Verification (4 Mins)',
@@ -74,9 +72,9 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
     steps: ['keyboard', 'mouse', 'display', 'speakers'],
   },
   full: {
-    title: 'Full Diagnostic Check (All 8 Tests)',
+    title: 'Full Diagnostic Check (All 7 Tests)',
     desc: 'Complete inspection evaluating all available browser device APIs.',
-    steps: ['mic', 'webcam', 'speakers', 'keyboard', 'mouse', 'display', 'gamepad', 'battery'],
+    steps: ['mic', 'webcam', 'speakers', 'keyboard', 'mouse', 'display', 'gamepad'],
   },
 };
 
@@ -587,15 +585,6 @@ export function GuidedInspectionFlow({
                 startButtonLabel="Start Gamepad Test"
               />
             )}
-            {activeStepKey === 'battery' && (
-              <BatteryTester
-                t={t}
-                onRecordResult={(res) => handleStepResult('battery', res)}
-                onResultClear={() => clearStepResult('battery')}
-                startButtonLabel="Start Battery Test"
-              />
-            )}
-
             {/* Navigation lives at the top; the test card keeps only the
                 always-available skip action. */}
             <div className="mt-8 pt-6 border-t border-[#DFE5EB] dark:border-[#223043]">

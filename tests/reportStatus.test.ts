@@ -39,11 +39,11 @@ test('Report Status - Warning with no fail or inconclusive returns warning', () 
 });
 
 test('Report Status - Skipped or unsupported returns inconclusive', () => {
-  const steps = ['mic', 'webcam', 'battery'];
+  const steps = ['mic', 'webcam', 'gamepad'];
   const results: Record<string, TestResultItem> = {
     mic: { status: 'passed' },
     webcam: { status: 'passed' },
-    battery: { status: 'unsupported' },
+    gamepad: { status: 'unsupported' },
   };
 
   const status = calculateReportStatus(steps, results);
