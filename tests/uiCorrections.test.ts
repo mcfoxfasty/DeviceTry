@@ -65,6 +65,30 @@ test('icons - all 15 primary tools map to distinct artwork', async () => {
   assert.equal(new Set(icons).size, icons.length, `Icons must be distinct across 15 tools, got: ${icons.join(', ')}`);
 });
 
+test('brand - the logo renders the supplied Logo.png file and Try shares its green', () => {
+  const logo = readFileSync('components/ui/DeviceTryLogo.tsx', 'utf8');
+
+  // The wordmark accent is the exact green sampled from the supplied artwork.
+  assert.match(logo, /export const DEVICE_TRY_GREEN = '#7ED957'/);
+  assert.match(logo, /<span style=\{\{ color: DEVICE_TRY_GREEN \}\}>Try<\/span>/);
+  assert.doesNotMatch(logo, /text-\[#0F766E\] dark:text-\[#14B8A6\]">Try/);
+
+  // The mark is the supplied file, not a redrawn SVG.
+  assert.match(logo, /import Image from 'next\/image'/);
+  assert.match(logo, /const DEVICE_TRY_LOGO_SRC = '\/brand\/devicetry-logo\.png'/);
+  assert.match(logo, /src=\{DEVICE_TRY_LOGO_SRC\}/);
+  assert.match(logo, /alt=""/);
+  assert.match(logo, /aria-hidden="true"/);
+  assert.doesNotMatch(logo, /<svg/);
+
+  // Untouched source file plus the generated brand/app/favicon assets.
+  assert.ok(existsSync(join(repoRoot, 'public', 'Logo.png')), 'the supplied source logo must stay in the repo');
+  assert.ok(existsSync(join(repoRoot, 'public', 'brand', 'devicetry-logo.png')), 'generated brand logo must exist');
+  assert.ok(existsSync(join(repoRoot, 'app', 'icon.png')), 'app icon must exist');
+  assert.equal(existsSync(join(repoRoot, 'app', 'icon.svg')), false, 'the old vector icon is replaced by the supplied artwork');
+  assert.ok(existsSync(join(repoRoot, 'public', 'favicon.ico')), 'favicon must exist');
+});
+
 test('homepage tools - Popular stays first and remaining cards use three desktop columns', () => {
   const landing = readFileSync('components/LandingClient.tsx', 'utf8');
   assert.match(
