@@ -7,7 +7,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
-import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
+import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
 
 export const metadata: Metadata = {
   title: 'All Tools — Free Online Device Tests | DeviceTry',
@@ -59,8 +59,8 @@ export default function TestsHub() {
                     href={`/test/${tool.slug}`}
                     className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md transition-all flex items-start gap-3"
                   >
-                    <div className="shrink-0 group-hover:scale-105 transition-transform">
-                      <ToolIcon name={toolSlugToIconName(tool.slug)} size={40} className="w-10 h-10" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center group-hover:scale-105 transition-transform">
+                      <ToolAssetIcon slug={tool.slug} size={40} className="h-10 w-10" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">

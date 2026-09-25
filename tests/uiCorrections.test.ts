@@ -95,11 +95,15 @@ test('homepage icons - all 15 supplied PNGs share one mapping across cards and s
   }
 });
 
-test('tool pages and sidebar use the shared supplied PNG mapping for every primary tool', () => {
+test('tool pages, Tests hub, and sidebar use the shared supplied PNG mapping for every primary tool', () => {
   const detail = readFileSync('components/ToolDetailView.tsx', 'utf8');
+  const testsHub = readFileSync('app/tests/page.tsx', 'utf8');
   const navbar = navbarSource;
   const sharedIcon = readFileSync('components/ui/ToolAssetIcon.tsx', 'utf8');
   assert.match(detail, /<ToolAssetIcon slug=\{tool\.slug\}/);
+  assert.match(testsHub, /<ToolAssetIcon slug=\{tool\.slug\} size=\{40\} className="h-10 w-10"/);
+  assert.match(testsHub, /flex h-10 w-10 shrink-0 items-center justify-center/);
+  assert.doesNotMatch(testsHub, /<ToolIcon|toolSlugToIconName/);
   assert.match(navbar, /<ToolAssetIcon slug=\{tool\.slug\}/);
   assert.match(sharedIcon, /toolIconSrc\(slug\)/);
   assert.match(sharedIcon, /if \(!src\)/);
