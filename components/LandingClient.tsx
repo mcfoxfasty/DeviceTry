@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   SearchX,
   X,
@@ -19,7 +21,6 @@ import {
 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
-import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { uiToolSearch } from '@/lib/tools/search';
 
@@ -41,7 +42,8 @@ interface LandingClientProps {
  * DeviceTry identity:
  *  - centered hero (H1 + supporting text, no large illustration),
  *  - compact search + category filter pills directly below,
- *  - dense 5/3/2/1 responsive tool grid, Popular-first ordering.
+ *  - three Popular tools in their original card treatment, followed by the
+ *    remaining catalog in a responsive three-column grid.
  * Content is unchanged: all 15 tools, truthful labels, no fake numbers.
  */
 
@@ -69,6 +71,42 @@ const TOOL_NOTES: Record<string, string> = {
 };
 
 const POPULAR_SET = new Set(POPULAR_SLUGS);
+
+/** The supplied homepage PNGs, mapped by the registry slug. */
+const HOME_TOOL_ICON_FILES: Record<string, string> = {
+  'microphone-test': 'microphone-test.png',
+  'webcam-test': 'webcam-test.png',
+  'speakers-test': 'speakers-test.png',
+  'voice-recorder': 'voice-recorder.png',
+  'tone-generator': 'tone-generator.png',
+  'keyboard-test': 'keyboard-test.png',
+  'mouse-test': 'mouse-test.png',
+  'gamepad-test': 'gamepad-test.png',
+  'touchscreen-test': 'touchscreen-test.png',
+  'click-speed-test': 'click-speed-test.png',
+  'reaction-time-test': 'reaction-time-test.png',
+  'screen-test': 'screen-test.png',
+  'refresh-rate-test': 'refresh-rate-test.png',
+  'internet-speed-test': 'internet-speed-test.png',
+  'what-is-my-ip': 'what-is-my-ip.png',
+};
+
+function HomeToolIcon({ slug, size = 40 }: { slug: string; size?: number }) {
+  const file = HOME_TOOL_ICON_FILES[slug];
+  if (!file) return null;
+  return (
+    <Image
+      src={`/Icons/${file}`}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      className="shrink-0 object-contain"
+      draggable={false}
+      unoptimized
+    />
+  );
+}
 
 /** Ordered: the three popular tools first, then the rest of the catalog. */
 const ORDERED_TOOLS: ToolDefinition[] = (() => {
@@ -163,6 +201,26 @@ const PRIVACY_POINTS = [
   },
 ] as const;
 
+/** Existing guided-inspection presets, copied from the inspection flow. */
+const GUIDED_INSPECTION_OPTIONS = [
+  {
+    title: 'Pre-Call / Meeting Readiness (3 Mins)',
+    description: 'Verifies microphone audio input, webcam video, and speaker clarity before an interview or video conference.',
+  },
+  {
+    title: 'Used Computer Hardware Inspection (7 Mins)',
+    description: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, video, battery.',
+  },
+  {
+    title: 'Classroom / Lab Kiosk Verification (4 Mins)',
+    description: 'Rapid diagnostic run for school lab workstations or shared kiosks: keyboard, mouse, audio, display.',
+  },
+  {
+    title: 'Full Diagnostic Check (All 8 Tests)',
+    description: 'Complete inspection evaluating all available browser device APIs.',
+  },
+] as const;
+
 export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -180,6 +238,15 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const guideTrackRef = useRef<HTMLDivElement | null>(null);
+  const inspectionTrackRef = useRef<HTMLDivElement | null>(null);
+  const [guideCarouselIndex, setGuideCarouselIndex] = useState(0);
+  const [inspectionCarouselIndex, setInspectionCarouselIndex] = useState(0);
+  const [guideInteractionPaused, setGuideInteractionPaused] = useState(false);
+  const [inspectionInteractionPaused, setInspectionInteractionPaused] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 
   // Track the URL value the input was last synced from, so we can adopt
   // external URL changes (browser Back) during render instead of via an
@@ -242,6 +309,8 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
 
   const toolCount = TOOLS_REGISTRY.length;
   const isFiltering = Boolean(searchQuery.trim()) || selectedCategory !== 'all';
+  const visiblePopularTools = filteredTools.filter((tool) => POPULAR_SET.has(tool.slug));
+  const remainingTools = filteredTools.filter((tool) => !POPULAR_SET.has(tool.slug));
 
   /** Clear Search: reset query, close suggestions, restore tools, refocus. */
   const clearSearch = () => {
@@ -311,6 +380,164 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [suggestionsOpen]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent) => setPrefersReducedMotion(event.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (prefersReducedMotion || guideInteractionPaused || homeGuides.length < 2) return;
+
+    const intervalId = window.setInterval(() => {
+      const track = guideTrackRef.current;
+      const cards = track
+        ? Array.from(track.querySelectorAll<HTMLElement>('[data-guide-card]'))
+        : [];
+      if (cards.length < 2) return;
+
+      setGuideCarouselIndex((currentIndex) => {
+        const nextIndex = (currentIndex + 1) % cards.length;
+        const target = cards[nextIndex];
+        if (target && track) {
+          track.scrollTo({
+            left: target.offsetLeft - track.clientLeft,
+            behavior: 'smooth',
+          });
+        }
+        return nextIndex;
+      });
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [guideInteractionPaused, homeGuides.length, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (prefersReducedMotion || inspectionInteractionPaused) return;
+
+    const intervalId = window.setInterval(() => {
+      const track = inspectionTrackRef.current;
+      const cards = track
+        ? Array.from(track.querySelectorAll<HTMLElement>('[data-inspection-card]'))
+        : [];
+      if (cards.length < 2) return;
+
+      setInspectionCarouselIndex((currentIndex) => {
+        const nextIndex = (currentIndex + 1) % cards.length;
+        const target = cards[nextIndex];
+        if (target && track) {
+          track.scrollTo({
+            left: target.offsetLeft - track.clientLeft,
+            behavior: 'smooth',
+          });
+        }
+        return nextIndex;
+      });
+    }, 6000);
+
+    return () => window.clearInterval(intervalId);
+  }, [inspectionInteractionPaused, prefersReducedMotion]);
+
+  const moveInspectionCarousel = (direction: -1 | 1) => {
+    const track = inspectionTrackRef.current;
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('[data-inspection-card]'));
+    const nextIndex = Math.min(
+      Math.max(inspectionCarouselIndex + direction, 0),
+      Math.max(cards.length - 1, 0)
+    );
+    const target = cards[nextIndex];
+    if (!target) return;
+    track.scrollTo({ left: target.offsetLeft - track.clientLeft, behavior: 'smooth' });
+    setInspectionCarouselIndex(nextIndex);
+  };
+
+  const syncInspectionCarousel = () => {
+    const track = inspectionTrackRef.current;
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('[data-inspection-card]'));
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    cards.forEach((card, index) => {
+      const distance = Math.abs(card.offsetLeft - track.clientLeft - track.scrollLeft);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setInspectionCarouselIndex(closestIndex);
+  };
+
+  const moveGuideCarousel = (direction: -1 | 1) => {
+    const track = guideTrackRef.current;
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('[data-guide-card]'));
+    const nextIndex = Math.min(
+      Math.max(guideCarouselIndex + direction, 0),
+      Math.max(homeGuides.length - 1, 0)
+    );
+    const target = cards[nextIndex];
+    if (!target) return;
+    track.scrollTo({ left: target.offsetLeft - track.clientLeft, behavior: 'smooth' });
+    setGuideCarouselIndex(nextIndex);
+  };
+
+  const syncGuideCarousel = () => {
+    const track = guideTrackRef.current;
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('[data-guide-card]'));
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    cards.forEach((card, index) => {
+      const distance = Math.abs(card.offsetLeft - track.clientLeft - track.scrollLeft);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setGuideCarouselIndex(closestIndex);
+  };
+
+  const renderToolCard = (tool: ToolDefinition, idx: number) => {
+    const popular = POPULAR_SET.has(tool.slug);
+    const note = TOOL_NOTES[tool.slug];
+    return (
+      <Link
+        key={tool.id}
+        href={`/test/${tool.slug}`}
+        className="glass tool-card group relative flex flex-col p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all"
+        style={idx < 10 ? { animationDelay: `${Math.min(idx * 0.04, 0.3)}s` } : undefined}
+      >
+        {popular && (
+          <span className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-[#FEF3C7] dark:bg-[#451A03] text-[#B45309] dark:text-[#FBBF24]">
+            Popular
+          </span>
+        )}
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 group-hover:scale-105 transition-transform duration-200">              <HomeToolIcon slug={tool.slug} size={40} />
+          </span>
+          <h2
+            className={`text-[13px] font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors ${
+              popular ? 'pr-14' : 'pr-2'
+            }`}
+          >
+            {tool.title}
+          </h2>
+        </div>
+        <p className="text-xs mt-2 text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
+          {tool.shortDesc}
+        </p>
+        {note && (
+          <p className="mt-2.5 text-[10px] font-medium text-[#8996A6] dark:text-[#677589] flex items-center gap-1">
+            <span className="w-1 h-1 rounded-full bg-[#0F766E] dark:bg-[#14B8A6] shrink-0" aria-hidden="true" />
+            {note}
+          </p>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <div className="pb-4">
@@ -414,7 +641,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                             }`}
                           >
                             <span className="shrink-0">
-                              <ToolIcon name={toolSlugToIconName(hit.slug)} size={28} />
+                              <HomeToolIcon slug={hit.slug} size={28} />
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
@@ -543,47 +770,21 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
         )}
 
         {filteredTools.length > 0 ? (
-          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-            {filteredTools.map((tool, idx) => {
-              const popular = POPULAR_SET.has(tool.slug);
-              const note = TOOL_NOTES[tool.slug];
-              return (
-                <Link
-                  key={tool.id}
-                  href={`/test/${tool.slug}`}
-                  className="glass tool-card group relative flex flex-col p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all"
-                  style={idx < 10 ? { animationDelay: `${Math.min(idx * 0.04, 0.3)}s` } : undefined}
-                >
-                  {popular && (
-                    <span className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-[#FEF3C7] dark:bg-[#451A03] text-[#B45309] dark:text-[#FBBF24]">
-                      Popular
-                    </span>
-                  )}
-                  {/* Icon beside its title; description in the text column below. */}
-                  <div className="flex items-center gap-3">
-                    <span className="shrink-0 group-hover:scale-105 transition-transform duration-200">
-                      <ToolIcon name={toolSlugToIconName(tool.slug)} size={40} className="w-10 h-10" />
-                    </span>
-                    <h2
-                      className={`text-[13px] font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors ${
-                        popular ? 'pr-14' : 'pr-2'
-                      }`}
-                    >
-                      {tool.title}
-                    </h2>
-                  </div>
-                  <p className="text-xs mt-2 text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
-                    {tool.shortDesc}
-                  </p>
-                  {note && (
-                    <p className="mt-2.5 text-[10px] font-medium text-[#8996A6] dark:text-[#677589] flex items-center gap-1">
-                      <span className="w-1 h-1 rounded-full bg-[#0F766E] dark:bg-[#14B8A6] shrink-0" aria-hidden="true" />
-                      {note}
-                    </p>
-                  )}
-                </Link>
-              );
-            })}
+          <div className="space-y-3">
+            {visiblePopularTools.length > 0 && (
+              <div className="grid grid-cols-1 gap-3">
+                {visiblePopularTools.map((tool) =>
+                  renderToolCard(tool, filteredTools.indexOf(tool))
+                )}
+              </div>
+            )}
+            {remainingTools.length > 0 && (
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 md:grid-cols-3 gap-3">
+                {remainingTools.map((tool) =>
+                  renderToolCard(tool, filteredTools.indexOf(tool))
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-16 text-center">
@@ -595,9 +796,20 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
 
       {/* ================= Guides & troubleshooting (pale teal band) ================= */}
       {homeGuides.length > 0 && (
-        <section aria-labelledby="home-guides-title" className="bg-[#EAF4F2] dark:bg-[#0E1B1A] py-12 mt-8">
+        <section
+          aria-labelledby="home-guides-title"
+          className="bg-[#EAF4F2] dark:bg-[#0E1B1A] py-12 mt-8"
+          onMouseEnter={() => setGuideInteractionPaused(true)}
+          onMouseLeave={() => setGuideInteractionPaused(false)}
+          onFocusCapture={() => setGuideInteractionPaused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setGuideInteractionPaused(false);
+            }
+          }}
+        >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
               <div className="max-w-2xl">
                 <h2 id="home-guides-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
                   {t.landing.guidesTitle}
@@ -606,20 +818,59 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                   {t.landing.guidesSubtitle}
                 </p>
               </div>
-              <Link
-                href="/guides"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors min-h-[44px]"
-              >
-                {t.landing.viewAllGuides}
-                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1" role="group" aria-label="Browse guides">
+                  <button
+                    type="button"
+                    onClick={() => moveGuideCarousel(-1)}
+                    disabled={guideCarouselIndex === 0}
+                    aria-label="Previous guide"
+                    aria-controls="home-guides-carousel"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveGuideCarousel(1)}
+                    disabled={guideCarouselIndex >= homeGuides.length - 1}
+                    aria-label="Next guide"
+                    aria-controls="home-guides-carousel"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <Link
+                  href="/guides"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-colors min-h-[44px]"
+                >
+                  {t.landing.viewAllGuides}
+                  <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              </div>
             </div>
-            <div className="grid gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3">
+            <p
+              className="mb-3 text-[11px] font-semibold text-[#52736F] dark:text-[#8CB8B2]"
+              aria-live={guideInteractionPaused || prefersReducedMotion ? 'polite' : 'off'}
+            >
+              Guide {guideCarouselIndex + 1} of {homeGuides.length}
+            </p>
+            <div
+              ref={guideTrackRef}
+              id="home-guides-carousel"
+              role="region"
+              aria-label="Guides and troubleshooting carousel"
+              tabIndex={0}
+              onScroll={syncGuideCarousel}
+              className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF]"
+            >
               {homeGuides.map((guide) => (
                 <Link
                   key={guide.slug}
                   href={`/guides/${guide.slug}`}
-                  className="glass group p-4 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
+                  data-guide-card
+                  className="glass group min-w-[86%] sm:min-w-[46%] lg:min-w-[31.5%] snap-start p-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
                     {guide.type === 'troubleshooting'
@@ -631,7 +882,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                   <span className="mt-1.5 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors">
                     {guide.title}
                   </span>
-                  <span className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-2 flex-1">
+                  <span className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-3 flex-1">
                     {guide.description}
                   </span>
                 </Link>
@@ -649,73 +900,155 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
           </h2>
           <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">{t.landing.howItWorksSubtitle}</p>
         </div>
-        <ol className="mt-8 grid gap-3 md:grid-cols-3">
+        <ol className="how-sequence mt-8 grid gap-4 md:grid-cols-3 md:gap-5">
           {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
             <li
               key={title}
-              className="glass p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043]"
+              className="how-step glass relative min-h-[190px] overflow-visible p-5 pt-6 rounded-2xl border border-[#E2E8F0] dark:border-[#223043]"
             >
-              <div className="flex items-center gap-2.5">
-                <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#EEF7F5] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] shrink-0">
-                  <Icon className="w-4.5 h-4.5" aria-hidden="true" />
+              <span
+                className="absolute right-4 top-2 text-5xl font-black tracking-tighter text-[#0F766E]/[0.07] dark:text-[#2DD4BF]/[0.09] select-none"
+                aria-hidden="true"
+              >
+                0{i + 1}
+              </span>
+              <div className="relative flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E7F5F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#2DD4BF] shrink-0 shadow-sm">
+                  <Icon className="w-5 h-5" aria-hidden="true" />
                 </span>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#8996A6]">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#0F766E] dark:text-[#2DD4BF]">
                   Step {i + 1}
                 </p>
               </div>
-              <h3 className="mt-3 text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
-              <p className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{body}</p>
+              <h3 className="relative mt-5 text-base font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+              <p className="relative mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{body}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      {/* ================= Privacy & benefits (peach/cream feature cards) ================= */}
+      {/* ================= Privacy by design ================= */}
       <section aria-labelledby="privacy-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-        <div className="text-center max-w-2xl mx-auto">
-          <h2 id="privacy-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
-            {t.landing.privacyTitle}
-          </h2>
-          <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{t.landing.privacySubtitle}</p>
-        </div>
-        <div className="mt-8 grid gap-3 md:grid-cols-3">
-          {PRIVACY_POINTS.map(({ icon: Icon, title, body }) => (
-            <div
-              key={title}
-              className="p-5 rounded-xl bg-[#FFF6EC] dark:bg-[#1D1710] border border-[#F5E3CC] dark:border-[#3A2E1F]"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-white dark:bg-[#26201A] text-[#D97706] shrink-0">
-                  <Icon className="w-4.5 h-4.5" aria-hidden="true" />
-                </span>
-                <h3 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
-              </div>
-              <p className="mt-2.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-                {body ?? t.landing.privacyNetworkException}
-              </p>
+        <div className="rounded-[1.75rem] border border-[#D7E9DC] dark:border-[#203D2A] bg-[#F1F8F3] dark:bg-[#0D1D14] p-6 sm:p-8 lg:p-10">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#DCFCE7] text-[#15803D] dark:bg-[#14532D] dark:text-[#86EFAC] shadow-sm">
+              <ShieldCheck className="w-6 h-6" aria-hidden="true" />
+            </span>
+            <div className="max-w-2xl">
+              <h2 id="privacy-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+                {t.landing.privacyTitle}
+              </h2>
+              <p className="mt-2 text-sm text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">{t.landing.privacySubtitle}</p>
             </div>
-          ))}
+          </div>
+          <div className="mt-7 grid gap-3 md:grid-cols-3">
+            {PRIVACY_POINTS.map(({ icon: Icon, title, body }) => (
+              <div
+                key={title}
+                className="p-5 rounded-xl bg-white/90 dark:bg-[#13251A] border border-[#D7E9DC] dark:border-[#274A32] shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F7EC] dark:bg-[#173522] text-[#15803D] dark:text-[#86EFAC] shrink-0">
+                    <Icon className="w-5 h-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+                </div>
+                <p className="mt-3 text-xs text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">
+                  {body ?? t.landing.privacyNetworkException}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* ================= Guided Checkup (lavender band) ================= */}
-      <section aria-labelledby="checkup-title" className="bg-[#EFEAFB] dark:bg-[#141221] py-12">
+      <section
+        aria-labelledby="checkup-title"
+        className="bg-[#EFEAFB] dark:bg-[#141221] py-12"
+        onMouseEnter={() => setInspectionInteractionPaused(true)}
+        onMouseLeave={() => setInspectionInteractionPaused(false)}
+        onFocusCapture={() => setInspectionInteractionPaused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setInspectionInteractionPaused(false);
+          }
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="glass p-6 sm:p-8 rounded-2xl border border-[#E2E8F0] dark:border-[#223043] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-            <div className="text-left">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl text-left">
               <h2 id="checkup-title" className="text-lg sm:text-xl font-bold text-[#142033] dark:text-[#E9EEF4]">
                 {t.landing.inspectionTitle}
               </h2>
-              <p className="text-sm mt-1.5 text-[#5F6B7A] dark:text-[#9AA6B8] max-w-2xl leading-relaxed">
+              <p className="text-sm mt-1.5 text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
                 {t.landing.inspectionSubtitle}
               </p>
             </div>
-            <Link
-              href="/inspection"
-              className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] text-sm font-bold transition-colors min-h-[44px]"
-            >
-              {t.landing.inspectionCta}
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1" role="group" aria-label="Browse guided inspection options">
+                <button
+                  type="button"
+                  onClick={() => moveInspectionCarousel(-1)}
+                  disabled={inspectionCarouselIndex === 0}
+                  aria-label="Previous guided inspection option"
+                  aria-controls="guided-inspection-carousel"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#C9B8E8] dark:border-[#493C68] bg-white dark:bg-[#131B27] text-[#6D28D9] dark:text-[#C4B5FD] hover:border-[#7C3AED] dark:hover:border-[#A78BFA] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveInspectionCarousel(1)}
+                  disabled={inspectionCarouselIndex >= GUIDED_INSPECTION_OPTIONS.length - 1}
+                  aria-label="Next guided inspection option"
+                  aria-controls="guided-inspection-carousel"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#C9B8E8] dark:border-[#493C68] bg-white dark:bg-[#131B27] text-[#6D28D9] dark:text-[#C4B5FD] hover:border-[#7C3AED] dark:hover:border-[#A78BFA] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <Link
+                href="/inspection"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] px-4 py-2.5 text-white dark:text-[#0B111A] text-sm font-bold transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
+              >
+                {t.landing.inspectionCta}
+              </Link>
+            </div>
+          </div>
+          <p
+            className="mt-5 text-[11px] font-semibold text-[#6D5B8C] dark:text-[#B9A9D6]"
+            aria-live={inspectionInteractionPaused || prefersReducedMotion ? 'polite' : 'off'}
+          >
+            Option {inspectionCarouselIndex + 1} of {GUIDED_INSPECTION_OPTIONS.length}
+          </p>
+          <div
+            ref={inspectionTrackRef}
+            id="guided-inspection-carousel"
+            role="region"
+            aria-label="Guided inspection options carousel"
+            tabIndex={0}
+            onScroll={syncInspectionCarousel}
+            className="relative mt-2 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD]"
+          >
+            {GUIDED_INSPECTION_OPTIONS.map((option) => (
+              <Link
+                key={option.title}
+                href="/inspection"
+                data-inspection-card
+                className="glass group min-w-[88%] sm:min-w-[48%] lg:min-w-[31.5%] snap-start flex flex-col rounded-xl border border-[#DED4F0] dark:border-[#3A3150] p-5 hover:border-[#7C3AED]/60 dark:hover:border-[#A78BFA]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-all"
+              >
+                <span className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#6D28D9] dark:group-hover:text-[#C4B5FD] transition-colors">
+                  {option.title}
+                </span>
+                <span className="mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed flex-1">
+                  {option.description}
+                </span>
+                <span className="mt-4 text-[11px] font-semibold text-[#6D28D9] dark:text-[#C4B5FD]">
+                  {t.landing.inspectionCta}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       </section>

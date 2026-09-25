@@ -5,9 +5,9 @@ import React from 'react';
  *
  * A compact, geometric icon set inspired by the clarity of iLovePDF's tool
  * cards — NOT a copy of their paths, symbols, or branding. One recognizable
- * visual idea per tool, solid color blocks, consistent 24-unit viewBox and
- * optical size. The palette is DeviceTry's: teal primary with coral, blue,
- * green, amber, and violet complements.
+ * visual idea per tool, consistent 24-unit viewBox and optical size. The
+ * original solid palette remains available elsewhere; the homepage can opt
+ * into the restrained green line-art treatment with `variant="line"`.
  *
  * Icons are decorative artwork (the tool title is always adjacent text), so
  * the root svg is aria-hidden; consumers can override with a label prop.
@@ -58,9 +58,174 @@ export interface ToolIconProps {
   className?: string;
   /** Provide when the icon is the sole content of a control. */
   title?: string;
+  /** Homepage cards use the green outline family without changing test pages. */
+  variant?: 'solid' | 'line';
 }
 
-export function ToolIcon({ name, size = 44, className = '', title }: ToolIconProps) {
+function LineToolIcon({ name, size = 44, className = '', title }: ToolIconProps) {
+  const shared = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    xmlns: 'http://www.w3.org/2000/svg',
+    className: `text-[#15803D] dark:text-[#4ADE80] ${className}`,
+    ...(title ? { role: 'img' as const, 'aria-label': title } : { 'aria-hidden': true as const }),
+  };
+  const line = (content: React.ReactNode) => (
+    <svg {...shared}>
+      <g
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {content}
+      </g>
+    </svg>
+  );
+
+  switch (name) {
+    case 'microphone':
+      return line(
+        <>
+          <rect x="9" y="2.5" width="6" height="11" rx="3" />
+          <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7" />
+          <path d="M8 6.5h8M8 9.5h8" opacity="0.55" />
+        </>
+      );
+    case 'webcam':
+      return line(
+        <>
+          <circle cx="12" cy="9" r="6.5" />
+          <circle cx="12" cy="9" r="3" />
+          <circle cx="12" cy="3.5" r="0.8" />
+          <path d="M9.5 15.5h5l-.7 4h-3.6l-.7-4ZM12 19.5V22M8.5 22h7" />
+        </>
+      );
+    case 'headphones':
+      return line(
+        <>
+          <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
+          <rect x="3" y="13" width="4.5" height="7" rx="2" />
+          <rect x="16.5" y="13" width="4.5" height="7" rx="2" />
+          <path d="M6 17h.01M18 17h.01" />
+        </>
+      );
+    case 'recorder':
+      return line(
+        <>
+          <path d="M5 20v-2.2A6.8 6.8 0 0 1 11.8 11h.4A6.8 6.8 0 0 1 19 17.8V20" />
+          <path d="M9 11a4 4 0 1 1 6 0M4 14v3M20 14v3M7 17h2M15 17h2M12 15v4" />
+        </>
+      );
+    case 'tone':
+      return line(
+        <>
+          <path d="M2.5 12h2l2-6 3.2 12L13 6l2.2 6H21" />
+          <path d="M4 19.5h16" opacity="0.55" />
+        </>
+      );
+    case 'keyboard':
+      return line(
+        <>
+          <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+          <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h.01M9.5 13.5h.01M13 13.5h.01M16.5 13.5h.01M8 16h8" />
+        </>
+      );
+    case 'mouse':
+      return line(
+        <>
+          <rect x="7.5" y="2.5" width="9" height="19" rx="4.5" />
+          <path d="M12 2.5v6M7.5 8.5h9" />
+          <rect x="10.8" y="4.5" width="2.4" height="2" rx="1.2" />
+        </>
+      );
+    case 'gamepad':
+      return line(
+        <>
+          <path d="M7.2 7.5h9.6a5.3 5.3 0 0 1 5.2 4.3l.8 4.4a3.1 3.1 0 0 1-5.6 2.2l-1.1-1.7H8l-1.1 1.7a3.1 3.1 0 0 1-5.6-2.2l.8-4.4a5.3 5.3 0 0 1 5.1-4.3Z" />
+          <path d="M7 10.5v4M5 12.5h4M16 11h.01M18 13h.01" />
+        </>
+      );
+    case 'touch':
+      return line(
+        <>
+          <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10" />
+          <path d="M12 9V4.5a1.5 1.5 0 0 1 3 0V10" />
+          <path d="M15 9V6.5a1.5 1.5 0 0 1 3 0v6.8c0 4.1-2.5 6.7-6.2 6.7h-.6c-2 0-3.4-.8-4.5-2.3l-2.6-3.5a1.6 1.6 0 0 1 2.4-2.1L9 14" />
+        </>
+      );
+    case 'click':
+      return line(
+        <>
+          <path d="m5 3 13 9-6.2 1.2L9 19 5 3Z" />
+          <path d="m12.5 14 4.5 4.5M17 15v4h-4" />
+        </>
+      );
+    case 'reaction':
+      return line(
+        <>
+          <circle cx="12" cy="13" r="8" />
+          <path d="M12 13 16 9M12 5V3M21 13h-2M5 13H3M9 3.9 7.6 2.5M17 3.9l1.4-1.4" />
+          <path d="M9.5 13h5" />
+        </>
+      );
+    case 'monitor':
+      return line(
+        <>
+          <rect x="2.5" y="4" width="19" height="13" rx="2" />
+          <path d="M8 21h8M12 17v4M6 8h4v3H6zM13 12h5M13 15h3" />
+        </>
+      );
+    case 'refresh':
+      return line(
+        <>
+          <path d="M19.5 8A8 8 0 0 0 5.2 6.5L3 9" />
+          <path d="M3 4.5V9h4.5M4.5 16A8 8 0 0 0 18.8 17.5L21 15" />
+          <path d="M21 19.5V15h-4.5" />
+        </>
+      );
+    case 'speed':
+      return line(
+        <>
+          <rect x="2.5" y="3.5" width="19" height="17" rx="2" />
+          <path d="M2.5 7.5h19M5 5.5h.01M8 5.5h.01" />
+          <path d="M6.5 16a5.5 5.5 0 0 1 11 0M12 16l3-4M9 18.5h6" />
+        </>
+      );
+    case 'network':
+      return line(
+        <>
+          <rect x="2.5" y="3.5" width="19" height="17" rx="2" />
+          <path d="M2.5 7.5h19M5 5.5h.01M8 5.5h.01" />
+          <circle cx="12" cy="14" r="3.5" />
+          <path d="M8.5 14h7M12 10.5c1.3 1.8 1.3 5.2 0 7M12 10.5c-1.3 1.8-1.3 5.2 0 7" />
+        </>
+      );
+    case 'gauge':
+      return line(
+        <>
+          <path d="M4 17a8 8 0 1 1 16 0M12 17l3.5-7.5" />
+          <circle cx="12" cy="17" r="1.5" />
+          <path d="M12 5V3M5.6 7.5 4.2 6.1M18.4 7.5l1.4-1.4" />
+        </>
+      );
+    case 'shield':
+    default:
+      return line(
+        <>
+          <path d="M12 2.8 19.5 5.6v6c0 4.6-3.2 7.9-7.5 9.6-4.3-1.7-7.5-5-7.5-9.6v-6L12 2.8Z" />
+          <path d="m8.8 11.6 2.3 2.3 4.2-4.6" />
+        </>
+      );
+  }
+}
+
+export function ToolIcon({ name, size = 44, className = '', title, variant = 'solid' }: ToolIconProps) {
+  if (variant === 'line') {
+    return <LineToolIcon name={name} size={size} className={className} title={title} />;
+  }
   const shared = {
     width: size,
     height: size,

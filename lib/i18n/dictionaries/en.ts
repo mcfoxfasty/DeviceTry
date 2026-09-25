@@ -87,7 +87,7 @@ export const enTranslations: Translations = {
     inspectionSubtitle: 'A structured checklist that walks you through several testers in sequence and builds one printable report.',
     inspectionCta: 'Start Guided Inspection',
     popularTitle: 'Most popular testers',
-    guidesTitle: 'Guides & troubleshooting',
+    guidesTitle: 'Guides & Troubleshooting',
     guidesSubtitle:
       'Step-by-step fixes written around the free test that verifies the result — plus specification-based buying guides with no invented ratings.',
     viewAllGuides: 'View all guides',

@@ -65,6 +65,84 @@ test('icons - all 15 primary tools map to distinct artwork', async () => {
   assert.equal(new Set(icons).size, icons.length, `Icons must be distinct across 15 tools, got: ${icons.join(', ')}`);
 });
 
+test('homepage tools - Popular stays first and remaining cards use three desktop columns', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  assert.match(
+    landing,
+    /const POPULAR_SLUGS = \['microphone-test', 'webcam-test', 'speakers-test'\]/,
+    'the original Popular order is unchanged'
+  );
+  assert.match(landing, /const visiblePopularTools = filteredTools\.filter/);
+  assert.match(landing, /const remainingTools = filteredTools\.filter/);
+  assert.match(landing, /visiblePopularTools\.length > 0[\s\S]{0,180}grid grid-cols-1 gap-3/);
+  assert.match(landing, /remainingTools\.length > 0[\s\S]{0,180}md:grid-cols-3/);
+  assert.doesNotMatch(landing, /xl:grid-cols-5/, 'remaining tools never collapse to a five-column row');
+  assert.match(landing, /href=\{`\/test\/\$\{tool\.slug\}`\}/, 'tool links remain data-driven');
+});
+
+test('homepage icons - all 15 supplied PNGs map to homepage cards and suggestions', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  assert.match(landing, /const HOME_TOOL_ICON_FILES: Record<string, string>/);
+  assert.match(landing, /src=\{`\/Icons\/\$\{file\}`\}/);
+  assert.equal((landing.match(/<HomeToolIcon/g) ?? []).length >= 2, true);
+  for (const tool of TOOLS_REGISTRY) {
+    assert.ok(
+      existsSync(join(repoRoot, 'public', 'Icons', `${tool.slug}.png`)),
+      `${tool.slug}.png is missing from the homepage asset directory`
+    );
+    assert.match(landing, new RegExp(`'${tool.slug}': '${tool.slug}\\.png'`));
+  }
+});
+
+test('homepage guides - carousel auto-advances accessibly and remains user-pausable', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  const page = readFileSync('app/page.tsx', 'utf8');
+  const dictionary = readFileSync('lib/i18n/dictionaries/en.ts', 'utf8');
+  assert.match(dictionary, /guidesTitle: 'Guides & Troubleshooting'/);
+  assert.match(
+    dictionary,
+    /Step-by-step fixes written around the free test that verifies the result — plus specification-based buying guides with no invented ratings\./
+  );
+  assert.match(landing, /id="home-guides-carousel"/);
+  assert.match(landing, /aria-label="Previous guide"/);
+  assert.match(landing, /aria-label="Next guide"/);
+  assert.equal((landing.match(/aria-controls="home-guides-carousel"/g) ?? []).length, 2);
+  assert.match(landing, /tabIndex=\{0\}/);
+  assert.match(landing, /focus-visible:outline/);
+  assert.match(landing, /window\.setInterval\([\s\S]{0,900},\s*5000\)/);
+  assert.match(landing, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/);
+  assert.match(landing, /onMouseEnter=\{\(\) => setGuideInteractionPaused\(true\)\}/);
+  assert.match(landing, /onFocusCapture=\{\(\) => setGuideInteractionPaused\(true\)\}/);
+  assert.match(landing, /prefersReducedMotion \|\| guideInteractionPaused/);
+  assert.match(landing, /href="\/guides"/);
+  assert.match(landing, /id="guided-inspection-carousel"/);
+  assert.match(landing, /aria-label="Previous guided inspection option"/);
+  assert.match(landing, /aria-label="Next guided inspection option"/);
+  assert.equal((landing.match(/aria-controls="guided-inspection-carousel"/g) ?? []).length, 2);
+  assert.match(landing, /data-inspection-card/);
+  assert.match(landing, /GUIDED_INSPECTION_OPTIONS/);
+  assert.match(landing, /href="\/inspection"/);
+  assert.match(landing, /window\.setInterval\([\s\S]{0,900},\s*6000\)/);
+  assert.match(landing, /inspectionInteractionPaused/);
+  assert.match(landing, /prefersReducedMotion/);
+  assert.match(page, /'checking-screen-dead-pixels'/);
+  assert.match(page, /'budget-headphones'/);
+});
+
+test('homepage atmosphere - geometry is stationary and privacy is green', () => {
+  const page = readFileSync('app/page.tsx', 'utf8');
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  assert.match(page, /className="homepage-geometry pointer-events-none fixed inset-0/);
+  assert.match(page, /border-2 border-\[#0F766E\]\/20/);
+  assert.doesNotMatch(page, /animate-|animation:/, 'background shapes remain stationary');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  assert.match(globals, /rgba\(15, 118, 110, 0\.055\)/);
+  assert.match(landing, /bg-\[#F1F8F3\]/);
+  assert.doesNotMatch(landing, /FFF6EC|text-\[#D97706\]/, 'privacy no longer uses the warning palette');
+  assert.match(landing, /className="how-sequence/);
+  assert.match(landing, /Media tools ask for browser permission first; the signal is processed locally\./);
+});
+
 test('search - "mic" ranks Microphone Test first (drawer + landing scenario)', async () => {
   const { searchTools } = await import('../lib/tools/search.js');
   const { TOOLS_REGISTRY } = await import('../lib/tools/registry.js');

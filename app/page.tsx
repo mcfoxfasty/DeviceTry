@@ -59,19 +59,14 @@ export const metadata: Metadata = {
  */
 function DecorativeBackground() {
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      {/* Base wash */}
-      <div className="absolute inset-0 bg-[#F7F6FB] dark:bg-[#0B111A]" />
-      {/* Pale teal circle — top left */}
-      <div className="absolute -top-32 -left-24 w-[26rem] h-[26rem] rounded-full bg-[#99F6E4] dark:bg-[#0F3D38] opacity-45 dark:opacity-20" />
-      {/* Lavender arc — right edge (ring, not fill) */}
-      <div className="absolute top-24 -right-40 w-[34rem] h-[34rem] rounded-full border-[3rem] border-[#DDD6FE] dark:border-[#221E3D] opacity-55 dark:opacity-25" />
-      {/* Soft peach form — bottom left edge */}
-      <div className="absolute -bottom-40 left-[8%] w-[24rem] h-[24rem] rounded-[38%] bg-[#FED7AA] dark:bg-[#3A2617] opacity-40 dark:opacity-15" />
-      {/* Amber dot cluster — mid-right edge */}
-      <div className="absolute top-[58%] -right-10 w-40 h-40 rounded-full bg-[#FDE68A] dark:bg-[#3A2E12] opacity-35 dark:opacity-15" />
-      {/* Small teal echo circle — lower center-left */}
-      <div className="absolute bottom-[12%] left-[38%] w-24 h-24 rounded-full border-8 border-[#99F6E4] dark:border-[#0F3D38] opacity-40 dark:opacity-20" />
+    <div
+      aria-hidden="true"
+      className="homepage-geometry pointer-events-none fixed inset-0 z-0 overflow-hidden"
+    >
+      <div className="absolute -left-52 -top-56 h-[42rem] w-[42rem] rounded-full border-2 border-[#0F766E]/20 dark:border-[#2DD4BF]/[0.16]" />
+      <div className="absolute -right-40 top-24 h-80 w-80 rotate-12 rounded-[4rem] border-2 border-[#7C3AED]/20 dark:border-[#A78BFA]/[0.16]" />
+      <div className="absolute -left-28 top-[42rem] h-44 w-[32rem] -rotate-12 rounded-full border-2 border-[#0F766E]/[0.16] dark:border-[#2DD4BF]/[0.13]" />
+      <div className="absolute bottom-24 right-[12%] h-36 w-36 rotate-45 rounded-[2.5rem] border-2 border-[#D97706]/20 dark:border-[#FBBF24]/[0.14]" />
     </div>
   );
 }
