@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 import { SITE_URL } from '@/lib/site';
 import { ThemeInitScript } from '@/lib/theme';
+import { BackToTop } from '@/components/layout/BackToTop';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -32,7 +33,10 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
             Light is the default; device dark preference never forces dark. */}
         <ThemeInitScript />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <BackToTop />
+      </body>
     </html>
   );
 }

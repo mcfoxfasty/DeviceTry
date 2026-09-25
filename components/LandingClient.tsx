@@ -23,6 +23,7 @@ import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { uiToolSearch } from '@/lib/tools/search';
+import { toolIconSrc } from '@/lib/tools/iconAssets';
 
 /** Lightweight guide pick resolved server-side (keeps article content out of the client bundle). */
 export interface HomeGuidePick {
@@ -72,31 +73,12 @@ const TOOL_NOTES: Record<string, string> = {
 
 const POPULAR_SET = new Set(POPULAR_SLUGS);
 
-/** The supplied homepage PNGs, mapped by the registry slug. */
-const HOME_TOOL_ICON_FILES: Record<string, string> = {
-  'microphone-test': 'microphone-test.png',
-  'webcam-test': 'webcam-test.png',
-  'speakers-test': 'speakers-test.png',
-  'voice-recorder': 'voice-recorder.png',
-  'tone-generator': 'tone-generator.png',
-  'keyboard-test': 'keyboard-test.png',
-  'mouse-test': 'mouse-test.png',
-  'gamepad-test': 'gamepad-test.png',
-  'touchscreen-test': 'touchscreen-test.png',
-  'click-speed-test': 'click-speed-test.png',
-  'reaction-time-test': 'reaction-time-test.png',
-  'screen-test': 'screen-test.png',
-  'refresh-rate-test': 'refresh-rate-test.png',
-  'internet-speed-test': 'internet-speed-test.png',
-  'what-is-my-ip': 'what-is-my-ip.png',
-};
-
 function HomeToolIcon({ slug, size = 40 }: { slug: string; size?: number }) {
-  const file = HOME_TOOL_ICON_FILES[slug];
-  if (!file) return null;
+  const src = toolIconSrc(slug);
+  if (!src) return null;
   return (
     <Image
-      src={`/Icons/${file}`}
+      src={src}
       alt=""
       aria-hidden="true"
       width={size}

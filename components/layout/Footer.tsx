@@ -29,12 +29,12 @@ const GUARANTEES = [
 
 export function Footer({ t }: FooterProps) {
   const linkClass =
-    'hover:text-[#2DD4BF] transition-colors';
+    'text-[#C9EEE4] hover:text-[#5EEAD4] focus-visible:text-[#5EEAD4] transition-colors';
 
   return (
-    <footer className="no-print w-full bg-[#0B1E28] dark:bg-[#081519] text-[#9FB3BE] dark:text-[#8CA2AD] mt-20">
+    <footer className="no-print w-full bg-[#0B2B2A] dark:bg-[#071C1B] text-[#B8D8D0] dark:text-[#A5C5BE] mt-20">
       {/* Accent hairline */}
-      <div className="h-px bg-gradient-to-r from-transparent via-[#14B8A6]/60 to-transparent" aria-hidden="true" />
+      <div className="h-px bg-gradient-to-r from-transparent via-[#2DD4BF]/60 to-transparent" aria-hidden="true" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
@@ -51,11 +51,11 @@ export function Footer({ t }: FooterProps) {
             <ul className="mt-6 space-y-3.5">
               {GUARANTEES.map(({ icon: Icon, title, description }) => (
                 <li key={title} className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 border border-white/10 shrink-0">
-                    <Icon className="w-3.5 h-3.5 text-[#2DD4BF]" />
+                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#E6F4F2]/10 border border-[#99F6E4]/15 shrink-0">
+                    <Icon className="w-3.5 h-3.5 text-[#5EEAD4]" />
                   </span>
                   <div>
-                    <p className="text-xs font-semibold text-[#E9F2F4]">{title}</p>
+                    <p className="text-xs font-semibold text-[#F0FFFA]">{title}</p>
                     <p className="text-[11px] mt-0.5 leading-relaxed">{description}</p>
                   </div>
                 </li>
@@ -65,7 +65,7 @@ export function Footer({ t }: FooterProps) {
 
           {/* Popular tests */}
           <div className="md:col-span-4">
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#E9F2F4] mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
               Popular Tests
             </h4>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-xs">
@@ -78,7 +78,7 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/test/gamepad-test" className={linkClass}>{t.gamepadTest.title}</Link></li>
               <li><Link href="/test/internet-speed-test" className={linkClass}>Internet Speed Test</Link></li>
             </ul>
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#E9F2F4] mt-6 mb-3">
+            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mt-6 mb-3">
               <Link href="/guides" className={linkClass}>Guides &amp; Troubleshooting</Link>
             </h4>
             <ul className="space-y-2 text-xs">
@@ -90,7 +90,7 @@ export function Footer({ t }: FooterProps) {
 
           {/* Legal & info */}
           <div className="md:col-span-3">
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#E9F2F4] mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
               Legal &amp; Info
             </h4>
             <ul className="space-y-2.5 text-xs">
@@ -110,13 +110,13 @@ export function Footer({ t }: FooterProps) {
       </div>
 
       {/* Bottom bar — copyright */}
-      <div className="border-t border-white/10">
+      <div className="border-t border-[#99F6E4]/15">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[11px] text-[#9FB3BE] dark:text-[#8CA2AD]">
+          <p className="text-[11px] text-[#B8D8D0] dark:text-[#A5C5BE]">
             {t.footer.copyright}
           </p>
-          <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#7E96A1]">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#2DD4BF]" />
+          <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#9BC7BD]">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#5EEAD4]" />
             Free · no sign-up · media stays on your device
           </p>
         </div>

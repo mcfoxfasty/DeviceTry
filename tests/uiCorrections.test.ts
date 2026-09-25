@@ -80,18 +80,58 @@ test('homepage tools - Popular stays first and remaining cards use three desktop
   assert.match(landing, /href=\{`\/test\/\$\{tool\.slug\}`\}/, 'tool links remain data-driven');
 });
 
-test('homepage icons - all 15 supplied PNGs map to homepage cards and suggestions', () => {
+test('homepage icons - all 15 supplied PNGs share one mapping across cards and suggestions', async () => {
   const landing = readFileSync('components/LandingClient.tsx', 'utf8');
-  assert.match(landing, /const HOME_TOOL_ICON_FILES: Record<string, string>/);
-  assert.match(landing, /src=\{`\/Icons\/\$\{file\}`\}/);
+  const { TOOL_ICON_FILES, toolIconSrc } = await import('../lib/tools/iconAssets.js');
+  assert.match(landing, /toolIconSrc/);
   assert.equal((landing.match(/<HomeToolIcon/g) ?? []).length >= 2, true);
   for (const tool of TOOLS_REGISTRY) {
+    assert.equal(TOOL_ICON_FILES[tool.slug], `${tool.slug}.png`);
+    assert.equal(toolIconSrc(tool.slug), `/Icons/${tool.slug}.png`);
     assert.ok(
       existsSync(join(repoRoot, 'public', 'Icons', `${tool.slug}.png`)),
-      `${tool.slug}.png is missing from the homepage asset directory`
+      `${tool.slug}.png is missing from the shared icon asset directory`
     );
-    assert.match(landing, new RegExp(`'${tool.slug}': '${tool.slug}\\.png'`));
   }
+});
+
+test('tool pages and sidebar use the shared supplied PNG mapping for every primary tool', () => {
+  const detail = readFileSync('components/ToolDetailView.tsx', 'utf8');
+  const navbar = navbarSource;
+  const sharedIcon = readFileSync('components/ui/ToolAssetIcon.tsx', 'utf8');
+  assert.match(detail, /<ToolAssetIcon slug=\{tool\.slug\}/);
+  assert.match(navbar, /<ToolAssetIcon slug=\{tool\.slug\}/);
+  assert.match(sharedIcon, /toolIconSrc\(slug\)/);
+  assert.match(sharedIcon, /if \(!src\)/);
+  assert.match(sharedIcon, /<Image/);
+});
+
+test('scroll behavior - new routes reset to top, anchors and history remain browser-owned', () => {
+  const scroll = readFileSync('components/layout/BackToTop.tsx', 'utf8');
+  const layout = readFileSync('app/layout.tsx', 'utf8');
+  assert.match(layout, /<BackToTop \/>/);
+  assert.match(scroll, /window\.addEventListener\('popstate'/);
+  assert.match(scroll, /!window\.location\.hash/);
+  assert.match(scroll, /window\.scrollTo\(\{ top: 0, left: 0, behavior: 'auto' \}\)/);
+  assert.match(scroll, /prefers-reduced-motion: reduce/);
+});
+
+test('back to top - visible, labelled, keyboard-visible, and motion-aware', () => {
+  const scroll = readFileSync('components/layout/BackToTop.tsx', 'utf8');
+  assert.match(scroll, /aria-label="Back to top"/);
+  assert.match(scroll, /focus-visible:ring-4/);
+  assert.match(scroll, /visible \? 'translate-y-0 opacity-100'/);
+  assert.match(scroll, /behavior: reducedMotion \? 'auto' : 'smooth'/);
+  assert.match(scroll, /tabIndex=\{visible \? 0 : -1\}/);
+});
+
+test('footer - refreshed green palette keeps light and dark readable', () => {
+  const footer = readFileSync('components/layout/Footer.tsx', 'utf8');
+  assert.match(footer, /bg-\[#0B2B2A\] dark:bg-\[#071C1B\]/);
+  assert.match(footer, /text-\[#C9EEE4\] hover:text-\[#5EEAD4\]/);
+  assert.match(footer, /text-\[#F0FFFA\]/);
+  assert.match(footer, /\/test\/microphone-test/);
+  assert.match(footer, /\/guides\/microphone-not-working/);
 });
 
 test('homepage guides - carousel auto-advances accessibly and remains user-pausable', () => {

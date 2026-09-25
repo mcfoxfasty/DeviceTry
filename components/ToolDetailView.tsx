@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, Info, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { ToolDefinition } from '@/lib/tools/types';
-import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
+import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
 import { ToolRendererDeepLink } from '@/components/ToolRendererDeepLink';
 import { PermissionPromptCard } from '@/components/PermissionPromptCard';
 
@@ -65,8 +65,8 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
 
       {/* Title block: H1 + description + truthful permission note */}
       <div className={!compact ? 'flex items-start gap-4' : 'flex items-start gap-3'}>
-        <div className="hidden sm:block shrink-0 mt-0.5">
-          <ToolIcon name={toolSlugToIconName(tool.slug)} size={44} />
+        <div className="shrink-0 mt-0.5">
+          <ToolAssetIcon slug={tool.slug} size={44} />
         </div>
         <div className="min-w-0">
           <TitleTag className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#142033] dark:text-[#E9EEF4] leading-tight">

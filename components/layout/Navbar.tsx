@@ -23,7 +23,7 @@ import { Translations } from '@/lib/i18n/types';
 import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { TOOLS_REGISTRY, ToolDefinition } from '@/lib/tools/registry';
-import { ToolIcon, toolSlugToIconName } from '@/components/ui/ToolIcon';
+import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
 import { uiToolSearch } from '@/lib/tools/search';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import { ShareSiteButton } from '@/components/ui/ShareSiteButton';
@@ -544,7 +544,7 @@ function ToolList({
           className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
         >
           <span className="shrink-0">
-            <ToolIcon name={toolSlugToIconName(tool.slug)} size={30} />
+            <ToolAssetIcon slug={tool.slug} size={30} />
           </span>
           <span className="flex-1 min-w-0">
             <span className="block text-[13px] font-semibold text-[#142033] dark:text-[#E9EEF4] truncate">
