@@ -245,10 +245,17 @@ test('speed provider - engine callbacks fired after dispose are ignored', async 
 // ---------------------------------------------------------------------------
 // Fix 4: no suppressHydrationWarning, no eslint.ignoreDuringBuilds
 // ---------------------------------------------------------------------------
-test('layout - html/body no longer carry suppressHydrationWarning', () => {
+test('layout - hydration suppression is scoped to the themed <html> element', () => {
   const layout = readFileSync('app/layout.tsx', 'utf8');
-  assert.ok(!layout.includes('suppressHydrationWarning'), 'root hydration suppression removed');
-  assert.ok(layout.includes('<html lang="en">'), 'html tag preserved');
+  // The theme choice is stored in localStorage, so ThemeInitScript sets `.dark`
+  // on <html> before React hydrates. That single attribute is the one thing the
+  // server genuinely cannot render, and React documents suppressHydrationWarning
+  // for exactly that case. The suppression must stay scoped to <html>: a blanket
+  // suppression anywhere else would hide real mismatches.
+  const suppressed = [...layout.matchAll(/<(\w+)[^>]*\ssuppressHydrationWarning/g)].map((m) => m[1]);
+  assert.deepEqual(suppressed, ['html'], 'only the themed <html> may suppress hydration warnings');
+  assert.ok(layout.includes('<html lang="en" suppressHydrationWarning>'), 'html tag preserved');
+  assert.ok(!layout.includes('<body lang'), 'body is untouched by the theme script');
 });
 
 test('config - lint is enforced as a hard gate in the verify script', () => {

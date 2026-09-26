@@ -40,7 +40,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en">
+    /* The stored theme lives in localStorage, so only the browser knows it:
+       ThemeInitScript sets `.dark` on <html> before first paint and React then
+       hydrates markup the server could not have produced. React documents
+       suppressHydrationWarning for exactly this one intentional attribute
+       difference, and it is scoped to this element alone — a real mismatch
+       anywhere else in the tree still reports. Dropping it would mean either
+       rendering the class the server cannot know, or applying the theme after
+       hydration and flashing light at dark-mode visitors. */
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Apply the stored Light/Dark choice before first paint.
             Light is the default; device dark preference never forces dark. */}
