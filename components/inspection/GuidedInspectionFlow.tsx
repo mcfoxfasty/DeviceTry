@@ -62,7 +62,7 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
     steps: ['mic', 'webcam', 'speakers'],
   },
   used_hardware: {
-    title: 'Used Computer Hardware Inspection (6 Mins)',
+    title: 'Used Computer Hardware Inspection (5 Mins)',
     desc: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
     steps: ['display', 'keyboard', 'mouse', 'speakers', 'mic', 'webcam'],
   },
@@ -105,6 +105,24 @@ export function GuidedInspectionFlow({
   useEffect(() => {
     resultsRef.current = results;
   }, [results]);
+
+  /**
+   * Deep link from a homepage card. /inspection?suite=pre_call opens THAT
+   * preset already running on its first step, so a card click lands on the
+   * exact inspection its artwork advertises instead of the default one.
+   *
+   * Read from location.search rather than useSearchParams so the page keeps
+   * static rendering without a Suspense boundary, and applied after mount so
+   * the server render and the first client render stay identical.
+   */
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('suite');
+    if (!requested || !PRESET_SUITES[requested]) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time post-hydration URL sync for the card deep link; a lazy useState initializer would read window.location during render and mismatch the server markup. */
+    setSelectedSuiteKey(requested);
+    setActiveStepIndex(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   const suite = PRESET_SUITES[selectedSuiteKey];
   const activeStepKey = suite.steps[activeStepIndex];

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -8,6 +8,28 @@ import { TOOLS_REGISTRY } from '../lib/tools/registry';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const navbarSource = readFileSync(join(repoRoot, 'components/layout/Navbar.tsx'), 'utf8');
+
+/** Reads the pixel dimensions straight out of a WebP header (no image deps). */
+function readJpegLikeSize(file: string): [number, number] {
+  const buf = readFileSync(file);
+  assert.equal(buf.slice(8, 12).toString('ascii'), 'WEBP', 'card artwork must be WebP');
+  // Simple lossy VP8 / extended VP8X / lossless VP8L layouts all put the canvas
+  // size in the first 10 bytes after the 'VP8 ' chunk header.
+  const chunk = buf.slice(12, 16).toString('ascii');
+  if (chunk === 'VP8 ') {
+    return [buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff];
+  }
+  if (chunk === 'VP8X') {
+    const w = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16));
+    const h = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16));
+    return [w, h];
+  }
+  if (chunk === 'VP8L') {
+    const bits = buf.readUInt32LE(21);
+    return [(bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1];
+  }
+  throw new Error(`unsupported WebP chunk: ${chunk}`);
+}
 
 /**
  * Phase 10 UI-correction regressions:
@@ -195,6 +217,96 @@ test('homepage guides - carousel auto-advances accessibly and remains user-pausa
   assert.match(landing, /prefersReducedMotion/);
   assert.match(page, /'checking-screen-dead-pixels'/);
   assert.match(page, /'budget-headphones'/);
+});
+
+test('homepage inspection cards - the supplied artwork IS the card', async () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+
+  // One image per preset, in the existing order, all served from public/.
+  const images = [...landing.matchAll(/image: '(\/inspection\/[^']+)'/g)].map((m) => m[1]);
+  assert.equal(images.length, 4, 'every guided-inspection option has one supplied image');
+  for (const src of images) {
+    assert.ok(src.endsWith('.webp'), 'card artwork is served as WebP');
+    const file = join(repoRoot, 'public', decodeURIComponent(src));
+    assert.ok(existsSync(file), `supplied card artwork must exist: ${src}`);
+    assert.ok(statSync(file).size < 400 * 1024, `card artwork must stay small: ${src}`);
+  }
+
+  // Every image carries descriptive alt text, not an empty one.
+  const alts = [...landing.matchAll(/alt: '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(alts.length, 4);
+  for (const alt of alts) {
+    assert.ok(alt.includes('card') && alt.length > 60, `alt text must describe the card: "${alt}"`);
+  }
+
+  // The artwork is the card as supplied, and the declared dimensions match the
+  // real file exactly — no size mismatch, so the four cards render at the same
+  // size in the shared box.
+  const declared = [...landing.matchAll(/imageWidth: (\d+),\s+imageHeight: (\d+)/g)].map(
+    (m) => [Number(m[1]), Number(m[2])]
+  );
+  assert.equal(declared.length, 4);
+  const actualSizes: Array<[number, number]> = [];
+  for (const [i, [w, h]] of declared.entries()) {
+    const src = images[i];
+    const file = join(repoRoot, 'public', decodeURIComponent(src));
+    const actual = readJpegLikeSize(file);
+    assert.deepEqual([w, h], actual, `declared size must match the file: ${src}`);
+    // Supplied cards are all exactly 2560x1440, so every card fills the shared
+    // 16:9 box identically and none reads as smaller than its neighbours.
+    assert.equal(Math.abs(w / h - 16 / 9) < 1e-9, true, `card artwork must be 16:9: ${src}`);
+    actualSizes.push(actual);
+  }
+  for (const [w, h] of actualSizes) {
+    assert.deepEqual([w, h], actualSizes[0], 'all four cards share one identical size');
+  }
+
+  // The card is the artwork: contained (never cropped or stretched) inside one
+  // shared 16:9 box so every card in the row lines up on the same line.
+  assert.match(landing, /<Image\s+src=\{option\.image\}/);
+  assert.match(landing, /className="h-full w-full object-contain"/);
+  assert.match(landing, /aspect-\[16\/9\]/, 'cards share one box so the row aligns');
+  // Scope to the card markup ITSELF (the map up to its closing '))}'). Slicing
+  // to end-of-file would swallow whatever homepage sections follow the carousel
+  // and flag their unrelated padding/border classes as card styling.
+  const cardStart = landing.indexOf('GUIDED_INSPECTION_OPTIONS.map');
+  assert.ok(cardStart > -1, 'the card carousel renders GUIDED_INSPECTION_OPTIONS');
+  const card = landing.slice(cardStart, landing.indexOf('))}', cardStart) + 3);
+  assert.doesNotMatch(card, /border-\[#DED4F0\]/, 'no border drawn around the image card');
+  assert.doesNotMatch(card, /\bp-5\b/, 'no padding wrapper around the image card');
+  // Past the React key, nothing renders the title or description as text.
+  const key = 'key={option.title}';
+  const cardBody = card.slice(card.indexOf(key) + key.length);
+  assert.doesNotMatch(cardBody, /\{option\.title\}|\{option\.description\}/, 'card text is not rebuilt in HTML');
+
+  // Each card opens ITS OWN inspection, already running on its first step.
+  const suites = [...landing.matchAll(/suite: '([a-z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(suites, ['pre_call', 'used_hardware', 'classroom', 'full']);
+  assert.match(card, /data-inspection-card/);
+  assert.match(card, /href=\{`\/inspection\?suite=\$\{option\.suite\}`\}/);
+
+  // The inspection page honours that deep link: right preset, right first step.
+  const flow = readFileSync('components/inspection/GuidedInspectionFlow.tsx', 'utf8');
+  assert.match(flow, /URLSearchParams\(window\.location\.search\)\.get\('suite'\)/);
+  assert.match(flow, /if \(!requested \|\| !PRESET_SUITES\[requested\]\) return;/);
+  assert.match(flow, /setSelectedSuiteKey\(requested\);[\s\S]{0,80}setActiveStepIndex\(0\);/);
+
+  // Landing on step 1 must NOT acquire a device: the guided flow itself never
+  // calls getUserMedia, and in the media testers the only call site sits in the
+  // Start handler, never in an effect body. So a card click reaches step 1 with
+  // the permission prompt still unopened, waiting for the user to press Start.
+  assert.doesNotMatch(flow, /getUserMedia/, 'the guided flow never requests a device permission');
+  for (const tester of ['MicrophoneTester', 'WebcamTester']) {
+    const src = readFileSync(`components/tests/${tester}.tsx`, 'utf8');
+    const calls = [...src.matchAll(/getUserMedia\(/g)].map((m) => m.index!);
+    assert.equal(calls.length, 1, `${tester} has a single getUserMedia call site`);
+    // Everything from the preceding function boundary to the call must not be
+    // an effect body: the call lives in the Start handler.
+    const before = src.slice(0, calls[0]);
+    const lastEffectEnd = before.lastIndexOf('}, [');
+    const lastHandler = before.lastIndexOf('async (');
+    assert.ok(lastHandler > lastEffectEnd, `${tester} only calls getUserMedia from a Start handler, not an effect`);
+  }
 });
 
 test('homepage atmosphere - geometry is stationary and privacy is green', () => {

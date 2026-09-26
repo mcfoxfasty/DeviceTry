@@ -183,23 +183,60 @@ const PRIVACY_POINTS = [
   },
 ] as const;
 
-/** Existing guided-inspection presets, copied from the inspection flow. */
+/**
+ * Existing guided-inspection presets, copied from the inspection flow. Each
+ * option is a finished card image served from public/inspection/ (the files
+ * supplied in public/Inspection .zip, renamed to URL-safe slugs and served as
+ * WebP). The artwork already carries the title, the summary, the duration and
+ * the call to action, so the card IS the image — it is never placed inside
+ * another card, given a border, or rebuilt as HTML. Alt text describes the
+ * same content for anyone who cannot see it.
+ *
+ * Each card deep-links to its OWN inspection (`/inspection?suite=…`), so a
+ * card click opens that preset already running instead of the default one.
+ *
+ * The artwork is trimmed to the card itself (no transparent padding baked
+ * into the file) and every card is laid out in the same 2:1 box, which is the
+ * real shape of the supplied cards, so the row lines up on one line and each
+ * card fills its box. Nothing is cropped or stretched: the artwork is
+ * contained, and all four cards are exactly 2560x1440 (16:9).
+ */
 const GUIDED_INSPECTION_OPTIONS = [
   {
     title: 'Pre-Call / Meeting Readiness (3 Mins)',
     description: 'Verifies microphone audio input, webcam video, and speaker clarity before an interview or video conference.',
+    suite: 'pre_call',
+    image: '/inspection/pre-call-meeting-readiness.webp',
+    imageWidth: 2560,
+    imageHeight: 1440,
+    alt: 'Pre-Call / Meeting Readiness card, about 3 minutes. Verifies microphone audio input, webcam video, and speaker clarity before an interview or video conference, with a Start Guided Inspection button.',
   },
   {
-    title: 'Used Computer Hardware Inspection (6 Mins)',
+    title: 'Used Computer Hardware Inspection (5 Mins)',
     description: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
+    suite: 'used_hardware',
+    image: '/inspection/used-computer-hardware-inspection.webp',
+    imageWidth: 2560,
+    imageHeight: 1440,
+    alt: 'Used Computer Hardware Inspection card, about 5 minutes. Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video, with a Start Guided Inspection button.',
   },
   {
     title: 'Classroom / Lab Kiosk Verification (4 Mins)',
     description: 'Rapid diagnostic run for school lab workstations or shared kiosks: keyboard, mouse, audio, display.',
+    suite: 'classroom',
+    image: '/inspection/classroom-lab-kiosk-verification.webp',
+    imageWidth: 2560,
+    imageHeight: 1440,
+    alt: 'Classroom and Lab Kiosk Verification card, about 4 minutes. Rapid diagnostic run for school lab workstations or shared kiosks: keyboard, mouse, audio, display, with a Start Guided Inspection button.',
   },
   {
     title: 'Full Diagnostic Check (All 7 Tests)',
     description: 'Complete inspection evaluating all available browser device APIs.',
+    suite: 'full',
+    image: '/inspection/full-diagnostic-check-all-7-tests.webp',
+    imageWidth: 2560,
+    imageHeight: 1440,
+    alt: 'Full Diagnostic Check card covering all 7 tests, about 7 minutes. Complete inspection evaluating all available browser device APIs, with a Start Guided Inspection button.',
   },
 ] as const;
 
@@ -874,76 +911,6 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
         </section>
       )}
 
-      {/* ================= How it works (white surface) ================= */}
-      <section aria-labelledby="how-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center max-w-2xl mx-auto">
-          <h2 id="how-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
-            {t.landing.howItWorksTitle}
-          </h2>
-          <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">{t.landing.howItWorksSubtitle}</p>
-        </div>
-        <ol className="how-sequence mt-8 grid gap-4 md:grid-cols-3 md:gap-5">
-          {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
-            <li
-              key={title}
-              className="how-step glass relative min-h-[190px] overflow-visible p-5 pt-6 rounded-2xl border border-[#E2E8F0] dark:border-[#223043]"
-            >
-              <span
-                className="absolute right-4 top-2 text-5xl font-black tracking-tighter text-[#0F766E]/[0.07] dark:text-[#2DD4BF]/[0.09] select-none"
-                aria-hidden="true"
-              >
-                0{i + 1}
-              </span>
-              <div className="relative flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E7F5F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#2DD4BF] shrink-0 shadow-sm">
-                  <Icon className="w-5 h-5" aria-hidden="true" />
-                </span>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#0F766E] dark:text-[#2DD4BF]">
-                  Step {i + 1}
-                </p>
-              </div>
-              <h3 className="relative mt-5 text-base font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
-              <p className="relative mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* ================= Privacy by design ================= */}
-      <section aria-labelledby="privacy-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-        <div className="rounded-[1.75rem] border border-[#D7E9DC] dark:border-[#203D2A] bg-[#F1F8F3] dark:bg-[#0D1D14] p-6 sm:p-8 lg:p-10">
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#DCFCE7] text-[#15803D] dark:bg-[#14532D] dark:text-[#86EFAC] shadow-sm">
-              <ShieldCheck className="w-6 h-6" aria-hidden="true" />
-            </span>
-            <div className="max-w-2xl">
-              <h2 id="privacy-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
-                {t.landing.privacyTitle}
-              </h2>
-              <p className="mt-2 text-sm text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">{t.landing.privacySubtitle}</p>
-            </div>
-          </div>
-          <div className="mt-7 grid gap-3 md:grid-cols-3">
-            {PRIVACY_POINTS.map(({ icon: Icon, title, body }) => (
-              <div
-                key={title}
-                className="p-5 rounded-xl bg-white/90 dark:bg-[#13251A] border border-[#D7E9DC] dark:border-[#274A32] shadow-sm"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F7EC] dark:bg-[#173522] text-[#15803D] dark:text-[#86EFAC] shrink-0">
-                    <Icon className="w-5 h-5" aria-hidden="true" />
-                  </span>
-                  <h3 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
-                </div>
-                <p className="mt-3 text-xs text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">
-                  {body ?? t.landing.privacyNetworkException}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ================= Guided Checkup (lavender band) ================= */}
       <section
         aria-labelledby="checkup-title"
@@ -1016,20 +983,96 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
             {GUIDED_INSPECTION_OPTIONS.map((option) => (
               <Link
                 key={option.title}
-                href="/inspection"
+                href={`/inspection?suite=${option.suite}`}
                 data-inspection-card
-                className="glass group min-w-[88%] sm:min-w-[48%] lg:min-w-[31.5%] snap-start flex flex-col rounded-xl border border-[#DED4F0] dark:border-[#3A3150] p-5 hover:border-[#7C3AED]/60 dark:hover:border-[#A78BFA]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-all"
+                className="group block min-w-[88%] sm:min-w-[48%] lg:min-w-[31.5%] snap-start aspect-[16/9] rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-shadow hover:shadow-lg"
               >
-                <span className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#6D28D9] dark:group-hover:text-[#C4B5FD] transition-colors">
-                  {option.title}
-                </span>
-                <span className="mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed flex-1">
-                  {option.description}
-                </span>
-                <span className="mt-4 text-[11px] font-semibold text-[#6D28D9] dark:text-[#C4B5FD]">
-                  {t.landing.inspectionCta}
-                </span>
+                {/* Every card sits in the SAME 16:9 box — the real shape of
+                    the supplied cards, which are all exactly 2560x1440 — so
+                    the row aligns on one line and no card reads as smaller
+                    than its neighbours. The artwork is contained, never
+                    cropped or stretched. */}
+                <Image
+                  src={option.image}
+                  alt={option.alt}
+                  width={option.imageWidth}
+                  height={option.imageHeight}
+                  sizes="(min-width: 1024px) 32vw, (min-width: 640px) 48vw, 88vw"
+                  draggable={false}
+                  unoptimized
+                  className="h-full w-full object-contain"
+                />
               </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ================= How it works (white surface) ================= */}
+      <section aria-labelledby="how-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center max-w-2xl mx-auto">
+          <h2 id="how-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+            {t.landing.howItWorksTitle}
+          </h2>
+          <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">{t.landing.howItWorksSubtitle}</p>
+        </div>
+        <ol className="how-sequence mt-8 grid gap-4 md:grid-cols-3 md:gap-5">
+          {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
+            <li
+              key={title}
+              className="how-step glass relative min-h-[190px] overflow-visible p-5 pt-6 rounded-2xl border border-[#E2E8F0] dark:border-[#223043]"
+            >
+              <span
+                className="absolute right-4 top-2 text-5xl font-black tracking-tighter text-[#0F766E]/[0.07] dark:text-[#2DD4BF]/[0.09] select-none"
+                aria-hidden="true"
+              >
+                0{i + 1}
+              </span>
+              <div className="relative flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E7F5F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#2DD4BF] shrink-0 shadow-sm">
+                  <Icon className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#0F766E] dark:text-[#2DD4BF]">
+                  Step {i + 1}
+                </p>
+              </div>
+              <h3 className="relative mt-5 text-base font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+              <p className="relative mt-2 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* ================= Privacy by design ================= */}
+      <section aria-labelledby="privacy-title" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <div className="rounded-[1.75rem] border border-[#D7E9DC] dark:border-[#203D2A] bg-[#F1F8F3] dark:bg-[#0D1D14] p-6 sm:p-8 lg:p-10">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#DCFCE7] text-[#15803D] dark:bg-[#14532D] dark:text-[#86EFAC] shadow-sm">
+              <ShieldCheck className="w-6 h-6" aria-hidden="true" />
+            </span>
+            <div className="max-w-2xl">
+              <h2 id="privacy-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+                {t.landing.privacyTitle}
+              </h2>
+              <p className="mt-2 text-sm text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">{t.landing.privacySubtitle}</p>
+            </div>
+          </div>
+          <div className="mt-7 grid gap-3 md:grid-cols-3">
+            {PRIVACY_POINTS.map(({ icon: Icon, title, body }) => (
+              <div
+                key={title}
+                className="p-5 rounded-xl bg-white/90 dark:bg-[#13251A] border border-[#D7E9DC] dark:border-[#274A32] shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F7EC] dark:bg-[#173522] text-[#15803D] dark:text-[#86EFAC] shrink-0">
+                    <Icon className="w-5 h-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4]">{title}</h3>
+                </div>
+                <p className="mt-3 text-xs text-[#52655A] dark:text-[#A7C3AE] leading-relaxed">
+                  {body ?? t.landing.privacyNetworkException}
+                </p>
+              </div>
             ))}
           </div>
         </div>
