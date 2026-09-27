@@ -195,6 +195,57 @@ test('footer - refreshed green palette keeps light and dark readable', () => {
   assert.match(footer, /\/guides\/microphone-not-working/);
 });
 
+test('tool cards - the 10px requirement note keeps a 4.5:1 contrast in both themes', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  const note = landing.match(/<p className="mt-2\.5 text-\[10px\][^"]*">/);
+  assert.ok(note, 'the tool-card note is still a 10px line');
+  const light = note[0].match(/text-\[#([0-9A-Fa-f]{6})\]/);
+  const dark = note[0].match(/dark:text-\[#([0-9A-Fa-f]{6})\]/);
+  assert.ok(light && dark, 'the note declares a colour for each theme');
+
+  // WCAG relative luminance, so a future palette tweak cannot silently regress.
+  const luminance = (hex: string) => {
+    const clean = hex.replace('#', '');
+    const channel = (v: number) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const [r, g, b] = [0, 2, 4].map((i) => channel(parseInt(clean.slice(i, i + 2), 16)));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  // The card surface is translucent, so each colour is checked against both the
+  // card and the lighter/darker page it sits on.
+  const lightRatios = [contrast(light[1], '#FFFFFF'), contrast(light[1], '#F7F6FB')];
+  const darkRatios = [contrast(dark[1], '#131B27'), contrast(dark[1], '#0B111A')];
+  for (const [theme, ratios] of [['light', lightRatios], ['dark', darkRatios]] as const) {
+    for (const ratio of ratios) {
+      assert.ok(ratio >= 4.5, `${theme} note contrast ${ratio.toFixed(2)}:1 must be at least 4.5:1`);
+    }
+  }
+  // Still visibly lighter than the card description it sits under.
+  assert.ok(luminance(light[1]) > luminance('5F6B7A'), 'light note stays lighter than the card description');
+  assert.ok(luminance(dark[1]) < luminance('9AA6B8'), 'dark note stays dimmer than the card description');
+});
+
+test('footer - section headings use the next sequential level, not h4', () => {
+  const footer = readFileSync('components/layout/Footer.tsx', 'utf8');
+  // The last heading inside <main> is an h2, and the footer sits beside the main
+  // sections, so h4 skipped a level.
+  assert.doesNotMatch(footer, /<h4[\s>]/, 'footer no longer uses h4');
+  const h3 = [...footer.matchAll(/<h3 className="([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(h3.length, 3, 'all three footer section headings are present');
+  for (const cls of h3) {
+    // Tailwind preflight zeroes heading margins, so the classes fully define
+    // the look: the swap must not change the rendered styles.
+    assert.match(cls, /text-xs font-bold uppercase tracking-\[0\.12em\] text-\[#F0FFFA\]/);
+  }
+});
+
 test('homepage guides - carousel auto-advances accessibly and remains user-pausable', () => {
   const landing = readFileSync('components/LandingClient.tsx', 'utf8');
   const page = readFileSync('app/page.tsx', 'utf8');

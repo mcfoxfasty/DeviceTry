@@ -65,9 +65,12 @@ export function Footer({ t }: FooterProps) {
 
           {/* Popular tests */}
           <div className="md:col-span-4">
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
+            {/* h3, not h4: the last heading in <main> is an h2, and these are
+                siblings of the main sections, so h4 skipped a level. The
+                classes set size, weight and colour, so nothing looks different. */}
+            <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
               Popular Tests
-            </h4>
+            </h3>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-xs">
               <li><Link href="/test/microphone-test" className={linkClass}>{t.micTest.title}</Link></li>
               <li><Link href="/test/webcam-test" className={linkClass}>{t.webcamTest.title}</Link></li>
@@ -78,9 +81,9 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/test/gamepad-test" className={linkClass}>{t.gamepadTest.title}</Link></li>
               <li><Link href="/test/internet-speed-test" className={linkClass}>Internet Speed Test</Link></li>
             </ul>
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mt-6 mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mt-6 mb-3">
               <Link href="/guides" className={linkClass}>Guides &amp; Troubleshooting</Link>
-            </h4>
+            </h3>
             <ul className="space-y-2 text-xs">
               <li><Link href="/guides/microphone-not-working" className={linkClass}>Microphone not working</Link></li>
               <li><Link href="/guides/webcam-not-working" className={linkClass}>Webcam not working</Link></li>
@@ -90,9 +93,9 @@ export function Footer({ t }: FooterProps) {
 
           {/* Legal & info */}
           <div className="md:col-span-3">
-            <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mb-4">
               Legal &amp; Info
-            </h4>
+            </h3>
             <ul className="space-y-2.5 text-xs">
               <li><Link href="/inspection" className={linkClass}>{t.nav.guidedInspection}</Link></li>
               <li><Link href="/test-history" className={linkClass}>{t.nav.testHistory}</Link></li>

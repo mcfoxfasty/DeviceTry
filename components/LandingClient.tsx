@@ -606,7 +606,10 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
           {tool.shortDesc}
         </p>
         {note && (
-          <p className="mt-2.5 text-[10px] font-medium text-[#8996A6] dark:text-[#677589] flex items-center gap-1">
+          // 10px text, so it needs the 4.5:1 body-text ratio. The old greys
+          // measured 3.0:1 in light and 3.7:1 in dark; these sit between the
+          // card surface and the card description, keeping the hierarchy.
+          <p className="mt-2.5 text-[10px] font-medium text-[#64707F] dark:text-[#8492A6] flex items-center gap-1">
             <span className="w-1 h-1 rounded-full bg-[#0F766E] dark:bg-[#14B8A6] shrink-0" aria-hidden="true" />
             {note}
           </p>
