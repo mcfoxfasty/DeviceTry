@@ -200,6 +200,11 @@ const PRIVACY_POINTS = [
  * real shape of the supplied cards, so the row lines up on one line and each
  * card fills its box. Nothing is cropped or stretched: the artwork is
  * contained, and all four cards are exactly 2560x1440 (16:9).
+ *
+ * The one baked-in inconsistency was the Full Diagnostic file, which carried
+ * a ~5px lavender frame around its perimeter; the other three have none. It
+ * was removed from the asset itself (never with a theme colour), so the four
+ * cards now share a single outer edge that CSS rounds and clips.
  */
 const GUIDED_INSPECTION_OPTIONS = [
   {
@@ -985,13 +990,21 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 key={option.title}
                 href={`/inspection?suite=${option.suite}`}
                 data-inspection-card
-                className="group block min-w-[88%] sm:min-w-[48%] lg:min-w-[31.5%] snap-start aspect-[16/9] rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-shadow hover:shadow-lg"
+                className="group block min-w-[88%] sm:min-w-[48%] lg:min-w-[31.5%] snap-start aspect-[16/9] rounded-xl overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD] transition-shadow hover:shadow-lg"
               >
                 {/* Every card sits in the SAME 16:9 box — the real shape of
                     the supplied cards, which are all exactly 2560x1440 — so
                     the row aligns on one line and no card reads as smaller
                     than its neighbours. The artwork is contained, never
-                    cropped or stretched. */}
+                    cropped or stretched.
+
+                    `overflow-hidden` is what gives all four ONE outer shape.
+                    The files fill the frame edge to edge, so whatever sits
+                    outside a card's own rounded corner (black on Pre-Call,
+                    white on the other three) is still in the pixels;
+                    `rounded-xl` only clips once the box also hides its
+                    overflow. The clip radius is larger than every file's
+                    corner wedge at every card width, so no artwork is cut. */}
                 <Image
                   src={option.image}
                   alt={option.alt}

@@ -277,6 +277,21 @@ test('homepage inspection cards - the supplied artwork IS the card', async () =>
   assert.match(landing, /<Image\s+src=\{option\.image\}/);
   assert.match(landing, /className="h-full w-full object-contain"/);
   assert.match(landing, /aspect-\[16\/9\]/, 'cards share one box so the row aligns');
+  // ONE outer shape for all four. Every file fills the frame edge to edge, so
+  // whatever sits outside a card's own rounded corner (black on Pre-Call,
+  // white on the rest) is still in the pixels; `rounded-xl` only clips once
+  // the box also hides its overflow. Without `overflow-hidden` the radius is
+  // inert and each card shows its own square corners.
+  assert.match(
+    landing,
+    /rounded-xl overflow-hidden[^"]*"[\s\S]{0,1200}<Image/,
+    'the card box must round AND clip, so all four share one outer edge',
+  );
+  assert.doesNotMatch(
+    landing,
+    /rounded-xl focus-visible:outline/,
+    'a radius without overflow-hidden leaves the square corners visible',
+  );
   // Scope to the card markup ITSELF (the map up to its closing '))}'). Slicing
   // to end-of-file would swallow whatever homepage sections follow the carousel
   // and flag their unrelated padding/border classes as card styling.
@@ -474,6 +489,116 @@ test('navbar - closed drawer is aria-hidden AND inert; open drawer is neither', 
   // Guard against the regression where the OPEN dialog was hidden from AT.
   assert.equal(/aria-hidden=\{true\}/.test(navbarSource.replace(/aria-hidden="true"/g, '')), false,
     'no element may be unconditionally aria-hidden=true (backdrop only)');
+});
+
+// ---------- Card artwork: one consistent outer shape ----------
+
+test('inspection cards - no card bakes a frame or a dark corner into its pixels', async (t) => {
+  // The Full Diagnostic file shipped with a ~5px lavender frame around its
+  // whole perimeter while the other three had none, so it read as a rounded
+  // card drawn inside a larger white square. The frame lives in the pixels:
+  // no theme colour or border can hide it, so it has to be absent from the
+  // file. Pre-Call instead fills its rounded corner with black; that is
+  // handled by the shared CSS clip, and is deliberately NOT a failure here.
+  //
+  // Decoding needs a raster decoder, which is not a direct dependency here
+  // (the rest of this file reads WebP headers only). The specifier is held in
+  // a variable so TypeScript never hard-depends on it, and the test skips
+  // loudly rather than pretending when no decoder is installed.
+  type RawInfo = { width: number; height: number; channels: number };
+  type Decoder = (file: string) => {
+    removeAlpha: () => {
+      raw: () => {
+        toBuffer: (o: { resolveWithObject: true }) => Promise<{ data: Buffer; info: RawInfo }>;
+      };
+    };
+  };
+  const specifier = 'sharp';
+  let decode: Decoder | null = null;
+  try {
+    const mod = (await import(specifier)) as unknown as Record<string, unknown>;
+    const candidate = (mod.default ?? mod) as unknown;
+    if (typeof candidate === 'function') decode = candidate as Decoder;
+  } catch {
+    decode = null;
+  }
+  if (!decode) {
+    t.skip('no image decoder available (sharp not installed)');
+    return;
+  }
+
+  const CARDS = [
+    'pre-call-meeting-readiness.webp',
+    'used-computer-hardware-inspection.webp',
+    'classroom-lab-kiosk-verification.webp',
+    'full-diagnostic-check-all-7-tests.webp',
+  ];
+  const sat = (r: number, g: number, b: number) => {
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    return mx === 0 ? 0 : (mx - mn) / mx;
+  };
+  // A frame is a saturated, BRIGHT band. Pre-Call fills its rounded corner
+  // with near-black, which is also "saturated" by the ratio above and must
+  // not be mistaken for one — that wedge is handled by the CSS clip.
+  const isFrameColour = (p: readonly [number, number, number]) =>
+    sat(p[0], p[1], p[2]) > 0.15 && Math.max(p[0], p[1], p[2]) > 40;
+
+  for (const name of CARDS) {
+    const file = join(repoRoot, 'public', 'inspection', name);
+    const { data, info } = await decode(file)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { width: W, height: H, channels } = info;
+    const px = (x: number, y: number) => {
+      const o = (y * W + x) * channels;
+      return [data[o], data[o + 1], data[o + 2]] as const;
+    };
+
+    // Walk INWARD from each edge; a baked frame is a contiguous chromatic
+    // band sitting on the perimeter. Sampled away from the corners, where a
+    // rounded card legitimately has no edge colour.
+    const N = 61;
+    const measure = (edge: 'left' | 'right' | 'top' | 'bottom') => {
+      let max = 0;
+      const span = edge === 'left' || edge === 'right' ? H : W;
+      for (let i = 2; i < N - 2; i++) {
+        const t = Math.floor(((i + 0.5) / N) * span);
+        let d = 0;
+        while (d < 16) {
+          const p =
+            edge === 'left' ? px(d, t)
+            : edge === 'right' ? px(W - 1 - d, t)
+            : edge === 'top' ? px(t, d)
+            : px(t, H - 1 - d);
+          if (!isFrameColour(p)) break;
+          d++;
+        }
+        if (d > max) max = d;
+      }
+      return max;
+    };
+
+    for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
+      const band = measure(edge);
+      // Artwork that runs to the card edge can colour one or two pixels; a
+      // frame is a deliberate band several pixels thick.
+      assert.ok(band <= 2, `${name}: ${band}px frame band baked into the ${edge} edge`);
+    }
+
+    // And the frame must be gone on every side, not just the sampled ones.
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (Math.min(x, y, W - 1 - x, H - 1 - y) >= 6) continue;
+        const p = px(x, y);
+        assert.ok(
+          !isFrameColour(p),
+          `${name}: frame-coloured pixel survives at (${x}, ${y}) = rgb(${p.join(',')})`,
+        );
+      }
+    }
+  }
 });
 
 // ---------- Post-deployment pass: share payload safety ----------
