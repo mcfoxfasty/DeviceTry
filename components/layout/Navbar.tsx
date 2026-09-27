@@ -69,6 +69,7 @@ function DrawerOverlay({
   open,
   side,
   label,
+  width = 'w-[86%] max-w-sm',
   onClose,
   children,
 }: {
@@ -76,6 +77,13 @@ function DrawerOverlay({
   open: boolean;
   side: 'left' | 'right';
   label: string;
+  /**
+   * Panel width. The nav drawer sizes itself to its content (`w-fit`) so it
+   * hugs its longest row instead of covering most of a phone screen; the
+   * tools drawer keeps a percentage width because its search field needs
+   * room. Both stay capped so they can never exceed the viewport.
+   */
+  width?: string;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -172,7 +180,7 @@ function DrawerOverlay({
         // (React types this as boolean; browsers that predate inert ignore it,
         // where aria-hidden above plus `invisible` below cover the gap.)
         inert={!open}
-        className={`glass-overlay no-print absolute top-0 ${side}-0 h-full w-[86%] max-w-sm border-${
+        className={`glass-overlay no-print absolute top-0 ${side}-0 h-full ${width} border-${
           side === 'left' ? 'r' : 'l'
         } border-[#E8E3F2] dark:border-[#223043] flex flex-col transition-transform duration-300 ease-out safe-b ${
           open ? 'translate-x-0' : side === 'left' ? '-translate-x-full' : 'translate-x-full'
@@ -185,54 +193,76 @@ function DrawerOverlay({
 }
 
 /**
- * Light/Dark theme control backed by the shared theme system.
- *  - drawer variant: labelled segmented control inside the left navigation
- *    drawer (mobile primary control),
- *  - desktop variant: compact icon-only radiogroup in the sticky header, so
- *    theme switching is never mobile-only.
+ * Light/Dark theme control: ONE iPhone-style switch instead of a Light/Dark
+ * button pair, shared by both placements so theme switching is never
+ * mobile-only:
+ *  - drawer variant: the switch itself, sitting under the APPEARANCE heading,
+ *  - desktop variant: the same switch in the sticky header.
+ *
+ * There is no visible text in either placement: the switch is self-evident,
+ * and on a phone a text label would force the drawer wider than its longest
+ * row. The name therefore lives in aria-label only.
+ *
+ * Accessibility:
+ *  - a real <button>, so click, Space and Enter all activate it through
+ *    native semantics. Deliberately NO onKeyDown: the browser would also fire
+ *    click on Space, so a manual handler would toggle twice per press.
+ *  - role="switch" + aria-checked carry the on/off state; the label says what
+ *    the switch does ("Toggle dark mode") rather than restating the state,
+ *    which is what aria-checked is for.
+ *  - the track and thumb are aria-hidden: purely visual, and the state they
+ *    show is already announced by aria-checked.
+ *  - the focus ring is drawn as a ring (box-shadow) rather than an outline:
+ *    Tailwind's `outline-none` sets the same --tw-outline-style property that
+ *    `outline-2` reads, so the two cancel out and the ring stays invisible.
+ *
+ * All theme work (localStorage('devicetry-theme') + the .dark class on <html>)
+ * stays in lib/theme.tsx; this control only calls the shared toggle.
+ *
+ * The track, thumb and glyph are styled purely with `dark:` variants, keyed
+ * off the .dark class that app/layout.tsx applies BEFORE first paint. The
+ * React theme value drives only aria-checked and the tooltip, so a returning
+ * visitor with a stored Light never sees the switch briefly in the wrong
+ * position while the client bundle hydrates.
  */
-function ThemeControl({ t, variant = 'drawer' }: { t: Translations; variant?: 'drawer' | 'desktop' }) {
-  const { theme, setTheme } = useTheme();
-  const options: Array<{ value: 'light' | 'dark'; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { value: 'light', label: t.nav.themeLight, icon: Sun },
-    { value: 'dark', label: t.nav.themeDark, icon: Moon },
-  ];
+function ThemeSwitch({ t, variant = 'drawer' }: { t: Translations; variant?: 'drawer' | 'desktop' }) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
   const compact = variant === 'desktop';
+  // Track / thumb / travel are measured so the thumb never overflows its
+  // track: travel = track width - thumb width - 2px inset (20px / 24px).
+  // Off = thumb left, on (dark) = thumb right, both in CSS.
+  const trackSize = compact ? 'w-11 h-6' : 'w-14 h-8';
+  const thumb = compact
+    ? 'w-5 h-5 translate-x-0 dark:translate-x-5'
+    : 'w-7 h-7 translate-x-0 dark:translate-x-6';
+  const iconSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
   return (
-    <div
-      role="radiogroup"
-      aria-label={t.nav.themeToggle}
-      className={`flex items-center gap-1 p-1 rounded-xl bg-[#F4F2FA] dark:bg-[#192332] ${
-        compact ? '' : 'w-full'
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isDark}
+      aria-label={t.nav.themeSwitch}
+      title={isDark ? t.nav.themeDark : t.nav.themeLight}
+      onClick={toggleTheme}
+      className={`inline-flex items-center rounded-xl cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] dark:focus-visible:ring-[#14B8A6] ${
+        // py-1.5 pads the 32px track to a 44px tap target on a phone; px-3
+        // lines the switch up with the icons of the rows above it.
+        compact ? '' : 'px-3 py-1.5'
       }`}
     >
-      {options.map(({ value, label, icon: Icon }) => {
-        const active = theme === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            title={label}
-            onClick={() => setTheme(value)}
-            className={`inline-flex items-center justify-center rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              compact
-                ? `w-8 h-8 ${active ? '' : 'hover:bg-white/60 dark:hover:bg-white/10'}`
-                : 'flex-1 gap-1.5 px-3 py-2'
-            } ${
-              active
-                ? 'bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#14B8A6] shadow-sm'
-                : 'text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4]'
-            }`}
-          >
-            <Icon className={compact ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
-            {!compact && label}
-            {compact && <span className="sr-only">{label}</span>}
-          </button>
-        );
-      })}
-    </div>
+      <span
+        aria-hidden="true"
+        className={`relative inline-flex shrink-0 items-center rounded-full bg-[#D9D4E8] dark:bg-[#14B8A6] transition-colors duration-300 ${trackSize}`}
+      >
+        <span
+          className={`absolute left-0.5 top-0.5 flex items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${thumb}`}
+        >
+          <Sun className={`${iconSize} text-[#D97706] dark:hidden`} />
+          <Moon className={`${iconSize} hidden text-[#0F766E] dark:inline`} />
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -361,11 +391,11 @@ function NavbarInner({ t }: NavbarProps) {
               </Link>
             </nav>
 
-            {/* Compact desktop Light/Dark control — theme switching is not
+            {/* Compact desktop theme switch — theme switching is not
                 mobile-only. Mobile keeps the labelled control in the left
-                drawer; this icon pair shares the same theme system. */}
+                drawer; both render the same switch on the same theme system. */}
             <div className="hidden md:flex items-center ml-3 pl-3 border-l border-[#E8E3F2] dark:border-[#223043]">
-              <ThemeControl t={t} variant="desktop" />
+              <ThemeSwitch t={t} variant="desktop" />
             </div>
           </div>
         </div>
@@ -377,6 +407,9 @@ function NavbarInner({ t }: NavbarProps) {
         open={openDrawer === 'nav'}
         side="left"
         label="Site menu"
+        // Hugs the longest row (~204px + padding) instead of taking 86% of a
+        // phone screen. max-w keeps it safe on very narrow devices.
+        width="w-fit max-w-[86vw]"
         onClose={closeDrawers}
       >
         <div className="flex items-center justify-between px-4 h-14 border-b border-[#E8E3F2] dark:border-[#223043] shrink-0">
@@ -404,12 +437,14 @@ function NavbarInner({ t }: NavbarProps) {
             ))}
           </div>
 
-          {/* Theme control — Light/Dark persisted locally. */}
+          {/* Theme control — the Light/Dark choice is persisted locally. The
+              switch carries its own name for AT; no visible label, so the
+              drawer stays as narrow as its longest row. */}
           <div className="mt-6">
-            <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
+            <p className="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8996A6]">
               {t.nav.themeToggle}
             </p>
-            <ThemeControl t={t} />
+            <ThemeSwitch t={t} />
           </div>
 
           {/* Share DeviceTry — public site URL only, Web Share first. */}

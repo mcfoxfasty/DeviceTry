@@ -6,7 +6,7 @@
  *
  * Tailwind v4 defaults `dark:` to `prefers-color-scheme`, which forced the
  * site dark for visitors whose OS is in dark mode. The site now ships a
- * complete Light default and honors a user-chosen theme stored locally.
+ * complete Dark default and honors a user-chosen theme stored locally.
  * A tiny inline script in app/layout.tsx applies the stored choice to
  * <html class="dark"> before first paint (no hydration mismatch, and no
  * global suppressHydrationWarning anywhere).

@@ -5,8 +5,8 @@ import React, { createContext, useCallback, useContext, useMemo, useSyncExternal
 /**
  * Theme handling (Phase 10 corrections):
  *
- * - Light is the DEFAULT for every visitor; device dark preference no longer
- *   forces the site dark.
+ * - Dark is the DEFAULT for every visitor; a stored Light choice is what opts
+ *   a returning visitor out of it. Device dark preference is not consulted.
  * - The stored choice lives in localStorage('devicetry-theme') as 'light' | 'dark'.
  * - app/layout.tsx runs a tiny inline script BEFORE first paint that applies
  *   the stored choice to <html class="dark">, so the initial render is stable
@@ -21,8 +21,20 @@ export type ThemeChoice = 'light' | 'dark';
 
 export const THEME_STORAGE_KEY = 'devicetry-theme';
 
-/** Shape the layout's inline script injects (kept in sync manually). */
-export const THEME_INIT_SNIPPET = `(function(){try{var s=localStorage.getItem('${THEME_STORAGE_KEY}');if(s==='dark'||s==='light'){document.documentElement.classList.toggle('dark',s==='dark');}}catch(e){}})();`;
+/**
+ * The theme a visitor gets when nothing is stored yet. Dark is the default;
+ * only an explicit stored 'light' turns it off. Single source of truth so the
+ * SSR snapshot, the <html> reader and the context default cannot drift apart.
+ */
+export const DEFAULT_THEME: ThemeChoice = 'dark';
+
+/**
+ * Shape the layout's inline script injects (kept in sync manually).
+ * Applies dark by default and only removes it for a stored 'light', so a
+ * first-time visitor never sees a light frame. The catch branch also sets
+ * dark: with storage blocked (private mode) we still want the default.
+ */
+export const THEME_INIT_SNIPPET = `(function(){try{var s=localStorage.getItem('${THEME_STORAGE_KEY}');document.documentElement.classList.toggle('dark',s!=='light');}catch(e){document.documentElement.classList.add('dark');}})();`;
 
 /** Inline script element for the root layout (renders nothing itself). */
 export function ThemeInitScript() {
@@ -40,7 +52,7 @@ function subscribe(listener: Listener): () => void {
 }
 
 function readDomTheme(): ThemeChoice {
-  if (typeof document === 'undefined') return 'light';
+  if (typeof document === 'undefined') return DEFAULT_THEME;
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 }
 
@@ -70,14 +82,14 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'light',
+  theme: DEFAULT_THEME,
   ready: false,
   setTheme: () => {},
   toggleTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const theme = useSyncExternalStore(subscribe, readDomTheme, () => 'light' as ThemeChoice);
+  const theme = useSyncExternalStore(subscribe, readDomTheme, () => DEFAULT_THEME);
   const ready = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   const setTheme = useCallback((next: ThemeChoice) => applyTheme(next), []);

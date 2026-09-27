@@ -33,26 +33,36 @@ function readJpegLikeSize(file: string): [number, number] {
 
 /**
  * Phase 10 UI-correction regressions:
- *  - theme module contract (Light default, storage key, init snippet),
+ *  - theme module contract (Dark default, storage key, init snippet),
  *  - i18n keys required by the two mobile drawers and theme control,
  *  - distinct icon mapping across the 15 primary tools (drawer/launcher art),
  *  - search still ranks "mic" correctly for the drawer quick-search and the
  *    landing suggestions (the overlap-fix scenario).
  */
 
-test('theme - Light is the default choice', async () => {
+test('theme - Dark is the default choice', async () => {
   const mod = await import('../lib/theme.js');
-  // The provider's initial context value must be Light, not device-derived.
+  // The provider's initial context value must be Dark, not device-derived.
   assert.equal(mod.THEME_STORAGE_KEY, 'devicetry-theme');
+  assert.equal(mod.DEFAULT_THEME, 'dark', 'DEFAULT_THEME must be dark');
 });
 
-test('theme - init snippet toggles the html class from stored choice only', async () => {
+test('theme - init snippet defaults to dark and only a stored light opts out', async () => {
   const mod = await import('../lib/theme.js');
   const snippet = mod.THEME_INIT_SNIPPET;
   assert.ok(snippet.includes("localStorage.getItem('devicetry-theme')"), 'snippet must read the persisted key');
   assert.ok(snippet.includes("classList.toggle('dark'"), 'snippet must toggle the .dark class on <html>');
-  // A stored 'light' must result in dark=false — i.e. the toggle compares to 'dark'.
-  assert.ok(snippet.includes("s==='dark'"), 'snippet must apply dark only for the literal dark choice');
+  // Dark is the fallthrough: anything that is not the literal 'light' is dark,
+  // so a first visit with no stored value renders dark rather than light.
+  assert.ok(
+    snippet.includes("s!=='light'"),
+    'snippet must treat anything other than a stored light as dark',
+  );
+  // With storage blocked the default still has to apply, not silently go light.
+  assert.ok(
+    /catch\(e\)\{[^}]*classList\.add\('dark'\)/.test(snippet),
+    'snippet must apply dark in the catch branch when storage is unavailable',
+  );
   // Must not read prefers-color-scheme: device preference never forces dark.
   assert.ok(!snippet.includes('prefers-color-scheme'), 'device dark preference must not force the theme');
 });
@@ -70,6 +80,7 @@ test('i18n - nav keys for dual drawers and theme control exist', async () => {
     'popularTools',
     'browseByCategory',
     'themeToggle',
+    'themeSwitch',
     'themeLight',
     'themeDark',
   ];
@@ -598,17 +609,137 @@ test('tool pages render the permission guidance AFTER the interactive test card'
   assert.ok(testerIdx < permissionIdx, 'permission guidance must follow the test card');
 });
 
-// ---------- Desktop theme control ----------
+// ---------- Theme control: one accessible switch, not a Light/Dark pair ----------
 
-test('navbar - compact desktop Light/Dark control shares the theme system', () => {
-  assert.match(navbarSource, /variant="desktop"/, 'desktop header must render the compact ThemeControl variant');
+test('navbar - the theme control is a single switch shared by drawer and header', async () => {
+  // The old Light/Dark two-button pair is gone: one control, both states.
+  assert.doesNotMatch(navbarSource, /role="radiogroup"/, 'the Light/Dark button pair must be replaced');
+  assert.doesNotMatch(navbarSource, /role="radio"/, 'no per-mode radio buttons remain');
+  assert.doesNotMatch(navbarSource, /function ThemeControl/, 'the segmented control is replaced by ThemeSwitch');
+
+  // Switch semantics: state comes from aria-checked, the name says what is
+  // being switched (not which state it is currently in).
+  assert.match(navbarSource, /role="switch"/);
+  assert.match(navbarSource, /aria-checked=\{isDark\}/);
+  assert.match(navbarSource, /aria-label=\{t\.nav\.themeSwitch\}/);
+  // The track/thumb are decorative; their state is already announced.
+  assert.match(navbarSource, /aria-hidden="true"/);
+  // The name must describe the control, not restate the state.
+  const { getDictionary } = await import('../lib/i18n/index.js');
+  const label = getDictionary().nav.themeSwitch;
+  assert.notEqual(label, getDictionary().nav.themeToggle, 'the switch must not be named after its section');
+  assert.doesNotMatch(label, /^(on|off)$/i);
+  // The switch shows no visible text, so aria-label is its ONLY name: it has
+  // to name the action or a screen reader announces an unlabelled switch.
+  assert.match(label, /dark/i, 'the accessible name must mention dark mode');
+  assert.match(label, /toggle/i, 'the accessible name must describe the action');
+  const switchBody = navbarSource.slice(
+    navbarSource.indexOf('function ThemeSwitch'),
+    navbarSource.indexOf('function NavbarInner'),
+  );
+  assert.doesNotMatch(switchBody, /\{t\.nav\.themeSwitch\}<\/span>/, 'the switch must render no visible label');
+
+  // Reuses the shared theme system, so localStorage persistence is unchanged.
+  assert.match(navbarSource, /const \{ theme, toggleTheme \} = useTheme\(\);/);
+  assert.match(navbarSource, /onClick=\{toggleTheme\}/);
+});
+
+test('navbar - the theme switch toggles on click and on Space (native button activation)', () => {
+  // Scope to the switch itself: the drawer legitimately uses keydown elsewhere.
+  const start = navbarSource.indexOf('function ThemeSwitch');
+  const end = navbarSource.indexOf('function NavbarInner');
+  assert.ok(start !== -1 && end > start, 'the ThemeSwitch component must exist');
+  const switchSrc = navbarSource.slice(start, end);
+
+  // A real <button> fires click on Space/Enter natively. A manual key handler
+  // would double-toggle, so its absence is the actual regression guard.
+  assert.match(switchSrc, /<button\s+type="button"\s+role="switch"/, 'the switch must be a real button element');
+  assert.doesNotMatch(
+    switchSrc.replace(/NO onKey\w+/g, ''),
+    /onKeyDown|onKeyUp|onKeyPress/,
+    'the switch must not add a key handler (it would double-toggle)',
+  );
+  // Keyboard users must be able to see where they are. A ring, not an
+  // outline: `outline-none` and `outline-2` share --tw-outline-style and
+  // cancel each other out, leaving no visible focus ring at all.
+  assert.match(switchSrc, /focus-visible:ring-2/);
+  assert.match(switchSrc, /focus-visible:ring-\[#0F766E\]/);
+  assert.doesNotMatch(switchSrc, /focus-visible:outline-2/, 'the outline utilities cancel out the ring');
+});
+
+test('navbar - the theme switch travels within its track and stays visible on mobile', () => {
+  assert.match(navbarSource, /variant="desktop"/, 'desktop header must render the compact ThemeSwitch variant');
   assert.match(
     navbarSource,
-    /hidden md:flex[\s\S]{0,200}<ThemeControl t=\{t\} variant="desktop" \/>/,
-    'desktop control must be hidden on mobile (drawer control covers mobile)'
+    /hidden md:flex[\s\S]{0,200}<ThemeSwitch t=\{t\} variant="desktop" \/>/,
+    'desktop switch must be hidden on mobile (drawer switch covers mobile)'
   );
-  // Accessible: icon-only buttons expose their label to AT via sr-only text.
-  assert.match(navbarSource, /role="radiogroup"/);
-  assert.match(navbarSource, /aria-checked=\{active\}/);
-  assert.match(navbarSource, /\{compact && <span className="sr-only">\{label\}<\/span>\}/);
+  assert.match(navbarSource, /<ThemeSwitch t=\{t\} \/>/, 'the drawer keeps the switch');
+
+  // On a phone the switch sits alone under the APPEARANCE heading, padded to
+  // a 44px tap target and lined up with the icon column of the rows above.
+  assert.match(navbarSource, /compact \? '' : 'px-3 py-1\.5'/, 'the drawer switch needs a 44px tap target');
+  assert.doesNotMatch(navbarSource, /w-full justify-between gap-3/, 'the switch must not span the drawer row');
+  assert.match(
+    navbarSource,
+    /mb-1 px-3 text-\[10px\] font-extrabold[\s\S]{0,200}<ThemeSwitch t=\{t\} \/>/,
+    'the APPEARANCE heading must stay above the switch, on the same left edge',
+  );
+
+  // The iPhone look: a sliding thumb on a rounded track. Travel equals
+  // track width - thumb width - the 2px inset, so it can never overflow.
+  assert.match(navbarSource, /w-11 h-6'/);
+  assert.match(navbarSource, /w-5 h-5 translate-x-0 dark:translate-x-5/, 'desktop thumb slides 20px');
+  assert.match(navbarSource, /w-14 h-8'/);
+  assert.match(navbarSource, /w-7 h-7 translate-x-0 dark:translate-x-6/, 'drawer thumb slides 24px');
+  assert.match(navbarSource, /rounded-full bg-\[#D9D4E8\] dark:bg-\[#14B8A6\]/, 'track colour follows the mode');
+  assert.match(navbarSource, /transition-transform duration-300/);
+  // Both modes keep a glyph, so the state is readable without relying on colour.
+  assert.match(navbarSource, /<Sun className=\{`\$\{iconSize\} text-\[#D97706\] dark:hidden`\}/);
+  assert.match(navbarSource, /<Moon className=\{`\$\{iconSize\} hidden text-\[#0F766E\] dark:inline`\}/);
+});
+
+test('navbar - the theme switch is positioned by CSS, not by hydration', () => {
+  // .dark is set on <html> before first paint, so the track/thumb/glyph must be
+  // driven by `dark:` variants. If the visuals read the React theme value
+  // instead, a returning visitor with a stored Light would see the switch in
+  // the wrong position until the client bundle hydrates.
+  const start = navbarSource.indexOf('function ThemeSwitch');
+  const end = navbarSource.indexOf('function NavbarInner');
+  const switchSrc = navbarSource.slice(start, end);
+  const visual = switchSrc.slice(switchSrc.indexOf('aria-hidden="true"'));
+  assert.ok(visual.length > 0, 'the decorative track must exist');
+  assert.doesNotMatch(visual, /isDark/, 'the visual state must come from CSS, not the React theme value');
+  // The React value is still used for the accessible state and the tooltip.
+  assert.match(switchSrc, /aria-checked=\{isDark\}/);
+  assert.match(switchSrc, /title=\{isDark \? t\.nav\.themeDark : t\.nav\.themeLight\}/);
+});
+
+// ---------- Phone drawer sizing ----------
+
+test('navbar - the phone nav drawer hugs its content instead of covering the screen', () => {
+  // The nav drawer used to be w-[86%] max-w-sm, i.e. ~303px on a 390px phone —
+  // almost the full screen, with a lot of empty space beside short labels.
+  // It now sizes to its longest row ("Share DeviceTry", ~204px + padding).
+  assert.match(
+    navbarSource,
+    /id="site-nav-drawer"[\s\S]{0,400}width="w-fit max-w-\[86vw\]"/,
+    'the nav drawer must size itself to its content and stay capped',
+  );
+  assert.doesNotMatch(
+    navbarSource,
+    /id="site-nav-drawer"[\s\S]{0,400}w-\[86%\]/,
+    'the nav drawer must not span 86% of a phone screen',
+  );
+  // Width is now a per-drawer prop; the tools drawer still needs the room for
+  // its search field, so the percentage width must remain the default.
+  assert.match(navbarSource, /width\?: string;/);
+  assert.match(navbarSource, /width = 'w-\[86%\] max-w-sm',/);
+  assert.match(
+    navbarSource,
+    /id="tools-drawer"[\s\S]{0,400}label=\{t\.nav\.toolsDrawerTitle\}/,
+    'the tools drawer is unchanged',
+  );
+  // The panel still fills the height and carries the slide-in transform.
+  assert.match(navbarSource, /absolute top-0 \$\{side\}-0 h-full \$\{width\}/);
 });

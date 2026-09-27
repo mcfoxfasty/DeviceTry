@@ -51,7 +51,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Apply the stored Light/Dark choice before first paint.
-            Light is the default; device dark preference never forces dark. */}
+            Dark is the default; only a stored Light opts out, and device dark
+            preference is never consulted. */}
         <ThemeInitScript />
       </head>
       {/* The brand face is scoped to the body so it reaches the wordmark

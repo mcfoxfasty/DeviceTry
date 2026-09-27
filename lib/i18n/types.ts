@@ -76,6 +76,10 @@ export interface Translations {
     popularTools: string;
     browseByCategory: string;
     themeToggle: string;
+    /** Accessible name of the Light/Dark switch. The switch has no visible
+     *  text in either placement, so this is its only name; it states the
+     *  action, never the current mode (aria-checked announces that). */
+    themeSwitch: string;
     themeLight: string;
     themeDark: string;
     mic: string;

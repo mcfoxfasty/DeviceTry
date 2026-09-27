@@ -49,6 +49,7 @@ export const enTranslations: Translations = {
     popularTools: 'Popular tools',
     browseByCategory: 'Browse by category',
     themeToggle: 'Appearance',
+    themeSwitch: 'Toggle dark mode',
     themeLight: 'Light',
     themeDark: 'Dark',
     mic: 'Microphone',
