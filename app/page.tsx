@@ -52,10 +52,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * Fixed decorative background — stationary viewport layer with subtle
- * DeviceTry-tinted geometric shapes. Content scrolls normally above it; the
- * layer itself never moves, never captures pointers, and is hidden from
- * assistive tech. No animation, no scroll handlers, no blur.
+ * Fixed decorative background — stationary viewport layer with geometric
+ * outlines in the tool-icon green (#15803D light / #4ADE80 dark, matching
+ * components/ui/ToolIcon.tsx). Content scrolls normally above it; the layer
+ * itself never moves, never captures pointers, and is hidden from assistive
+ * tech. No animation, no scroll handlers, no blur filters — the dark-mode
+ * "neon" is a deliberately quiet pair of plain box-shadow halos (a tight core
+ * plus a wide bloom) painted once behind the content. Brighter cores were
+ * tried and rejected: the approved reference look is a thin lit line rather
+ * than a glowing tube, so the outlines carry the least halo that still reads
+ * as lit, and the corner ambience in globals.css carries the balance instead.
  */
 function DecorativeBackground() {
   return (
@@ -63,10 +69,10 @@ function DecorativeBackground() {
       aria-hidden="true"
       className="homepage-geometry pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      <div className="absolute -left-52 -top-56 h-[42rem] w-[42rem] rounded-full border-2 border-[#0F766E]/20 dark:border-[#2DD4BF]/[0.16]" />
-      <div className="absolute -right-40 top-24 h-80 w-80 rotate-12 rounded-[4rem] border-2 border-[#7C3AED]/20 dark:border-[#A78BFA]/[0.16]" />
-      <div className="absolute -left-28 top-[42rem] h-44 w-[32rem] -rotate-12 rounded-full border-2 border-[#0F766E]/[0.16] dark:border-[#2DD4BF]/[0.13]" />
-      <div className="absolute bottom-24 right-[12%] h-36 w-36 rotate-45 rounded-[2.5rem] border-2 border-[#D97706]/20 dark:border-[#FBBF24]/[0.14]" />
+      <div className="absolute -left-52 -top-56 h-[42rem] w-[42rem] rounded-full border-2 border-[#15803D]/[0.20] dark:border-[#4ADE80]/[0.30] dark:shadow-[0_0_8px_rgba(74,222,128,0.12),0_0_60px_rgba(74,222,128,0.09)]" />
+      <div className="absolute -right-40 top-24 h-80 w-80 rotate-12 rounded-[4rem] border-2 border-[#15803D]/[0.17] dark:border-[#4ADE80]/[0.26] dark:shadow-[0_0_8px_rgba(74,222,128,0.12),0_0_40px_rgba(74,222,128,0.09)]" />
+      <div className="absolute -left-28 top-[42rem] h-44 w-[32rem] -rotate-12 rounded-full border-2 border-[#15803D]/[0.15] dark:border-[#4ADE80]/[0.22] dark:shadow-[0_0_8px_rgba(74,222,128,0.11),0_0_48px_rgba(74,222,128,0.08)]" />
+      <div className="absolute bottom-24 right-[12%] h-36 w-36 rotate-45 rounded-[2.5rem] border-2 border-[#15803D]/[0.17] dark:border-[#4ADE80]/[0.26] dark:shadow-[0_0_8px_rgba(74,222,128,0.12),0_0_36px_rgba(74,222,128,0.09)]" />
     </div>
   );
 }

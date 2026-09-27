@@ -189,20 +189,31 @@ body {
 }
 
 /* Stationary, low-contrast geometry keeps the homepage calm without
-   competing with cards or controls. */
+   competing with cards or controls. The grid and the outline shapes in
+   app/page.tsx share the tool-icon green (#15803D light, #4ADE80 dark).
+   Layer 1 is the dark-mode corner ambience: a soft, wide wash pinned to the
+   top-left corner and faded to nothing before the hero paragraph, so it reads
+   as corner light rather than a bright patch behind the text. It carries most
+   of the green balance in dark mode, because the outlines themselves are
+   meant to stay thin and barely haloed (see app/page.tsx). Layers 2/3 are the
+   grid lines, whose alpha stays low and is not driven by that glow. Nothing
+   here animates, and the first layer must be `auto`-sized so the grid layers
+   keep their 96px cell. */
 .homepage-geometry {
   background-image:
-    linear-gradient(to right, rgba(15, 118, 110, 0.055) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 118, 110, 0.055) 1px, transparent 1px);
-  background-size: 96px 96px;
+    radial-gradient(120% 78% at 14% -6%, rgba(21, 128, 61, 0.06) 0%, rgba(21, 128, 61, 0) 58%),
+    linear-gradient(to right, rgba(21, 128, 61, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(21, 128, 61, 0.06) 1px, transparent 1px);
+  background-size: auto, 96px 96px, 96px 96px;
   mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.35) 62%, transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.35) 62%, transparent 100%);
 }
 
 .dark .homepage-geometry {
   background-image:
-    linear-gradient(to right, rgba(45, 212, 191, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(45, 212, 191, 0.05) 1px, transparent 1px);
+    radial-gradient(90% 40% at 0% 0%, rgba(74, 222, 128, 0.28) 0%, rgba(74, 222, 128, 0.16) 26%, rgba(74, 222, 128, 0.06) 50%, rgba(74, 222, 128, 0) 76%),
+    linear-gradient(to right, rgba(74, 222, 128, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(74, 222, 128, 0.09) 1px, transparent 1px);
 }
 
 /* A short connector and chevron make the three factual steps read as one

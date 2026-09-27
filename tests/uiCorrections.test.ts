@@ -339,14 +339,88 @@ test('homepage atmosphere - geometry is stationary and privacy is green', () => 
   const page = readFileSync('app/page.tsx', 'utf8');
   const landing = readFileSync('components/LandingClient.tsx', 'utf8');
   assert.match(page, /className="homepage-geometry pointer-events-none fixed inset-0/);
-  assert.match(page, /border-2 border-\[#0F766E\]\/20/);
+  assert.match(page, /border-2 border-\[#15803D\]/);
   assert.doesNotMatch(page, /animate-|animation:/, 'background shapes remain stationary');
   const globals = readFileSync('app/globals.css', 'utf8');
-  assert.match(globals, /rgba\(15, 118, 110, 0\.055\)/);
+  assert.match(globals, /rgba\(21, 128, 61, 0\.06\)/);
   assert.match(landing, /bg-\[#F1F8F3\]/);
   assert.doesNotMatch(landing, /FFF6EC|text-\[#D97706\]/, 'privacy no longer uses the warning palette');
   assert.match(landing, /className="how-sequence/);
   assert.match(landing, /Media tools ask for browser permission first; the signal is processed locally\./);
+});
+
+test('homepage background - outlines and grid use the tool-icon green', () => {
+  const page = readFileSync('app/page.tsx', 'utf8');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  const toolIcon = readFileSync('components/ui/ToolIcon.tsx', 'utf8');
+
+  // The green the tool icons actually use, so the background cannot drift away.
+  assert.match(toolIcon, /text-\[#15803D\] dark:text-\[#4ADE80\]/);
+  const lightGreen = '#15803D';
+  const darkGreen = '#4ADE80';
+
+  // Every decorative outline is that green in both modes — no teal, violet or amber left.
+  const outlines = [...page.matchAll(/rounded-(?:full|\[[^\]]+\])[^"]*border-2[^"]*/g)].map((m) => m[0]);
+  assert.equal(outlines.length, 4, 'all four decorative outlines are covered');
+  for (const outline of outlines) {
+    assert.ok(outline.includes(lightGreen), `outline uses the light tool green: ${outline}`);
+    assert.ok(outline.includes(`dark:border-[${darkGreen}]`), `outline uses the dark tool green: ${outline}`);
+  }
+  assert.doesNotMatch(page, /#0F766E|#2DD4BF|#7C3AED|#A78BFA|#D97706|#FBBF24/, 'no old background hues remain');
+
+  // Grid: same greens, gentle in light mode, calm neon bloom in dark mode.
+  const lightGrid = globals.slice(globals.indexOf('.homepage-geometry {'), globals.indexOf('.dark .homepage-geometry {'));
+  const darkGrid = globals.slice(globals.indexOf('.dark .homepage-geometry {'), globals.indexOf('.how-step::after'));
+  assert.match(lightGrid, /rgba\(21, 128, 61, 0\.06\)/);
+  assert.doesNotMatch(lightGrid, /rgba\(15, 118, 110/, 'light grid is no longer teal');
+  assert.doesNotMatch(lightGrid, /at 0% 0%/, 'the corner glow is a dark-mode-only treatment');
+  assert.match(darkGrid, /rgba\(74, 222, 128, 0\.09\)/);
+  // Dark-mode corner ambience, matched to the approved reference look: present
+  // but soft, and contained so it never becomes a bright patch behind the text.
+  const cornerGlow = darkGrid.match(/radial-gradient\((\d+)% (\d+)% at 0% 0%, rgba\(74, 222, 128, ([\d.]+)\)/);
+  assert.ok(cornerGlow, 'dark mode pins a green ambience to the top-left corner');
+  const [, glowW, glowH, coreAlpha] = cornerGlow;
+  assert.ok(Number(coreAlpha) >= 0.26, `the corner glow reads (alpha ${coreAlpha})`);
+  assert.ok(Number(coreAlpha) <= 0.32, `but stays soft, not a bright spot (alpha ${coreAlpha})`);
+  assert.ok(Number(glowH) <= 45, `it dies out vertically above the hero paragraph (${glowH}% of viewport height)`);
+  assert.ok(Number(glowW) <= 95, 'and fades horizontally toward the middle');
+  assert.match(darkGrid, /rgba\(74, 222, 128, 0\) 7\d%\)/, 'the glow has a gradual fade to nothing');
+  assert.match(lightGrid, /background-size: auto, 96px 96px, 96px 96px/, 'the bloom layer is not tiled');
+  assert.doesNotMatch(darkGrid, /background-size/, 'dark mode inherits the untiled background-size');
+  for (const block of [lightGrid, darkGrid]) {
+    assert.doesNotMatch(block, /animation|transition|filter:/, 'background layers stay static and cheap');
+  }
+
+  // Visible enough to read, still calm: dark outlines clearly above light ones,
+  // and light mode stays low enough to keep body text legible.
+  for (const outline of outlines) {
+    const light = Number(outline.match(/border-\[#15803D\]\/\[([\d.]+)\]/)![1]);
+    const dark = Number(outline.match(/dark:border-\[#4ADE80\]\/\[([\d.]+)\]/)![1]);
+    assert.ok(light > 0.12 && light <= 0.2, `light outline stays subtle (${light})`);
+    assert.ok(dark > light, `dark outline is more present than light (${dark} > ${light})`);
+    assert.ok(dark <= 0.32, `dark outline stays calm (${dark})`);
+  }
+
+  // Static, invisible to the pointer, and never a blur filter on a large surface.
+  const decorative = page.slice(page.indexOf('function DecorativeBackground'), page.indexOf('export default function HomePage'));
+  assert.match(decorative, /aria-hidden="true"/);
+  assert.doesNotMatch(decorative, /animate-|animation:|transition:|backdrop-|blur-\[|blur-md|filter:/, 'glow is a static box-shadow, not an animated or filtered layer');
+
+  // Every outline is haloed in dark mode, but lightly: a tight core plus a
+  // wide bloom and nothing in between. The approved reference look is a thin
+  // lit line, so no outline may grow a bright core or a third ring.
+  const halos = [...decorative.matchAll(/dark:shadow-\[([^\]]+)\]/g)].map((m) =>
+    [...m[1].matchAll(/0_0_(\d+)px_rgba\(74,222,128,([\d.]+)\)/g)].map(([, blur, alpha]) => ({ blur: +blur, alpha: +alpha }))
+  );
+  assert.equal(halos.length, 4, 'each outline carries a soft halo in dark mode');
+  for (const halo of halos) {
+    assert.equal(halo.length, 2, 'each halo is exactly one tight core plus one wide bloom');
+    assert.ok(halo[1].blur > halo[0].blur, 'the bloom is wider than the core');
+    assert.ok(halo[1].alpha < halo[0].alpha, 'and dimmer than the core');
+    assert.ok(halo[0].blur <= 8, `the core hugs the line (${halo[0].blur}px)`);
+    assert.ok(halo[0].alpha <= 0.13, `no strong halo around the outlines (core alpha ${halo[0].alpha})`);
+    assert.ok(halo[1].alpha <= 0.1, `the wide bloom stays faint (alpha ${halo[1].alpha})`);
+  }
 });
 
 test('search - "mic" ranks Microphone Test first (drawer + landing scenario)', async () => {
