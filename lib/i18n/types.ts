@@ -120,6 +120,7 @@ export interface Translations {
     guidesTitle: string;
     guidesSubtitle: string;
     viewAllGuides: string;
+    viewAllTests: string;
     guideTypeTroubleshooting: string;
     guideTypeBuying: string;
     guideTypeHowTo: string;

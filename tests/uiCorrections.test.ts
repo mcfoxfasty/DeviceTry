@@ -423,6 +423,59 @@ test('homepage background - outlines and grid use the tool-icon green', () => {
   }
 });
 
+test('homepage order - hero, tools, quick guided check, how, privacy, guides, FAQ', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  const dictionary = readFileSync('lib/i18n/dictionaries/en.ts', 'utf8');
+
+  const order = [
+    'Hero',
+    'Tools grid',
+    'Quick Guided Check',
+    'How it works',
+    'Privacy by design',
+    'Guides & troubleshooting',
+    'FAQ',
+  ];
+  const positions = order.map((name) => landing.indexOf(`/* ================= ${name}`));
+  for (const [i, name] of order.entries()) {
+    assert.ok(positions[i] >= 0, `homepage still has the ${name} section`);
+    if (i > 0) assert.ok(positions[i] > positions[i - 1], `${name} comes after ${order[i - 1]}`);
+  }
+  // The guided band is renamed, and the guides band no longer precedes it.
+  assert.match(dictionary, /inspectionTitle: 'Quick Guided Check'/);
+  assert.doesNotMatch(dictionary, /In a hurry/);
+  assert.ok(
+    landing.indexOf('Quick Guided Check') < landing.indexOf('Guides & troubleshooting'),
+    'Guides & Troubleshooting sits after the quick guided check, not before it'
+  );
+  // Header and footer are untouched: they live outside LandingClient.
+  const page = readFileSync('app/page.tsx', 'utf8');
+  assert.match(page, /<Navbar t=\{t\} \/>/);
+  assert.match(page, /<Footer t=\{t\} \/>/);
+});
+
+test('tools list - phones show 3 popular + IP + speed, then View all tests', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  const dictionary = readFileSync('lib/i18n/dictionaries/en.ts', 'utf8');
+
+  assert.match(landing, /const POPULAR_SLUGS = \['microphone-test', 'webcam-test', 'speakers-test'\]/);
+  assert.match(landing, /const MOBILE_EXTRA_SLUGS = \['what-is-my-ip', 'internet-speed-test'\]/);
+  assert.match(landing, /const MOBILE_DEFAULT_SET = new Set\(\[\.\.\.POPULAR_SLUGS, \.\.\.MOBILE_EXTRA_SLUGS\]\)/);
+  for (const slug of ['microphone-test', 'webcam-test', 'speakers-test', 'what-is-my-ip', 'internet-speed-test']) {
+    assert.ok(TOOLS_REGISTRY.some((tool) => tool.slug === slug), `${slug} is a real tool`);
+  }
+  // The trimmed grid is mobile-only and the rest of the catalog survives on desktop.
+  assert.match(landing, /\{!isFiltering && mobileDefaultExtras\.length > 0 && \(\s*<div className="grid grid-cols-1 gap-3 md:hidden">/);
+  assert.match(landing, /isFiltering \? '' : 'hidden md:grid'/);
+  assert.match(landing, /md:grid-cols-3/);
+  // Searching or filtering brings every match back on phones.
+  assert.match(landing, /const isFiltering = Boolean\(searchQuery\.trim\(\)\) \|\| selectedCategory !== 'all'/);
+  // The escape hatch points at the full catalog hub.
+  assert.match(landing, /!isFiltering && hasMoreToolsThanMobileShows &&/);
+  assert.match(landing, /href="\/tests"/);
+  assert.match(dictionary, /viewAllTests: 'View all tests'/);
+});
+
 test('search - "mic" ranks Microphone Test first (drawer + landing scenario)', async () => {
   const { searchTools } = await import('../lib/tools/search.js');
   const { TOOLS_REGISTRY } = await import('../lib/tools/registry.js');

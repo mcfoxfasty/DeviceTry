@@ -50,6 +50,13 @@ interface LandingClientProps {
 
 const POPULAR_SLUGS = ['microphone-test', 'webcam-test', 'speakers-test'];
 
+/** Phones open on a short, useful list instead of all 15 testers: the three
+ *  popular ones plus the two checks people reach for first. Desktop keeps the
+ *  full catalog, and searching always reveals every match, so this only trims
+ *  the unfiltered first paint on small screens. */
+const MOBILE_EXTRA_SLUGS = ['what-is-my-ip', 'internet-speed-test'];
+const MOBILE_DEFAULT_SET = new Set([...POPULAR_SLUGS, ...MOBILE_EXTRA_SLUGS]);
+
 const QUICK_SEARCHES = ['microphone', 'webcam', 'keyboard', 'mouse', 'gamepad'];
 
 /** Per-tool truthful card notes (required permission / hardware). */
@@ -335,6 +342,9 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   const isFiltering = Boolean(searchQuery.trim()) || selectedCategory !== 'all';
   const visiblePopularTools = filteredTools.filter((tool) => POPULAR_SET.has(tool.slug));
   const remainingTools = filteredTools.filter((tool) => !POPULAR_SET.has(tool.slug));
+  /** The two extra cards phones show before "View all tests". */
+  const mobileDefaultExtras = remainingTools.filter((tool) => MOBILE_DEFAULT_SET.has(tool.slug));
+  const hasMoreToolsThanMobileShows = remainingTools.length > mobileDefaultExtras.length;
 
   /** Clear Search: reset query, close suggestions, restore tools, refocus. */
   const clearSearch = () => {
@@ -802,11 +812,36 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 )}
               </div>
             )}
+            {/* Phones add only What's My IP and Internet Speed Test here; the
+                full rest-of-catalog grid is hidden below md until a filter or
+                search makes it relevant, then "View all tests" opens /tests. */}
+            {!isFiltering && mobileDefaultExtras.length > 0 && (
+              <div className="grid grid-cols-1 gap-3 md:hidden">
+                {mobileDefaultExtras.map((tool) =>
+                  renderToolCard(tool, filteredTools.indexOf(tool))
+                )}
+              </div>
+            )}
             {remainingTools.length > 0 && (
-              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 md:grid-cols-3 gap-3">
+              <div
+                className={`grid grid-cols-1 min-[400px]:grid-cols-2 md:grid-cols-3 gap-3 ${
+                  isFiltering ? '' : 'hidden md:grid'
+                }`}
+              >
                 {remainingTools.map((tool) =>
                   renderToolCard(tool, filteredTools.indexOf(tool))
                 )}
+              </div>
+            )}
+            {!isFiltering && hasMoreToolsThanMobileShows && (
+              <div className="pt-1 md:hidden">
+                <Link
+                  href="/tests"
+                  className="flex w-full min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-[#0F766E]/40 dark:border-[#14B8A6]/40 bg-white dark:bg-[#131B27] px-4 py-3 text-sm font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
+                >
+                  {t.landing.viewAllTests}
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
               </div>
             )}
           </div>
@@ -818,105 +853,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
         )}
       </section>
 
-      {/* ================= Guides & troubleshooting (pale teal band) ================= */}
-      {homeGuides.length > 0 && (
-        <section
-          aria-labelledby="home-guides-title"
-          className="bg-[#EAF4F2] dark:bg-[#0E1B1A] py-12 mt-8"
-          onMouseEnter={() => setGuideInteractionPaused(true)}
-          onMouseLeave={() => setGuideInteractionPaused(false)}
-          onFocusCapture={() => setGuideInteractionPaused(true)}
-          onBlurCapture={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setGuideInteractionPaused(false);
-            }
-          }}
-        >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-              <div className="max-w-2xl">
-                <h2 id="home-guides-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
-                  {t.landing.guidesTitle}
-                </h2>
-                <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-                  {t.landing.guidesSubtitle}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1" role="group" aria-label="Browse guides">
-                  <button
-                    type="button"
-                    onClick={() => moveGuideCarousel(-1)}
-                    disabled={guideCarouselIndex === 0}
-                    aria-label="Previous guide"
-                    aria-controls="home-guides-carousel"
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveGuideCarousel(1)}
-                    disabled={guideCarouselIndex >= homeGuides.length - 1}
-                    aria-label="Next guide"
-                    aria-controls="home-guides-carousel"
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
-                  >
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
-                <Link
-                  href="/guides"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-colors min-h-[44px]"
-                >
-                  {t.landing.viewAllGuides}
-                  <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-                </Link>
-              </div>
-            </div>
-            <p
-              className="mb-3 text-[11px] font-semibold text-[#52736F] dark:text-[#8CB8B2]"
-              aria-live={guideInteractionPaused || prefersReducedMotion ? 'polite' : 'off'}
-            >
-              Guide {guideCarouselIndex + 1} of {homeGuides.length}
-            </p>
-            <div
-              ref={guideTrackRef}
-              id="home-guides-carousel"
-              role="region"
-              aria-label="Guides and troubleshooting carousel"
-              tabIndex={0}
-              onScroll={syncGuideCarousel}
-              className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF]"
-            >
-              {homeGuides.map((guide) => (
-                <Link
-                  key={guide.slug}
-                  href={`/guides/${guide.slug}`}
-                  data-guide-card
-                  className="glass group min-w-[86%] sm:min-w-[46%] lg:min-w-[31.5%] snap-start p-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
-                    {guide.type === 'troubleshooting'
-                      ? t.landing.guideTypeTroubleshooting
-                      : guide.type === 'buying'
-                        ? t.landing.guideTypeBuying
-                        : t.landing.guideTypeHowTo}
-                  </span>
-                  <span className="mt-1.5 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors">
-                    {guide.title}
-                  </span>
-                  <span className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-3 flex-1">
-                    {guide.description}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ================= Guided Checkup (lavender band) ================= */}
+      {/* ================= Quick Guided Check (lavender band) ================= */}
       <section
         aria-labelledby="checkup-title"
         className="bg-[#EFEAFB] dark:bg-[#141221] py-12"
@@ -1090,6 +1027,104 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
           </div>
         </div>
       </section>
+
+      {/* ================= Guides & troubleshooting (pale teal band) ================= */}
+      {homeGuides.length > 0 && (
+        <section
+          aria-labelledby="home-guides-title"
+          className="bg-[#EAF4F2] dark:bg-[#0E1B1A] py-12 mt-8"
+          onMouseEnter={() => setGuideInteractionPaused(true)}
+          onMouseLeave={() => setGuideInteractionPaused(false)}
+          onFocusCapture={() => setGuideInteractionPaused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setGuideInteractionPaused(false);
+            }
+          }}
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+              <div className="max-w-2xl">
+                <h2 id="home-guides-title" className="text-xl sm:text-2xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight">
+                  {t.landing.guidesTitle}
+                </h2>
+                <p className="mt-2 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+                  {t.landing.guidesSubtitle}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1" role="group" aria-label="Browse guides">
+                  <button
+                    type="button"
+                    onClick={() => moveGuideCarousel(-1)}
+                    disabled={guideCarouselIndex === 0}
+                    aria-label="Previous guide"
+                    aria-controls="home-guides-carousel"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveGuideCarousel(1)}
+                    disabled={guideCarouselIndex >= homeGuides.length - 1}
+                    aria-label="Next guide"
+                    aria-controls="home-guides-carousel"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFD8D4] dark:border-[#2A4A46] bg-white dark:bg-[#131B27] text-[#0F766E] dark:text-[#5EEAD4] hover:border-[#0F766E] dark:hover:border-[#14B8A6] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF] transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <Link
+                  href="/guides"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] hover:border-[#0F766E] dark:hover:border-[#14B8A6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-colors min-h-[44px]"
+                >
+                  {t.landing.viewAllGuides}
+                  <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+            <p
+              className="mb-3 text-[11px] font-semibold text-[#52736F] dark:text-[#8CB8B2]"
+              aria-live={guideInteractionPaused || prefersReducedMotion ? 'polite' : 'off'}
+            >
+              Guide {guideCarouselIndex + 1} of {homeGuides.length}
+            </p>
+            <div
+              ref={guideTrackRef}
+              id="home-guides-carousel"
+              role="region"
+              aria-label="Guides and troubleshooting carousel"
+              tabIndex={0}
+              onScroll={syncGuideCarousel}
+              className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F766E] dark:focus-visible:outline-[#2DD4BF]"
+            >
+              {homeGuides.map((guide) => (
+                <Link
+                  key={guide.slug}
+                  href={`/guides/${guide.slug}`}
+                  data-guide-card
+                  className="glass group min-w-[86%] sm:min-w-[46%] lg:min-w-[31.5%] snap-start p-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
+                    {guide.type === 'troubleshooting'
+                      ? t.landing.guideTypeTroubleshooting
+                      : guide.type === 'buying'
+                        ? t.landing.guideTypeBuying
+                        : t.landing.guideTypeHowTo}
+                  </span>
+                  <span className="mt-1.5 text-sm font-bold text-[#142033] dark:text-[#E9EEF4] leading-snug group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] transition-colors">
+                    {guide.title}
+                  </span>
+                  <span className="mt-1.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed line-clamp-3 flex-1">
+                    {guide.description}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ================= FAQ ================= */}
       <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">

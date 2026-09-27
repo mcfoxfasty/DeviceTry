@@ -83,7 +83,7 @@ export const enTranslations: Translations = {
     searchNoResults: 'No tester matches your search. Try “microphone” or “pixel”.',
     toolsTitle: 'Test every part of your setup',
     toolsSubtitle: 'From microphones and webcams to keyboards, screens, and controllers — pick a category, run the check, and get your verdict in seconds. Everything runs right in your browser.',
-    inspectionTitle: 'In a hurry? Run the guided inspection instead',
+    inspectionTitle: 'Quick Guided Check',
     inspectionSubtitle: 'A structured checklist that walks you through several testers in sequence and builds one printable report.',
     inspectionCta: 'Start Guided Inspection',
     popularTitle: 'Most popular testers',
@@ -91,6 +91,7 @@ export const enTranslations: Translations = {
     guidesSubtitle:
       'Step-by-step fixes written around the free test that verifies the result — plus specification-based buying guides with no invented ratings.',
     viewAllGuides: 'View all guides',
+    viewAllTests: 'View all tests',
     guideTypeTroubleshooting: 'Troubleshooting',
     guideTypeBuying: 'Buying guide',
     guideTypeHowTo: 'How-to',
