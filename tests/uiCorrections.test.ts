@@ -476,6 +476,37 @@ test('tools list - phones show 3 popular + IP + speed, then View all tests', () 
   assert.match(dictionary, /viewAllTests: 'View all tests'/);
 });
 
+test('homepage renders on the server - no useSearchParams, no empty 60vh shell', () => {
+  const landing = readFileSync('components/LandingClient.tsx', 'utf8');
+  const page = readFileSync('app/page.tsx', 'utf8');
+
+  // useSearchParams() opts the page out of static rendering: the server then
+  // ships <main> with only a 60vh placeholder, the footer paints under the
+  // header, and the real page is injected afterwards. That one jump was the
+  // entire CLS score (0.33 mobile / 0.34 desktop).
+  const landingCode = landing.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  assert.doesNotMatch(landingCode, /useSearchParams/, 'LandingClient must not opt the homepage out of prerendering');
+  assert.doesNotMatch(page, /min-h-\[60vh\]/, 'no empty placeholder shell around the homepage');
+  assert.doesNotMatch(page, /<Suspense/, 'no Suspense boundary deferring the homepage markup');
+  assert.match(page, /<main className="flex-1 relative z-10">[\s\S]*?<LandingClient t=\{t\} guides=\{pickHomeGuides\(\)\} \/>[\s\S]*?<\/main>/);
+
+  // The URL is read through useSyncExternalStore instead, which gives the
+  // server and the first client render the same snapshot, and popstate still
+  // restores Back/Forward.
+  assert.match(landing, /import React, \{[^}]*useSyncExternalStore/);
+  assert.match(landing, /function subscribeToUrlChange[\s\S]*addEventListener\('popstate'/);
+  assert.match(landing, /useSyncExternalStore\(subscribeToUrlChange, getUrlSearch, getServerUrlSearch\)/);
+  assert.match(landing, /function getServerUrlSearch\(\) \{\s*return '';/);
+
+  // router.replace() never emits popstate, so the visible filter is local state
+  // that the URL merely mirrors; Back/Forward re-syncs both from the store.
+  assert.match(landing, /const applyFilter = useCallback\([\s\S]*setSearchQuery\(query\);[\s\S]*setSelectedCategory\(category\);[\s\S]*router\.replace/);
+  assert.match(landing, /if \(urlQuery !== lastUrlQuery\) \{[\s\S]*setSearchQuery\(urlQuery\);/);
+  assert.match(landing, /if \(urlCategory !== lastUrlCategory\) \{[\s\S]*setSelectedCategory\(urlCategory\);/);
+  assert.doesNotMatch(landing, /const searchQuery = urlQuery;/, 'filtering reads state, not the URL store');
+  assert.doesNotMatch(landing, /syncUrl\(/, 'every filter path goes through applyFilter');
+});
+
 test('search - "mic" ranks Microphone Test first (drawer + landing scenario)', async () => {
   const { searchTools } = await import('../lib/tools/search.js');
   const { TOOLS_REGISTRY } = await import('../lib/tools/registry.js');

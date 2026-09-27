@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Search,
   ChevronDown,
@@ -56,6 +56,32 @@ const POPULAR_SLUGS = ['microphone-test', 'webcam-test', 'speakers-test'];
  *  the unfiltered first paint on small screens. */
 const MOBILE_EXTRA_SLUGS = ['what-is-my-ip', 'internet-speed-test'];
 const MOBILE_DEFAULT_SET = new Set([...POPULAR_SLUGS, ...MOBILE_EXTRA_SLUGS]);
+
+/* ============================================================================
+ * URL state without useSearchParams — this is what keeps the homepage in the
+ * server HTML. Calling useSearchParams() opts the whole page out of static
+ * rendering: Next then ships <main> containing only an empty 60vh placeholder,
+ * paints the footer directly beneath the header, and injects the real page a
+ * moment later. The footer then jumps the full height of the page, which was
+ * the entire CLS score (0.33 mobile / 0.34 desktop, one single shift entry).
+ *
+ * Reading the query ourselves keeps the homepage prerendered. useSyncExternalStore
+ * hands the server and the first client render the same snapshot, so hydration
+ * still matches, and popstate keeps Back/Forward restoring the previous filter.
+ * ========================================================================== */
+function subscribeToUrlChange(onStoreChange: () => void) {
+  window.addEventListener('popstate', onStoreChange);
+  return () => window.removeEventListener('popstate', onStoreChange);
+}
+
+function getUrlSearch() {
+  return window.location.search;
+}
+
+/** Server render and the hydration pass both see "no query in the URL". */
+function getServerUrlSearch() {
+  return '';
+}
 
 const QUICK_SEARCHES = ['microphone', 'webcam', 'keyboard', 'mouse', 'gamepad'];
 
@@ -254,14 +280,19 @@ const GUIDED_INSPECTION_OPTIONS = [
 
 export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const urlSearch = useSyncExternalStore(subscribeToUrlChange, getUrlSearch, getServerUrlSearch);
 
-  // Query + category are URL-driven so browser Back/Forward restores them.
-  const urlQuery = searchParams.get('q') ?? '';
-  const urlCategory = searchParams.get('category') ?? 'all';
-  const selectedCategory = (VALID_CATEGORIES.has(urlCategory) ? urlCategory : 'all') as ToolCategory | 'all';
+  // Query + category stay URL-driven so browser Back/Forward restores them, but
+  // they are read from the store above instead of useSearchParams() so the page
+  // can still be prerendered (see the note beside subscribeToUrlChange).
+  const urlParams = useMemo(() => new URLSearchParams(urlSearch), [urlSearch]);
+  const urlQuery = urlParams.get('q') ?? '';
+  const rawUrlCategory = urlParams.get('category') ?? 'all';
+  const urlCategory = (VALID_CATEGORIES.has(rawUrlCategory) ? rawUrlCategory : 'all') as ToolCategory | 'all';
 
   const [inputValue, setInputValue] = useState<string>(urlQuery);
+  const [searchQuery, setSearchQuery] = useState<string>(urlQuery);
+  const [selectedCategory, setSelectedCategory] = useState<ToolCategory | 'all'>(urlCategory);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   // Autocomplete state: open, highlighted suggestion index (-1 = none).
@@ -281,16 +312,29 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
 
   // Track the URL value the input was last synced from, so we can adopt
   // external URL changes (browser Back) during render instead of via an
-  // effect that calls setState (react-hooks/set-state-in-effect).
+  // effect that calls setState (react-hooks/set-state-in-effect). The category
+  // pill works the same way: a tap updates state immediately and writes the URL,
+  // and popstate re-syncs both when the user navigates back.
   const [lastUrlQuery, setLastUrlQuery] = useState<string>(urlQuery);
   if (urlQuery !== lastUrlQuery) {
     setLastUrlQuery(urlQuery);
     setInputValue(urlQuery);
+    setSearchQuery(urlQuery);
+  }
+  const [lastUrlCategory, setLastUrlCategory] = useState<ToolCategory | 'all'>(urlCategory);
+  if (urlCategory !== lastUrlCategory) {
+    setLastUrlCategory(urlCategory);
+    setSelectedCategory(urlCategory);
   }
 
-  /** Push query + category to the URL without re-scrolling. */
-  const syncUrl = useCallback(
+  /** Apply a filter: update what is on screen right away, then mirror it to the
+   *  URL without re-scrolling. The state is the source of truth because
+   *  router.replace() never emits popstate, so the URL store above only
+   *  re-syncs on real history navigation (browser Back/Forward). */
+  const applyFilter = useCallback(
     (query: string, category: ToolCategory | 'all') => {
+      setSearchQuery(query);
+      setSelectedCategory(category);
       const params = new URLSearchParams();
       if (query.trim()) params.set('q', query.trim());
       if (category !== 'all') params.set('category', category);
@@ -302,16 +346,14 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
 
   const handleQueryChange = (value: string) => {
     setInputValue(value);
-    syncUrl(value, selectedCategory);
+    applyFilter(value, selectedCategory);
     setSuggestionsOpen(Boolean(value.trim()));
     setActiveIndex(-1);
   };
 
   const handleCategoryChange = (key: ToolCategory | 'all') => {
-    syncUrl(inputValue, key);
+    applyFilter(inputValue, key);
   };
-
-  const searchQuery = urlQuery;
 
   // Lenient search: word-order independent, filler words tolerated, typos
   // forgiven. Filtered by category first, then scored + ranked.
@@ -349,7 +391,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   /** Clear Search: reset query, close suggestions, restore tools, refocus. */
   const clearSearch = () => {
     setInputValue('');
-    syncUrl('', selectedCategory);
+    applyFilter('', selectedCategory);
     setSuggestionsOpen(false);
     setActiveIndex(-1);
     inputRef.current?.focus();
@@ -358,7 +400,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   /** Quick-search chip: focus input, apply term, show suggestions. */
   const applyQuickSearch = (term: string) => {
     setInputValue(term);
-    syncUrl(term, selectedCategory);
+    applyFilter(term, selectedCategory);
     setSuggestionsOpen(true);
     setActiveIndex(-1);
     inputRef.current?.focus();

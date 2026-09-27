@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React from 'react';
 import type { Metadata } from 'next';
 import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
@@ -107,11 +107,12 @@ export default function HomePage() {
       <Navbar t={t} />
 
       <main className="flex-1 relative z-10">
-        {/* useSearchParams inside LandingClient requires a Suspense boundary
-            for static prerendering (missing-suspense-with-csr-bailout). */}
-        <Suspense fallback={<div className="min-h-[60vh]" aria-hidden="true" /> }>
-          <LandingClient t={t} guides={pickHomeGuides()} />
-        </Suspense>
+        {/* No Suspense boundary here on purpose: LandingClient reads the query
+            string without useSearchParams, so the whole homepage prerenders
+            into this element. Behind a boundary the server still emits a
+            60vh placeholder and appends the real page afterwards, which moved
+            the footer and cost the whole CLS score. */}
+        <LandingClient t={t} guides={pickHomeGuides()} />
       </main>
 
       <div className="relative z-10">
