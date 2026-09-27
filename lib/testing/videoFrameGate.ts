@@ -20,6 +20,61 @@ export interface FrameGateDecision {
 }
 
 /**
+ * How long to wait for real frame evidence before calling the feed stalled.
+ * A stalled run must end in an explicit inconclusive result, never silence.
+ */
+export const FRAME_EVIDENCE_TIMEOUT_MS = 12_000;
+
+/** Minimal video-element surface needed to attach a stream and start it. */
+export interface PlayableVideoElement {
+  srcObject: unknown;
+  muted?: boolean;
+  playsInline?: boolean;
+  play?: () => Promise<void> | void;
+}
+
+/**
+ * Attach a stream to a video element and START playback explicitly.
+ *
+ * The `autoplay` attribute is not enough on iOS Safari: the MediaStream is
+ * attached after the element has already mounted, and iOS does not re-run
+ * autoplay for a resource that arrives later. The element then sits paused at
+ * readyState 0 — no frame callback ever fires and no fallback can observe a
+ * frame — which is the stall this call exists to prevent. Android Chrome
+ * already autoplays, so the extra play() is a no-op there.
+ *
+ * `muted`/`playsInline` are set as properties too, because iOS requires both
+ * for inline playback and an element configured only by markup can miss them
+ * when React reuses the node.
+ *
+ * Resolves true when playback started, false when the browser refused it
+ * (autoplay policy). A refusal is not reported as success here: the frame
+ * evidence checks decide the verdict.
+ */
+export function attachStreamToVideo(
+  el: PlayableVideoElement | null,
+  stream: unknown
+): Promise<boolean> {
+  if (!el) return Promise.resolve(false);
+  el.srcObject = stream;
+  el.muted = true;
+  el.playsInline = true;
+  let started: Promise<void> | void;
+  try {
+    started = el.play?.();
+  } catch {
+    return Promise.resolve(false);
+  }
+  if (started && typeof (started as Promise<void>).then === 'function') {
+    return (started as Promise<void>).then(
+      () => true,
+      () => false
+    );
+  }
+  return Promise.resolve(true);
+}
+
+/**
  * Does this browser support requestVideoFrameCallback on video elements?
  * Checked on the element instance first, then the prototype.
  */

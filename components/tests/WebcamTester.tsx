@@ -9,6 +9,8 @@ import { CameraSession } from '@/lib/testing/cameraSession';
 import {
   createFrameGate,
   supportsRequestVideoFrameCallback,
+  attachStreamToVideo,
+  FRAME_EVIDENCE_TIMEOUT_MS,
 } from '@/lib/testing/videoFrameGate';
 
 interface WebcamTesterProps {
@@ -74,8 +76,10 @@ export function WebcamTester({
   const snapshotUrlRef = useRef<string | null>(null);
   /** Frame-delivery gate for the CURRENT stream observation. */
   const frameGateRef = useRef<ReturnType<typeof createFrameGate> | null>(null);
-  /** Fallback readyState poll handle (browsers without rVFC). */
+  /** Fallback readyState poll handle (safety net for a silent rVFC). */
   const fallbackPollRef = useRef<number | null>(null);
+  /** Watchdog that ends a stalled observation instead of hanging. */
+  const frameWatchdogRef = useRef<number | null>(null);
   // Set on unmount only: in-flight getUserMedia must never touch state after it.
   const unmountedRef = useRef<boolean>(false);
 
@@ -83,8 +87,37 @@ export function WebcamTester({
   // token captured at attempt start; stale resolutions are stopped and ignored.
   const [session] = useState(() => new CameraSession<MediaStream>());
 
+  /** Stop the readyState safety-net poll. */
+  const stopFallbackPoll = useCallback(() => {
+    if (fallbackPollRef.current !== null) {
+      window.clearTimeout(fallbackPollRef.current);
+      fallbackPollRef.current = null;
+    }
+  }, []);
+
+  /** Cancel the stall watchdog once evidence lands (or the run ends). */
+  const clearFrameWatchdog = useCallback(() => {
+    if (frameWatchdogRef.current !== null) {
+      window.clearTimeout(frameWatchdogRef.current);
+      frameWatchdogRef.current = null;
+    }
+  }, []);
+
+  /** The <video> element mounts with the 'granted' UI; wait briefly for it. */
+  const waitForVideoElement = useCallback(async (): Promise<HTMLVideoElement | null> => {
+    if (videoRef.current) return videoRef.current;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+      if (unmountedRef.current) return null;
+      if (videoRef.current) return videoRef.current;
+    }
+    return null;
+  }, []);
+
   /** Pure resource teardown — no lifecycle or result-state changes. */
   const releaseCameraResources = useCallback(() => {
+    stopFallbackPoll();
+    clearFrameWatchdog();
     // 1. Cancel requestVideoFrameCallback if supported and active
     if (
       videoRef.current &&
@@ -123,7 +156,7 @@ export function WebcamTester({
 
     // 4. Release any still-adopted-but-not-yet-attached stream
     session.releaseAll();
-  }, [session]);
+  }, [session, stopFallbackPoll, clearFrameWatchdog]);
 
   /** Device enumeration guarded against stale runs and unmount. */
   const loadCameras = useCallback(
@@ -222,79 +255,110 @@ export function WebcamTester({
           return;
         }
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          // Frame-delivery gate: passed requires an ACTUALLY delivered frame.
-          // Metadata/dimensions alone (onloadedmetadata) are not evidence.
-          const gate = createFrameGate({
-            runToken,
-            streamIdentity: mediaStream,
-            isCurrent: () =>
-              !unmountedRef.current &&
-              runToken === currentRun() &&
-              streamRef.current === mediaStream,
-          });
-          frameGateRef.current = gate;
-
-          if (supportsRequestVideoFrameCallback(videoRef.current)) {
-            // Report once per observation: a delivered frame is one verdict;
-            // the loop keeps running for FPS accounting, but identical verdict
-            // re-emissions are deduped by the ResultController anyway.
-            let reported = false;
-            const onFrame = () => {
-              if (!gate.isLive()) return;
-              const w = videoRef.current?.videoWidth ?? 0;
-              const h = videoRef.current?.videoHeight ?? 0;
-              const decision = gate.onFrame(runToken, mediaStream);
-              if (decision.delivered && !reported && w > 0 && h > 0) {
-                reported = true;
-                setResolution({ width: w, height: h });
-                emitRunRich(runToken, {
-                  status: 'passed',
-                  details: `Video frames actually delivered at ${w}x${h} (confirmed via requestVideoFrameCallback).`,
-                  metrics: {
-                    width: w,
-                    height: h,
-                    deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
-                    frameEvidence: 'requestVideoFrameCallback',
-                  },
-                });
-              }
-              scheduleNextFrame(onFrame);
-            };
-            scheduleNextFrame(onFrame);
-          } else {
-            // Documented fallback (no rVFC, e.g. older Firefox/Safari): poll
-            // readyState; HAVE_CURRENT_DATA + non-zero dimensions is the best
-            // available evidence that a frame was decoded for display.
-            setFpsSupported(false);
-            setObservedFps(null);
-            let pollReported = false;
-            const poll = () => {
-              if (!gate.isLive()) return;
-              const decision = gate.checkFallbackReady(videoRef.current);
-              if (decision.delivered && !pollReported) {
-                pollReported = true;
-                const w = videoRef.current?.videoWidth ?? 0;
-                const h = videoRef.current?.videoHeight ?? 0;
-                setResolution({ width: w, height: h });
-                emitRunRich(runToken, {
-                  status: 'passed',
-                  details: `Video frames delivered at ${w}x${h} (readyState fallback — this browser does not expose requestVideoFrameCallback).`,
-                  metrics: {
-                    width: w,
-                    height: h,
-                    deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
-                    frameEvidence: 'readyState-fallback',
-                  },
-                });
-                return;
-              }
-              fallbackPollRef.current = window.setTimeout(poll, 100);
-            };
-            fallbackPollRef.current = window.setTimeout(poll, 100);
-          }
+        // The <video> element mounts when permissionState flips to 'granted',
+        // which React may not have committed by the time we get here. A late
+        // mount used to skip the whole gate, leaving the test spinning forever.
+        const videoEl = await waitForVideoElement();
+        if (unmountedRef.current || runToken !== currentRun() || streamRef.current !== mediaStream) {
+          return;
         }
+        if (!videoEl) {
+          emitRunRich(runToken, {
+            status: 'inconclusive',
+            details:
+              'The camera stream was acquired but no video element was available to display it, so no frame could be observed.',
+          });
+          return;
+        }
+
+        // iOS Safari does not start a stream that is attached after mount from
+        // the autoplay attribute alone; the element would sit paused and neither
+        // evidence path could ever fire. Start playback explicitly.
+        await attachStreamToVideo(videoEl, mediaStream);
+        if (unmountedRef.current || runToken !== currentRun() || streamRef.current !== mediaStream) {
+          return;
+        }
+
+        // Frame-delivery gate: passed requires an ACTUALLY delivered frame.
+        // Metadata/dimensions alone (onloadedmetadata) are not evidence.
+        const gate = createFrameGate({
+          runToken,
+          streamIdentity: mediaStream,
+          isCurrent: () =>
+            !unmountedRef.current &&
+            runToken === currentRun() &&
+            streamRef.current === mediaStream,
+        });
+        frameGateRef.current = gate;
+
+        // One verdict per observation, whichever facility proves it first.
+        let reported = false;
+        const reportDelivery = (source: 'requestVideoFrameCallback' | 'readyState-fallback') => {
+          if (reported || !gate.isLive()) return;
+          const w = videoEl.videoWidth ?? 0;
+          const h = videoEl.videoHeight ?? 0;
+          if (w <= 0 || h <= 0) return;
+          reported = true;
+          clearFrameWatchdog();
+          stopFallbackPoll();
+          setResolution({ width: w, height: h });
+          emitRunRich(runToken, {
+            status: 'passed',
+            details:
+              source === 'requestVideoFrameCallback'
+                ? `Video frames actually delivered at ${w}x${h} (confirmed via requestVideoFrameCallback).`
+                : `Video frames delivered at ${w}x${h} (confirmed via readyState — requestVideoFrameCallback did not report on this browser).`,
+            metrics: {
+              width: w,
+              height: h,
+              deviceLabel: mediaStream.getVideoTracks()[0]?.label || 'Webcam',
+              frameEvidence: source,
+            },
+          });
+        };
+
+        // A silent stall is the worst outcome: end it as inconclusive instead.
+        frameWatchdogRef.current = window.setTimeout(() => {
+          frameWatchdogRef.current = null;
+          if (reported || !gate.isLive()) return;
+          stopFallbackPoll();
+          emitRunRich(runToken, {
+            status: 'inconclusive',
+            details:
+              'The camera was granted and the stream started, but no video frame was delivered within 12 seconds. This is a browser playback problem, not a permission problem.',
+          });
+        }, FRAME_EVIDENCE_TIMEOUT_MS);
+
+        if (supportsRequestVideoFrameCallback(videoEl)) {
+          // Report once per observation: a delivered frame is one verdict;
+          // the loop keeps running for FPS accounting, but identical verdict
+          // re-emissions are deduped by the ResultController anyway.
+          const onFrame = () => {
+            if (!gate.isLive()) return;
+            const decision = gate.onFrame(runToken, mediaStream);
+            if (decision.delivered) reportDelivery('requestVideoFrameCallback');
+            scheduleNextFrame(onFrame);
+          };
+          scheduleNextFrame(onFrame);
+        } else {
+          setFpsSupported(false);
+          setObservedFps(null);
+        }
+
+        // Safety net for BOTH cases. On a healthy browser the frame callback
+        // wins within a few hundred ms, so the reported evidence is unchanged;
+        // on iOS, where requestVideoFrameCallback can stay silent for a live
+        // stream, this readyState evidence is what completes the test.
+        const poll = () => {
+          if (!gate.isLive()) return;
+          const decision = gate.checkFallbackReady(videoEl);
+          if (decision.delivered) {
+            reportDelivery('readyState-fallback');
+            return;
+          }
+          fallbackPollRef.current = window.setTimeout(poll, 150);
+        };
+        fallbackPollRef.current = window.setTimeout(poll, 400);
       } catch (err: unknown) {
         const error = err as Error;
         if (unmountedRef.current || !session.reject(runToken)) {
@@ -322,7 +386,7 @@ export function WebcamTester({
         });
       }
     },
-    [startRun, session, releaseCameraResources, loadCameras, currentRun, emitRunRich, scheduleNextFrame, t.common.permissionDenied, t.common.deviceUnavailable, t.common.error]
+    [startRun, session, releaseCameraResources, loadCameras, currentRun, emitRunRich, scheduleNextFrame, waitForVideoElement, stopFallbackPoll, clearFrameWatchdog, t.common.permissionDenied, t.common.deviceUnavailable, t.common.error]
   );
 
   const takeSnapshot = () => {

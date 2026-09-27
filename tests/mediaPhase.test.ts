@@ -10,6 +10,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 import {
   isMediaRecorderAvailable,
@@ -34,6 +39,9 @@ import {
   createFrameGate,
   supportsRequestVideoFrameCallback,
   readyStateIndicatesDeliveredFrame,
+  attachStreamToVideo,
+  FRAME_EVIDENCE_TIMEOUT_MS,
+  PlayableVideoElement,
 } from '../lib/testing/videoFrameGate';
 import { MicSignalObserver } from '../lib/testing/micSignal';
 
@@ -278,6 +286,97 @@ test('webcam frame gate - rVFC support detection handles missing globals', () =>
   // Plain objects / SSR context without HTMLVideoElement: honest false.
   assert.equal(supportsRequestVideoFrameCallback(null), false);
   assert.equal(supportsRequestVideoFrameCallback({}), false);
+});
+
+// ------------------------------ iOS playback: the stall this fix removes
+//
+// iOS Safari does not autostart a MediaStream that is attached to an already
+// mounted <video>; the element stays paused at readyState 0, so BOTH evidence
+// paths can stay silent forever. The tester used to rely on the autoplay
+// attribute alone and then wait on EITHER rVFC OR the readyState poll.
+
+test('attachStreamToVideo - attaches the stream AND starts playback explicitly', async () => {
+  const stream = { id: 's1' };
+  const calls: string[] = [];
+  const el: PlayableVideoElement = {
+    srcObject: null,
+    muted: false,
+    playsInline: false,
+    play: () => {
+      calls.push('play');
+      return Promise.resolve();
+    },
+  };
+
+  const started = await attachStreamToVideo(el, stream);
+
+  assert.equal(el.srcObject, stream, 'the stream is attached');
+  assert.equal(calls.length, 1, 'play() is called explicitly (autoplay alone stalls on iOS)');
+  assert.equal(el.muted, true, 'iOS requires muted for inline autoplay');
+  assert.equal(el.playsInline, true, 'iOS requires playsInline');
+  assert.equal(started, true);
+});
+
+test('attachStreamToVideo - a refused play() is reported, never thrown', async () => {
+  const el: PlayableVideoElement = {
+    srcObject: null,
+    play: () => Promise.reject(new DOMException('NotAllowedError')),
+  };
+  assert.equal(await attachStreamToVideo(el, {}), false, 'refusal is not reported as success');
+
+  const throws: PlayableVideoElement = {
+    srcObject: null,
+    play: () => { throw new Error('boom'); },
+  };
+  assert.equal(await attachStreamToVideo(throws, {}), false, 'a throwing play() is contained');
+});
+
+test('attachStreamToVideo - missing element or missing play() cannot hang', async () => {
+  assert.equal(await attachStreamToVideo(null, {}), false, 'no element: unresolved');
+
+  const noPlay: PlayableVideoElement = { srcObject: null };
+  assert.equal(await attachStreamToVideo(noPlay, {}), true, 'already-playing element: started');
+
+  const legacy: PlayableVideoElement = { srcObject: null, play: () => undefined };
+  assert.equal(await attachStreamToVideo(legacy, {}), true, 'a void play() is started, not pending');
+});
+
+test('frame evidence timeout - a stalled run always ends in a bounded time', () => {
+  assert.equal(
+    FRAME_EVIDENCE_TIMEOUT_MS,
+    12_000,
+    'the watchdog must be wired to this exact constant (the result text quotes it)',
+  );
+  assert.ok(FRAME_EVIDENCE_TIMEOUT_MS > 0 && FRAME_EVIDENCE_TIMEOUT_MS < 60_000);
+});
+
+test('webcam tester source - both evidence paths are always armed, never either/or', () => {
+  const source = readFileSync(join(repoRoot, 'components/tests/WebcamTester.tsx'), 'utf8');
+
+  // The stall: relying on the autoplay attribute only, and then choosing ONE
+  // of the two evidence facilities via if/else.
+  assert.match(source, /await attachStreamToVideo\(/, 'playback is started explicitly');
+
+  // The readyState safety net must be installed OUTSIDE the rVFC branch.
+  const rVfcBranch = source.indexOf('if (supportsRequestVideoFrameCallback(videoEl))');
+  const pollInstall = source.indexOf('fallbackPollRef.current = window.setTimeout(poll, 400)');
+  const elseBranch = source.indexOf('} else {', rVfcBranch);
+  assert.ok(rVfcBranch > -1, 'rVFC branch exists');
+  assert.ok(elseBranch > rVfcBranch, 'rVFC branch has an else');
+  assert.ok(
+    pollInstall > elseBranch,
+    'the readyState poll is installed after the rVFC if/else, so it runs in BOTH cases',
+  );
+
+  // The frame element may mount late: the gate waits for it.
+  assert.match(source, /await waitForVideoElement\(\)/);
+
+  // A stall must terminate in an explicit verdict, not silence.
+  assert.match(source, /frameWatchdogRef\.current = window\.setTimeout/);
+  assert.match(source, /FRAME_EVIDENCE_TIMEOUT_MS/);
+  assert.match(source, /no video frame was delivered within/);
+  // ...and the watchdog must be torn down with the rest of the resources.
+  assert.match(source, /stopFallbackPoll\(\);\s*\n\s*clearFrameWatchdog\(\);/);
 });
 
 // ------------------------------------------------------ micSignal tests
