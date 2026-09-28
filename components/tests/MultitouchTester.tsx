@@ -26,7 +26,15 @@ const TOUCH_COLORS = [
   '#F59E0B', // orange
 ];
 
-export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
+interface MultitouchTesterProps extends ToolComponentProps {
+  /**
+   * Host reset hook. Multi-Touch keeps its own verdict, so its Reset must clear
+   * that verdict rather than leave a stale observation count on screen.
+   */
+  onResultClear?: () => void;
+}
+
+export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTesterProps) {
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [maxObserved, setMaxObserved] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -67,6 +75,8 @@ export function MultitouchTester({ onResultUpdate }: ToolComponentProps) {
     counterRef.current.reset();
     setMaxObserved(0);
     setActiveTouches([]);
+    // Clear this tab's own verdict — independent of the coverage tab's.
+    onResultClear?.();
   };
 
   return (

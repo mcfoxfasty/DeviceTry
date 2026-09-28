@@ -8,6 +8,12 @@ import {
   countsAsTouchInput,
   emptyTally,
   tallySource,
+  tileKey,
+  coveragePercent,
+  coverageVerdict,
+  TOUCH_GRID_ROWS,
+  TOUCH_GRID_COLS,
+  TOUCH_GRID_TILES,
   TouchSourceTally,
 } from '@/lib/testing/sensorGates';
 
@@ -15,15 +21,21 @@ interface ToolComponentProps {
   t: Translations;
   locale?: string;
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
+  /**
+   * Host reset hook. The grid's Reset must clear the recorded RESULT as well as
+   * the tiles, otherwise a stale verdict keeps describing a grid that no longer
+   * holds that coverage.
+   */
+  onResultClear?: () => void;
 }
 
-export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
+export function TouchscreenTester({ onResultUpdate, onResultClear }: ToolComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [touchedTiles, setTouchedTiles] = useState<Set<string>>(new Set());
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [sources, setSources] = useState<TouchSourceTally>(emptyTally());
-  const rows = 10;
-  const cols = 10;
+  const rows = TOUCH_GRID_ROWS;
+  const cols = TOUCH_GRID_COLS;
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -50,7 +62,7 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
         ctx.strokeRect(c * cellW, r * cellH, cellW, cellH);
       }
     }
-  }, [touchedTiles]);
+  }, [touchedTiles, rows, cols]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,18 +99,23 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
     const c = Math.floor(x / cellW);
     const r = Math.floor(y / cellH);
 
-    if (r >= 0 && r < rows && c >= 0 && c < cols) {
-      const key = `${r}-${c}`;
+    const key = tileKey(r, c, rows, cols);
+    if (key) {
       if (!touchedTiles.has(key)) {
         setTouchedTiles((prev) => {
           const next = new Set(prev);
           next.add(key);
-          const pct = Math.round((next.size / (rows * cols)) * 100);
-          const sourceNote = source === 'pen' ? ' (pen input — finger coverage may differ)' : '';
-          onResultUpdate?.(
-            'inconclusive',
-            `Observed touch coverage: ${pct}% (${next.size}/${rows * cols} tiles)${sourceNote}. Partial coverage does not certify the whole screen — cover all regions and judge dead zones visually.`
-          );
+          // The verdict is derived from the coverage actually observed, so a
+          // fully-swept grid reports a pass instead of a permanent
+          // "Partial coverage" inconclusive. The tally is recomputed here
+          // rather than read from state, because this callback runs before the
+          // source setState has been applied.
+          const verdict = coverageVerdict({
+            covered: next.size,
+            sources: tallySource(sources, source),
+            total: rows * cols,
+          });
+          onResultUpdate?.(verdict.status, verdict.details);
           return next;
         });
       }
@@ -106,13 +123,18 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
     }
   };
 
+  /**
+   * Reset clears the grid AND the recorded result. Leaving the verdict behind
+   * would describe coverage the grid no longer shows.
+   */
   const clearCanvas = () => {
     setTouchedTiles(new Set());
     setTotalPoints(0);
     setSources(emptyTally());
+    onResultClear?.();
   };
 
-  const coveragePercent = Math.round((touchedTiles.size / (rows * cols)) * 100);
+  const coverage = coveragePercent(touchedTiles.size, rows * cols);
   const hasTouchInput = sources.touch > 0;
   const hasPenInput = sources.pen > 0;
   const hasMouseInput = sources.mouse > 0;
@@ -127,7 +149,7 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
               Touch Coverage
             </span>
             <div className="text-xl font-mono font-bold text-[#0F766E] dark:text-[#14B8A6]">
-              {coveragePercent}%
+              {coverage}%
             </div>
           </div>
           <div>
@@ -184,7 +206,13 @@ export function TouchscreenTester({ onResultUpdate }: ToolComponentProps) {
           ref={canvasRef}
           onPointerDown={handlePointer}
           onPointerMove={handlePointer}
-          className="w-full h-[400px] touch-none cursor-crosshair block"
+          onPointerUp={handlePointer}
+          // `touch-none` (touch-action: none) is what stops the page scrolling
+          // under a finger drag, where the browser permits it. Without it iOS
+          // Safari claims the gesture for panning and coverage never completes.
+          // `overscroll-contain` stops the scroll chaining that would still
+          // rubber-band the page at the grid's edges.
+          className="w-full h-[400px] touch-none overscroll-contain select-none cursor-crosshair block"
         />
       </div>
       <p className="text-center text-xs text-[#59677D] dark:text-[#9AA6B8]">

@@ -416,7 +416,13 @@ export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, 
 
   return (
     <div className="w-full">
-      <Tester {...testerProps} onResultUpdate={emit} />
+      {/* `reset` is passed to the tester as well as the banner so a tester's own
+          Reset can clear the verdict it produced. It clears the visible result
+          and notifies the host exactly once, which is the same semantics the
+          banner's Clear button has — previously only the banner had a way to
+          clear, so an in-card Reset left a stale verdict describing state that
+          no longer existed. Testers that ignore the prop are unaffected. */}
+      <Tester {...testerProps} onResultUpdate={emit} onResultClear={reset} />
       <TestResultBanner result={result} onClear={reset} variant="attached" toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
     </div>
   );

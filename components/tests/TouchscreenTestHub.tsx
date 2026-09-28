@@ -10,6 +10,8 @@ interface TouchscreenTestHubProps {
   t: Translations;
   /** Host-page/guided telemetry hook, forwarded to the active tab's tester. */
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
+  /** Host reset hook, forwarded so a tester's own Reset can clear the result. */
+  onResultClear?: () => void;
   /** Initial tab (migration deep links use ?tab=multi-touch). */
   initialTab?: string;
 }
@@ -22,9 +24,20 @@ type TouchTab = 'touch' | 'multi-touch';
  * distinctions and observed-coverage rules live inside each tester. Only the
  * active tab is mounted, so input listeners never coexist across tabs.
  */
-export function TouchscreenTestHub({ t, onResultUpdate, initialTab }: TouchscreenTestHubProps) {
+export function TouchscreenTestHub({ t, onResultUpdate, onResultClear, initialTab }: TouchscreenTestHubProps) {
   const isInitialTabValid = initialTab === 'touch' || initialTab === 'multi-touch';
   const [tab, setTab] = useState<TouchTab>(isInitialTabValid ? initialTab : 'touch');
+
+  /**
+   * Switching tabs clears the outgoing tab's verdict so the two tests stay
+   * independent: a passed coverage sweep must not sit under the Multi-Touch
+   * tab as though multi-touch had produced it (or vice versa).
+   */
+  const selectTab = (next: TouchTab) => {
+    if (next === tab) return;
+    onResultClear?.();
+    setTab(next);
+  };
 
   const TABS: Array<{ key: TouchTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { key: 'touch', label: 'Coverage', icon: Hand },
@@ -39,7 +52,7 @@ export function TouchscreenTestHub({ t, onResultUpdate, initialTab }: Touchscree
             key={key}
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => selectTab(key)}
             className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               tab === key
                 ? 'bg-[#0F766E] text-white shadow-sm dark:bg-[#14B8A6] dark:text-[#0B111A]'
@@ -56,9 +69,19 @@ export function TouchscreenTestHub({ t, onResultUpdate, initialTab }: Touchscree
         {/* TouchscreenTester reports only the four core statuses; the adapter
             narrows the hub's wider hook type without ever dropping a call. */}
         {tab === 'touch' && (
-          <TouchscreenTester t={t} onResultUpdate={(s, d) => onResultUpdate?.(s, d)} />
+          <TouchscreenTester
+            t={t}
+            onResultUpdate={(s, d) => onResultUpdate?.(s, d)}
+            onResultClear={onResultClear}
+          />
         )}
-        {tab === 'multi-touch' && <MultitouchTester t={t} onResultUpdate={onResultUpdate} />}
+        {tab === 'multi-touch' && (
+          <MultitouchTester
+            t={t}
+            onResultUpdate={onResultUpdate}
+            onResultClear={onResultClear}
+          />
+        )}
       </div>
     </div>
   );

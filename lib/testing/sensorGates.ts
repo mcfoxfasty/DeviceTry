@@ -95,6 +95,105 @@ export function tallySource(tally: TouchSourceTally, source: PointerSource): Tou
   return next;
 }
 
+// --------------------------------------------------- touch grid coverage
+
+/** Grid geometry of the coverage tester. Exported so UI and tests agree. */
+export const TOUCH_GRID_ROWS = 10;
+export const TOUCH_GRID_COLS = 10;
+export const TOUCH_GRID_TILES = TOUCH_GRID_ROWS * TOUCH_GRID_COLS;
+
+/** Stable key for one grid cell, or null when the coordinates are outside it. */
+export function tileKey(
+  row: number,
+  col: number,
+  rows = TOUCH_GRID_ROWS,
+  cols = TOUCH_GRID_COLS,
+): string | null {
+  if (!Number.isInteger(row) || !Number.isInteger(col)) return null;
+  if (row < 0 || row >= rows || col < 0 || col >= cols) return null;
+  return `${row}-${col}`;
+}
+
+/** Coverage as a whole percentage, clamped to a sane 0–100 range. */
+export function coveragePercent(covered: number, total = TOUCH_GRID_TILES): number {
+  if (!Number.isFinite(covered) || !Number.isFinite(total) || total <= 0) return 0;
+  const ratio = Math.min(Math.max(covered, 0), total) / total;
+  return Math.round(ratio * 100);
+}
+
+export type CoverageStatus = 'passed' | 'inconclusive';
+
+export interface CoverageVerdict {
+  status: CoverageStatus;
+  details: string;
+  covered: number;
+  total: number;
+  percent: number;
+}
+
+/**
+ * The observed-coverage verdict for the touchscreen grid.
+ *
+ * The rules, and why each exists:
+ *
+ * - Full coverage by genuine touch or pen input is a PASS. Previously the
+ *   status was hard-coded to `inconclusive`, so a fully-swept grid could never
+ *   pass no matter how many real touches arrived, and the explanation always
+ *   claimed "Partial coverage" — both wrong at 100%.
+ * - Partial coverage stays INCONCLUSIVE. Touching some regions says nothing
+ *   about the rest.
+ * - Mouse/other input NEVER passes. Counted events of those kinds cannot
+ *   contribute to coverage at all, but the check is repeated here so a caller
+ *   that passed a mouse-only tally cannot produce a pass.
+ * - The pass wording is deliberately narrow: it reports that the digitizer
+ *   answered across every grid region, and states plainly that this does not
+ *   certify every pixel of the display, because one dead spot inside a tile is
+ *   invisible to this test.
+ */
+export function coverageVerdict(params: {
+  covered: number;
+  sources: TouchSourceTally;
+  total?: number;
+}): CoverageVerdict {
+  const total = params.total ?? TOUCH_GRID_TILES;
+  const covered = Math.min(Math.max(Math.trunc(params.covered) || 0, 0), total);
+  const percent = coveragePercent(covered, total);
+  const genuineEvents = params.sources.touch + params.sources.pen;
+  const penOnly = params.sources.pen > 0 && params.sources.touch === 0;
+
+  if (genuineEvents <= 0) {
+    return {
+      status: 'inconclusive',
+      covered,
+      total,
+      percent,
+      details: `Observed touch coverage: ${percent}% (${covered}/${total} tiles). Mouse or unclassified input does not count toward a touchscreen result — touch the grid with a finger to begin.`,
+    };
+  }
+
+  if (covered >= total) {
+    const penNote = penOnly
+      ? ' Every region was reached with a pen — the digitizer responded, but finger-touch coverage may still differ.'
+      : '';
+    return {
+      status: 'passed',
+      covered,
+      total,
+      percent,
+      details: `Observed touch coverage: 100% (${total}/${total} tiles). Every grid region responded to genuine touch input, so the digitizer reported input across the whole grid.${penNote} This does not certify every pixel of the display — a dead spot smaller than one grid cell can still be present.`,
+    };
+  }
+
+  const penNote = penOnly ? ' (pen input — finger coverage may differ)' : '';
+  return {
+    status: 'inconclusive',
+    covered,
+    total,
+    percent,
+    details: `Observed touch coverage: ${percent}% (${covered}/${total} tiles)${penNote}. Partial coverage does not certify the whole screen — cover all regions and judge dead zones visually.`,
+  };
+}
+
 /**
  * Observed simultaneous-touch bookkeeping. The max is what WAS OBSERVED —
  * consumers must present it as "observed simultaneous touches", never as the
