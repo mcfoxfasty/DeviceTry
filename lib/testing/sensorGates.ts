@@ -194,6 +194,111 @@ export function coverageVerdict(params: {
   };
 }
 
+// ------------------------------------------------- simultaneous touch points
+
+/**
+ * The fewest simultaneous genuine touch points that demonstrate multi-touch.
+ * One finger is ordinary single-touch and proves nothing about multi-touch.
+ */
+export const MULTITOUCH_MIN_SIMULTANEOUS = 2;
+
+export type MultitouchStatus = 'passed' | 'inconclusive';
+
+export interface MultitouchVerdict {
+  status: MultitouchStatus;
+  details: string;
+  observed: number;
+  /** True when the observation could not be attributed to genuine touch. */
+  unverified: boolean;
+}
+
+/**
+ * The verdict for the simultaneous-touch test.
+ *
+ * The rules, and why each exists:
+ *
+ * - Two or more genuine touch points seen AT THE SAME TIME is a PASS. The
+ *   digitizer genuinely reported several independent contacts in a single
+ *   event, which is the observable evidence of multi-touch support.
+ * - The pass wording never states a device maximum. Browsers expose no
+ *   hardware touch-point limit, so the number reported is strictly what was
+ *   observed in this session — a device that accepted five fingers here is
+ *   not thereby certified to accept five.
+ * - One finger is INCONCLUSIVE: a single contact is ordinary single-touch.
+ * - Mouse (or other non-touch input) is INCONCLUSIVE and says so, so a
+ *   desktop user is never told a touchscreen passed.
+ * - Nothing observed yet is INCONCLUSIVE, never a silent pass.
+ *
+ * `observed` is the high-water mark of simultaneously-down touch points. The
+ * caller supplies it, so the same rule applies whether it was measured from
+ * TouchEvents, PointerEvents, or replayed in a test.
+ */
+export function multitouchVerdict(params: {
+  observed: number;
+  /** Set when the input seen was mouse or otherwise not genuine touch. */
+  mouseInput?: boolean;
+  /** Set when the platform gave no usable simultaneous-touch observation. */
+  unsupportedObservation?: boolean;
+}): MultitouchVerdict {
+  const raw = params.observed;
+  const observed = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+
+  if (observed >= MULTITOUCH_MIN_SIMULTANEOUS) {
+    return {
+      status: 'passed',
+      observed,
+      unverified: false,
+      details:
+        `Observed ${observed} simultaneous genuine touch point${observed === 1 ? '' : 's'} at once, ` +
+        `so multi-touch input was detected. This is what was observed in this session — ` +
+        `it is not the device's maximum supported touch count, which browsers do not expose, ` +
+        `and it does not certify how many fingers the hardware can accept.`,
+    };
+  }
+
+  if (observed === 1) {
+    return {
+      status: 'inconclusive',
+      observed,
+      unverified: false,
+      details:
+        'Observed only 1 simultaneous touch point. A single finger is ordinary single-touch — place two or more ' +
+        'fingers on the pad at the same time to test for multi-touch support.',
+    };
+  }
+
+  if (params.unsupportedObservation) {
+    return {
+      status: 'inconclusive',
+      observed,
+      unverified: true,
+      details:
+        'This browser did not provide a simultaneous touch observation, so multi-touch could not be measured. ' +
+        'No multi-touch claim is made.',
+    };
+  }
+
+  if (params.mouseInput) {
+    return {
+      status: 'inconclusive',
+      observed,
+      unverified: true,
+      details:
+        'Mouse input does not count toward a multi-touch result — a mouse reports a single contact by definition. ' +
+        'Use a touchscreen or trackpad with genuine multi-touch to test this.',
+    };
+  }
+
+  return {
+    status: 'inconclusive',
+    observed,
+    unverified: false,
+    details:
+      'No touch has been observed yet. Place two or more fingers on the pad at the same time — the test reports the ' +
+      'highest number of simultaneous touch points it actually observed.',
+  };
+}
+
 /**
  * Observed simultaneous-touch bookkeeping. The max is what WAS OBSERVED —
  * consumers must present it as "observed simultaneous touches", never as the

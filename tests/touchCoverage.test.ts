@@ -238,7 +238,12 @@ test('touch coverage - Multi-Touch keeps its own verdict and its own reset', () 
     'multi-touch must accept its own clear hook',
   );
   assert.match(multi, /const resetMax = \(\) => \{[\s\S]{0,200}onResultClear\?\.\(\)/);
-  // Its verdict is about observed simultaneous touches, and must keep saying so.
+  // Its verdict is about observed simultaneous touches. The exact wording now
+  // lives in multitouchVerdict (lib/testing/sensorGates.ts) so the UI and the
+  // tests share one source of truth; the component must delegate to it rather
+  // than hand-write a status.
   assert.match(multi, /maxSimultaneousObserved/);
-  assert.match(multi, /not the device's maximum supported touch count/);
+  assert.match(multi, /multitouchVerdict\(/);
+  const gates = stripComments(read('lib/testing/sensorGates.ts'));
+  assert.match(gates, /not the device's maximum supported touch count/);
 });

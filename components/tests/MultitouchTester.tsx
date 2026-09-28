@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { RotateCcw, Smartphone, Info } from 'lucide-react';
 import { ToolComponentProps } from '@/lib/tools/types';
-import { ObservedTouchCounter } from '@/lib/testing/sensorGates';
+import { ObservedTouchCounter, multitouchVerdict, MULTITOUCH_MIN_SIMULTANEOUS } from '@/lib/testing/sensorGates';
 
 interface TouchPoint {
   id: number;
@@ -34,12 +34,35 @@ interface MultitouchTesterProps extends ToolComponentProps {
   onResultClear?: () => void;
 }
 
+/**
+ * Whether this browser can report simultaneous touches at all. Used only to
+ * explain an absence of data — never to claim a pass.
+ */
+function canReportTouches(): boolean {
+  if (typeof window === 'undefined') return false;
+  return 'ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+}
+
 export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTesterProps) {
   const [activeTouches, setActiveTouches] = useState<TouchPoint[]>([]);
   const [maxObserved, setMaxObserved] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Central bookkeeping for observed simultaneous touches (extracted + tested).
   const counterRef = useRef<ObservedTouchCounter>(new ObservedTouchCounter());
+  // Guards the mouse handler so a drag emits one explanation, not a stream.
+  const mouseExplainedRef = useRef<boolean>(false);
+
+  /**
+   * Emit the verdict derived from what was actually observed. The rules live in
+   * `multitouchVerdict` so they are unit-testable; this only feeds it the tally.
+   */
+  const publish = (overrides: { mouseInput?: boolean; unsupportedObservation?: boolean } = {}) => {
+    const verdict = multitouchVerdict({
+      observed: counterRef.current.maxSimultaneousObserved,
+      ...overrides,
+    });
+    onResultUpdate?.(verdict.status, verdict.details);
+  };
 
   const handleTouch = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
@@ -64,10 +87,31 @@ export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTe
     const observed = counterRef.current.maxSimultaneousObserved;
     if (observed > maxObserved) {
       setMaxObserved(observed);
-      onResultUpdate?.(
-        'inconclusive',
-        `Observed ${observed} simultaneous touch point${observed === 1 ? '' : 's'} in this session. This is what was observed here — not the device's maximum supported touch count.`
-      );
+      // Re-derived every time the high-water mark rises: two or more genuine
+      // points at once is the evidence of multi-touch. It previously reported
+      // a hard-coded inconclusive, so a real multi-finger observation could
+      // never pass.
+      publish();
+    }
+  };
+
+  /**
+   * A mouse is a single contact by definition and must never pass. It is
+   * reported explicitly rather than ignored, so a desktop user learns why
+   * nothing happened instead of seeing a silent, unchanged card.
+   */
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return;
+    if (mouseExplainedRef.current) return;
+    mouseExplainedRef.current = true;
+    publish({ mouseInput: true });
+  };
+
+  /** Nothing observed yet — report the guidance, never a silent pass. */
+  const handlePadEnter = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return;
+    if (counterRef.current.maxSimultaneousObserved === 0) {
+      publish({ unsupportedObservation: !canReportTouches() });
     }
   };
 
@@ -75,6 +119,7 @@ export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTe
     counterRef.current.reset();
     setMaxObserved(0);
     setActiveTouches([]);
+    mouseExplainedRef.current = false;
     // Clear this tab's own verdict — independent of the coverage tab's.
     onResultClear?.();
   };
@@ -98,6 +143,23 @@ export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTe
           </div>
         </div>
 
+        {/* Clear, plain readout of the simultaneous-touch observation, so the
+            number is not buried in the result details. */}
+        <div className="text-right">
+          <span className="text-xs text-[#59677D] dark:text-[#9AA6B8]">
+            Simultaneous genuine touch points
+          </span>
+          <p
+            className={`text-sm font-mono font-bold ${
+              maxObserved >= MULTITOUCH_MIN_SIMULTANEOUS
+                ? 'text-[#0F766E] dark:text-[#14B8A6]'
+                : 'text-[#59677D] dark:text-[#9AA6B8]'
+            }`}
+          >
+            {maxObserved} at once
+          </p>
+        </div>
+
         <button
           onClick={resetMax}
           className="px-3 py-1.5 rounded-lg border border-[#DFE5EB] dark:border-[#223043] hover:bg-slate-50 dark:hover:bg-[#192332] text-xs font-semibold text-[#172033] dark:text-[#E9EEF4] flex items-center gap-1.5 cursor-pointer"
@@ -114,7 +176,13 @@ export function MultitouchTester({ onResultUpdate, onResultClear }: MultitouchTe
         onTouchMove={handleTouch}
         onTouchEnd={handleTouch}
         onTouchCancel={handleTouch}
-        className="relative w-full h-80 sm:h-96 rounded-2xl bg-[#0F172A] border-2 border-dashed border-[#334155] touch-none select-none flex items-center justify-center overflow-hidden cursor-crosshair"
+        // Mouse is a single contact by definition; it is reported honestly
+        // rather than ignored. Genuine touches skip it entirely.
+        onPointerDown={handlePointerDown}
+        // With nothing observed yet, entering the pad explains the idle state
+        // instead of leaving a silent, unexplained card.
+        onPointerEnter={handlePadEnter}
+        className="relative w-full h-80 sm:h-96 rounded-2xl bg-[#0F172A] border-2 border-dashed border-[#334155] touch-none overscroll-contain select-none flex items-center justify-center overflow-hidden cursor-crosshair"
       >
         {activeTouches.length === 0 ? (
           <div className="text-center p-6 pointer-events-none">
