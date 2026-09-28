@@ -4,97 +4,83 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Square, Volume2 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 
+import {
+  ToneSession,
+  toneSessionVerdict,
+  TONE_FREQUENCY_MIN,
+  TONE_FREQUENCY_MAX,
+  TONE_VOLUME_MIN,
+  TONE_VOLUME_MAX,
+} from '@/lib/testing/toneSession';
+
 interface ToolComponentProps {
   t: Translations;
   locale?: string;
-  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
+  onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive' | 'unsupported', details?: string) => void;
 }
 
 type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle';
 
+/**
+ * The tone generator drives a single ToneSession: one oscillator, one gain,
+ * one context at a time. Starting replaces the current tone synchronously, so
+ * overlapping tones are impossible, and every stop/unmount disconnects and
+ * closes the nodes it created. On mobile Safari the start must happen inside
+ * the tap handler, which is why playTone awaits the session's resume before
+ * reporting anything.
+ */
 export function ToneGeneratorTester({ onResultUpdate }: ToolComponentProps) {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [frequency, setFrequency] = useState<number>(440);
   const [waveform, setWaveform] = useState<WaveformType>('sine');
   const [volume, setVolume] = useState<number>(0.15); // conservative default gain
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscRef = useRef<OscillatorNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
+  const sessionRef = useRef<ToneSession | null>(null);
 
-  const stopTone = useCallback(() => {
-    if (gainRef.current && audioCtxRef.current) {
-      gainRef.current.gain.setValueAtTime(gainRef.current.gain.value, audioCtxRef.current.currentTime);
-      gainRef.current.gain.linearRampToValueAtTime(0.0001, audioCtxRef.current.currentTime + 0.05);
-    }
-    setTimeout(() => {
-      if (oscRef.current) {
-        try {
-          oscRef.current.stop();
-          oscRef.current.disconnect();
-        } catch {}
-        oscRef.current = null;
-      }
-      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-        audioCtxRef.current.close().catch(() => {});
-        audioCtxRef.current = null;
-      }
-      setIsPlaying(false);
-    }, 60);
+  const getSession = useCallback(() => {
+    if (!sessionRef.current) sessionRef.current = new ToneSession();
+    return sessionRef.current;
   }, []);
 
-  const playTone = () => {
-    stopTone();
+  const stopTone = useCallback(() => {
+    sessionRef.current?.stop();
+    setIsPlaying(false);
+    onResultUpdate?.('inconclusive', 'Tone stopped. Press Play to sound a tone again.');
+  }, [onResultUpdate]);
 
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+  const playTone = useCallback(async () => {
+    const session = getSession();
+    const outcome = await session.start({ frequency, volume, waveform });
+    const verdict = toneSessionVerdict({
+      started: outcome.started,
+      running: outcome.running,
+      contextState: outcome.contextState,
+      frequency,
+      waveform,
+    });
+    setIsPlaying(outcome.started);
+    onResultUpdate?.(verdict.status, verdict.details);
+  }, [frequency, volume, waveform, getSession, onResultUpdate]);
 
-    osc.type = waveform;
-    osc.frequency.setValueAtTime(frequency, ctx.currentTime);
-
-    // smooth ramp in
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.04);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-
-    audioCtxRef.current = ctx;
-    oscRef.current = osc;
-    gainRef.current = gain;
-    setIsPlaying(true);
-
-    if (onResultUpdate) {
-      onResultUpdate('passed', `Generated ${frequency} Hz ${waveform} wave`);
-    }
-  };
-
+  // Live control changes while playing — the session ignores these when idle.
   useEffect(() => {
-    if (oscRef.current && audioCtxRef.current) {
-      oscRef.current.frequency.setValueAtTime(frequency, audioCtxRef.current.currentTime);
-    }
+    sessionRef.current?.updateFrequency(frequency);
   }, [frequency]);
 
   useEffect(() => {
-    if (oscRef.current) {
-      oscRef.current.type = waveform;
-    }
+    sessionRef.current?.updateWaveform(waveform);
   }, [waveform]);
 
   useEffect(() => {
-    if (gainRef.current && audioCtxRef.current) {
-      gainRef.current.gain.setValueAtTime(volume, audioCtxRef.current.currentTime);
-    }
+    sessionRef.current?.updateVolume(volume);
   }, [volume]);
 
+  // Leaving the page silences the tone immediately. `dispose` also forbids
+  // restarts, so no deferred finalize can resurrect audio after unmount.
   useEffect(() => {
     return () => {
-      stopTone();
+      sessionRef.current?.dispose();
     };
-  }, [stopTone]);
+  }, []);
 
   const presets = [
     { label: 'Sub Bass (60 Hz)', freq: 60 },
@@ -123,8 +109,8 @@ export function ToneGeneratorTester({ onResultUpdate }: ToolComponentProps) {
         <div className="space-y-2">
           <input
             type="range"
-            min="20"
-            max="12000"
+            min={TONE_FREQUENCY_MIN}
+            max={TONE_FREQUENCY_MAX}
             step="1"
             value={frequency}
             onChange={(e) => setFrequency(parseFloat(e.target.value))}
@@ -182,8 +168,8 @@ export function ToneGeneratorTester({ onResultUpdate }: ToolComponentProps) {
             </div>
             <input
               type="range"
-              min="0.01"
-              max="0.5"
+              min={TONE_VOLUME_MIN}
+              max={TONE_VOLUME_MAX}
               step="0.01"
               value={volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
