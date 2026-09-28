@@ -4,6 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, RefreshCw, FlipHorizontal, ZoomIn, ZoomOut, Download, AlertCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { CameraSession } from '@/lib/testing/cameraSession';
+import {
+  attachStreamToVideo,
+  readyStateIndicatesDeliveredFrame,
+  supportsRequestVideoFrameCallback,
+  FRAME_EVIDENCE_TIMEOUT_MS,
+  VideoFrameSource,
+} from '@/lib/testing/videoFrameGate';
 
 interface ToolComponentProps {
   t: Translations;
@@ -24,18 +31,121 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
   const sessionRef = useRef<CameraSession<MediaStream>>(new CameraSession<MediaStream>());
   const runTokenRef = useRef(0);
   const mountedRef = useRef(true);
+  /** Frame-verification handles, so Stop/unmount can cancel a pending check. */
+  const frameTimerRef = useRef<number | null>(null);
+  const rvfcIdRef = useRef<number | null>(null);
+  /** Bumped on every stop so a superseded frame check resolves instead of hanging. */
+  const verifyTokenRef = useRef(0);
 
-  const stopStream = useCallback(() => {
-    // Stop-as-cleanup: release hardware without invalidating lifecycle state.
-    sessionRef.current.releaseAll();
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+  /** Cancel the pending frame verification (poll timer + frame callback). */
+  const clearFrameWatch = useCallback(() => {
+    if (frameTimerRef.current !== null) {
+      window.clearTimeout(frameTimerRef.current);
+      frameTimerRef.current = null;
     }
-    setIsActive(false);
+    const id = rvfcIdRef.current;
+    const el = videoRef.current;
+    // Read the id BEFORE nulling it: cancel needs the id it was given.
+    if (id !== null && el && 'cancelVideoFrameCallback' in el) {
+      try {
+        (
+          el as unknown as { cancelVideoFrameCallback: (frameId: number) => void }
+        ).cancelVideoFrameCallback(id);
+      } catch {
+        // ignore: the element may already be detached
+      }
+    }
+    rvfcIdRef.current = null;
   }, []);
 
+  /** The <video> is always mounted, so this resolves on the first tick in practice. */
+  const waitForVideoElement = useCallback(async (): Promise<HTMLVideoElement | null> => {
+    if (videoRef.current) return videoRef.current;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+      if (!mountedRef.current) return null;
+      if (videoRef.current) return videoRef.current;
+    }
+    return null;
+  }, []);
+
+  /**
+   * Resolve once a frame is REALLY being delivered, or null if none arrives
+   * within the timeout. A resolved getUserMedia stream is not evidence of a
+   * live preview, so "passed" must wait for this.
+   */
+  const verifyLiveFrames = useCallback(
+    (el: HTMLVideoElement, token: number): Promise<VideoFrameSource | null> => {
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (source: VideoFrameSource | null) => {
+          if (settled) return;
+          settled = true;
+          clearFrameWatch();
+          resolve(source);
+        };
+
+        // Preferred, precise evidence when the browser offers it.
+        if (supportsRequestVideoFrameCallback(el)) {
+          try {
+            const rvfcEl = el as HTMLVideoElement & {
+              requestVideoFrameCallback: (cb: () => void) => number;
+            };
+            rvfcIdRef.current = rvfcEl.requestVideoFrameCallback(() =>
+              finish('requestVideoFrameCallback')
+            );
+          } catch {
+            // fall through to the readyState safety net
+          }
+        }
+
+        // Safety net for both cases: a paused or unstarted element never
+        // reaches HAVE_CURRENT_DATA, so this also bounds a silent stall.
+        const startedAt = Date.now();
+        const poll = () => {
+          if (settled) return;
+          if (token !== verifyTokenRef.current) {
+            finish(null);
+            return;
+          }
+          if (readyStateIndicatesDeliveredFrame(el)) {
+            finish('readyState-fallback');
+            return;
+          }
+          if (Date.now() - startedAt >= FRAME_EVIDENCE_TIMEOUT_MS) {
+            finish(null);
+            return;
+          }
+          frameTimerRef.current = window.setTimeout(poll, 200);
+        };
+        frameTimerRef.current = window.setTimeout(poll, 200);
+      });
+    },
+    [clearFrameWatch]
+  );
+
+  const stopStream = useCallback(() => {
+    // Supersede any frame check still waiting, then release the hardware.
+    runTokenRef.current += 1;
+    verifyTokenRef.current = runTokenRef.current;
+    clearFrameWatch();
+    sessionRef.current.invalidate();
+    sessionRef.current.releaseAll();
+    const el = videoRef.current;
+    if (el) {
+      el.srcObject = null;
+      try {
+        el.pause();
+      } catch {
+        // ignore
+      }
+    }
+    setIsActive(false);
+    setIsRequesting(false);
+  }, [clearFrameWatch]);
+
   const startMirror = async () => {
-    if (isRequesting) return; // prevent concurrent pending requests
+    if (isRequesting || isActive) return; // prevent concurrent pending requests
     setErrorMsg(null);
     setIsRequesting(true);
     // New observation: invalidate pending work from any previous attempt,
@@ -43,6 +153,7 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
     // never re-read inside the later promise resolution).
     sessionRef.current.invalidate();
     const token = ++runTokenRef.current;
+    verifyTokenRef.current = token;
     if (!sessionRef.current.begin(token)) {
       setIsRequesting(false);
       return;
@@ -53,49 +164,84 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
         audio: false,
       });
       const result = sessionRef.current.resolve(token, mediaStream);
-      if (!result.live) {
+      if (!mountedRef.current || !result.live) {
         // Superseded (Turn Off / restart / unmount won): the session already
         // stopped every returned track. Update nothing.
         setIsRequesting(false);
         return;
       }
+
+      // Reveal the element FIRST, then attach. The <video> is always mounted,
+      // but this ordering also guarantees it is visible before we judge frames.
       setIsActive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = result.stream;
-        videoRef.current.play().catch(() => {});
+      const videoEl = await waitForVideoElement();
+      if (!mountedRef.current || token !== runTokenRef.current || !videoEl) {
+        setIsRequesting(false);
+        return;
+      }
+
+      // Attach AND start playback. Autoplay alone does not start a stream that
+      // arrives after mount on iOS Safari, which left the preview black.
+      await attachStreamToVideo(videoEl, result.stream);
+      if (!mountedRef.current || token !== runTokenRef.current) {
+        setIsRequesting(false);
+        return;
       }
       setIsRequesting(false);
-      onResultUpdate?.(
-        'passed',
-        'Mirror preview showing live video from the selected camera. Preview confirms delivery only — not a full camera certification.'
-      );
+
+      // A granted stream is not a live preview. Report "passed" only once a
+      // frame is actually delivered, and bound the wait so a stall is honest.
+      const source = await verifyLiveFrames(videoEl, token);
+      if (!mountedRef.current || token !== runTokenRef.current) return;
+
+      if (source) {
+        onResultUpdate?.(
+          'passed',
+          `Mirror preview is live${isMirrored ? ' and horizontally mirrored' : ''}. Frame delivery confirmed via ${source}. Preview confirms delivery only — not a full camera certification.`
+        );
+      } else {
+        const msg =
+          'The camera was granted and the preview started, but no video frame arrived within 12 seconds, so the mirror could not be confirmed. This is a playback problem, not a permission problem.';
+        setErrorMsg(msg);
+        onResultUpdate?.('inconclusive', msg);
+      }
     } catch (err: unknown) {
       const error = err as Error;
       const stale = !sessionRef.current.reject(token);
+      clearFrameWatch();
       setIsRequesting(false);
       if (stale || !mountedRef.current) return;
       setErrorMsg(error.message || 'Camera access denied or unavailable');
-      onResultUpdate?.('failed', error.message);
+      onResultUpdate?.('failed', `${error.name}: ${error.message || 'Camera access denied or unavailable'}`);
     }
   };
 
   useEffect(() => {
     mountedRef.current = true;
     // Capture the refs up front: the cleanup runs after unmount and must not
-    // read ref fields that React may have detached.
+    // read ref fields that React may have detached. Capturing the element here
+    // is safe only because the <video> is now always mounted — effects run
+    // after the first commit, so the ref is already populated.
     const session = sessionRef.current;
     const videoEl = videoRef.current;
     return () => {
       mountedRef.current = false;
-      // Unmount: invalidate pending work and release hardware. No setState —
-      // this must be safe after React has torn the component down.
+      // Unmount: invalidate pending work, cancel the frame check, and release
+      // every track. No setState — this must be safe after React has torn the
+      // component down.
+      clearFrameWatch();
       session.invalidate();
       session.releaseAll();
       if (videoEl) {
         videoEl.srcObject = null;
+        try {
+          videoEl.pause();
+        } catch {
+          // ignore
+        }
       }
     };
-  }, []);
+  }, [clearFrameWatch]);
 
   const takeSnapshot = () => {
     if (!videoRef.current) return;
@@ -130,20 +276,26 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
 
       {/* Main Mirror Viewport */}
       <div className="relative rounded-2xl bg-[#111D30] border border-[#223043] overflow-hidden flex flex-col items-center justify-center min-h-[420px]">
-        {isActive ? (
-          <div className="w-full h-full flex items-center justify-center overflow-hidden">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full max-h-[560px] object-cover transition-transform duration-150"
-              style={{
-                transform: `${isMirrored ? 'scaleX(-1)' : 'scaleX(1)'} scale(${zoomLevel})`,
-              }}
-            />
-          </div>
-        ) : (
+        {/* The <video> stays MOUNTED for the whole session. It used to be
+            rendered only while active, so the ref was still null at the moment
+            the stream needed attaching and the preview stayed black forever.
+            Opacity (not display:none) keeps the element decoding. */}
+        <div className="w-full h-full flex items-center justify-center overflow-hidden">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            aria-label="Live mirrored camera preview"
+            className={`w-full max-h-[560px] object-cover transition-all duration-150 ${
+              isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            style={{
+              transform: `${isMirrored ? 'scaleX(-1)' : 'scaleX(1)'} scale(${zoomLevel})`,
+            }}
+          />
+        </div>
+        {!isActive && (
           <div className="text-center p-8 space-y-4">
             <div className="w-16 h-16 rounded-2xl bg-[#0F766E]/20 text-[#14B8A6] flex items-center justify-center mx-auto">
               <Camera className="w-8 h-8" />

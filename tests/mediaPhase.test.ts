@@ -379,6 +379,66 @@ test('webcam tester source - both evidence paths are always armed, never either/
   assert.match(source, /stopFallbackPoll\(\);\s*\n\s*clearFrameWatchdog\(\);/);
 });
 
+// ------------------------------------- Online Mirror (the never-worked flow)
+
+test('online mirror source - the video element is mounted before the stream is attached', () => {
+  const source = readFileSync(join(repoRoot, 'components/tests/OnlineMirrorTester.tsx'), 'utf8');
+
+  // The original bug: <video> rendered only while active, so the ref was still
+  // null at attach time and the stream was never attached at all.
+  assert.doesNotMatch(
+    source,
+    /\{isActive \? \(\s*<div[^>]*>\s*<video/,
+    'the <video> must not be created by the same branch that starts the camera'
+  );
+  const videoTag = source.indexOf('<video');
+  const isActiveGate = source.indexOf('{!isActive && (');
+  assert.ok(videoTag > -1, 'a <video> element exists');
+  assert.ok(
+    isActiveGate > videoTag,
+    'the inactive placeholder gates only the OVERLAY; the <video> stays mounted'
+  );
+  assert.doesNotMatch(source, /if \(videoRef\.current\) \{/, 'no branch may skip attaching on a null ref');
+
+  // Attachment goes through the shared, tested helper (which also starts
+  // playback — autoplay alone does not start a late stream on iOS).
+  assert.match(source, /await attachStreamToVideo\(/);
+  assert.match(source, /await waitForVideoElement\(\)/);
+});
+
+test('online mirror source - passed requires a delivered frame, and the stall is bounded', () => {
+  const source = readFileSync(join(repoRoot, 'components/tests/OnlineMirrorTester.tsx'), 'utf8');
+
+  // A granted getUserMedia stream is not proof of a live preview.
+  assert.match(source, /await verifyLiveFrames\(/);
+  assert.match(source, /supportsRequestVideoFrameCallback\(el\)/);
+  assert.match(source, /readyStateIndicatesDeliveredFrame\(el\)/);
+  assert.match(source, /FRAME_EVIDENCE_TIMEOUT_MS/);
+  assert.match(source, /status: passed|onResultUpdate\?\.\(\s*'passed'/);
+  assert.match(
+    source,
+    /onResultUpdate\?\.\('inconclusive'/,
+    'no frame within the timeout must be inconclusive, never passed'
+  );
+});
+
+test('online mirror source - hardware is released on Stop and on unmount', () => {
+  const source = readFileSync(join(repoRoot, 'components/tests/OnlineMirrorTester.tsx'), 'utf8');
+
+  const stop = source.slice(source.indexOf('const stopStream'), source.indexOf('const startMirror'));
+  assert.match(stop, /sessionRef\.current\.invalidate\(\)/, 'Stop invalidates the pending attempt');
+  assert.match(stop, /sessionRef\.current\.releaseAll\(\)/, 'Stop releases every track');
+  assert.match(stop, /clearFrameWatch\(\)/, 'Stop cancels the pending frame check');
+  assert.match(stop, /srcObject = null/);
+  assert.match(stop, /el\.pause\(\)/, 'Stop pauses playback, not just detaches');
+  assert.match(stop, /setIsActive\(false\)/);
+
+  const cleanup = source.slice(source.indexOf('return () => {'));
+  assert.match(cleanup, /session\.invalidate\(\)/, 'unmount invalidates');
+  assert.match(cleanup, /session\.releaseAll\(\)/, 'unmount releases the camera');
+  assert.match(cleanup, /clearFrameWatch\(\)/, 'unmount cancels the frame check');
+});
+
 // ------------------------------------------------------ micSignal tests
 
 test('mic signal - stream connection alone is never a passed observation', () => {
