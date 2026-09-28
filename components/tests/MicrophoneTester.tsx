@@ -6,13 +6,16 @@ import { Translations } from '@/lib/i18n/types';
 import { PermissionDeniedModal } from '@/components/PermissionDeniedModal';
 import { TestResultBanner, useTestResult } from '@/components/TestResultBanner';
 import { MicSignalObserver } from '@/lib/testing/micSignal';
-import {
-  isMediaRecorderAvailable,
-  selectRecordingMimeType,
-  actualBlobMimeType,
-  extensionForMimeType,
-  FALLBACK_MIME,
-} from '@/lib/testing/recordingFormat';
+import { WAV_MIME_TYPE, createWavBlob } from '@/lib/testing/wavEncoder';
+import { PcmAccumulator, describeError } from '@/lib/testing/pcmRecorder';
+
+/** Duration of the self-monitoring sample clip (seconds). */
+const MIC_SAMPLE_SECONDS = 5;
+/**
+ * Frames per audio callback while tapping PCM for the sample clip. 4096 is
+ * the value Safari and Chromium handle best and keeps each copy small.
+ */
+const PCM_BUFFER_FRAMES = 4096;
 
 interface MicrophoneTesterProps {
   t: Translations;
@@ -66,21 +69,23 @@ export function MicrophoneTester({
 
   // Recording sample state
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordTimeLeft, setRecordTimeLeft] = useState<number>(5);
+  const [recordTimeLeft, setRecordTimeLeft] = useState<number>(MIC_SAMPLE_SECONDS);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  /** Actual recorded MIME of the last finished sample (for accurate extension). */
-  const [sampleBlobType, setSampleBlobType] = useState<string | null>(null);
 
   // Stable references for deterministic cleanup without stale closures
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recordedAudioUrlRef = useRef<string | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // PCM tap for the sample clip. These are separate from the analyser graph so
+  // the meter/waveform keep running untouched while a sample is captured.
+  const sampleSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sampleProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const sampleSinkRef = useRef<GainNode | null>(null);
+  const sampleAccumulatorRef = useRef<PcmAccumulator | null>(null);
   // Track the stream request in flight so a resolution after stop/device
   // change/reset can be rejected and its obsolete tracks stopped immediately.
   const pendingStreamRef = useRef<MediaStream | null>(null);
@@ -89,23 +94,6 @@ export function MicrophoneTester({
   // Requires a SUSTAINED non-trivial level before "usable signal" is credited:
   // permission granted or a connected stream alone is NOT a passed observation.
   const signalObserverRef = useRef<MicSignalObserver>(new MicSignalObserver());
-  const sampleMimeRef = useRef<string | null>(null);
-
-  // Probe the supported recording MIME once (deferred set, no effect-body setState).
-  useEffect(() => {
-    let cancelled = false;
-    const probe = () => {
-      if (cancelled) return;
-      sampleMimeRef.current = isMediaRecorderAvailable(MediaRecorder)
-        ? selectRecordingMimeType(MediaRecorder)
-        : null;
-    };
-    const raf = requestAnimationFrame(probe);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-    };
-  }, []);
 
   // Load audio input devices list
   const loadDevices = async () => {
@@ -143,15 +131,9 @@ export function MicrophoneTester({
       countdownIntervalRef.current = null;
     }
 
-    // 3. Stop MediaRecorder if active
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {
-        // ignore
-      }
-      mediaRecorderRef.current = null;
-    }
+    // 3. Detach any in-flight PCM tap for the sample clip (the samples are
+    //    dropped — an interrupted sample is never published as a clip).
+    releaseSampleTap();
 
     // 4. Stop and release all tracks on streamRef
     if (streamRef.current) {
@@ -357,15 +339,102 @@ export function MicrophoneTester({
     render();
   };
 
-  // 5-second sample recording for user self-monitoring. The recorder uses
-  // the browser's supported MIME (never forced audio/webm) and the download
-  // extension is derived from the ACTUAL recorded MIME type.
-  const startRecordingSample = () => {
-    if (!streamRef.current) return;
-    if (!isMediaRecorderAvailable(MediaRecorder)) {
+  /**
+   * Detach the PCM tap. Deliberately does NOT close the AudioContext — the
+   * level meter and waveform own it and must keep running afterwards.
+   */
+  const releaseSampleTap = () => {
+    const processor = sampleProcessorRef.current;
+    if (processor) {
+      // Detach the callback first so no late audio block appends after teardown.
+      processor.onaudioprocess = null;
+      try {
+        processor.disconnect();
+      } catch {
+        // already disconnected
+      }
+      sampleProcessorRef.current = null;
+    }
+    const source = sampleSourceRef.current;
+    if (source) {
+      try {
+        source.disconnect();
+      } catch {
+        // already disconnected
+      }
+      sampleSourceRef.current = null;
+    }
+    const sink = sampleSinkRef.current;
+    if (sink) {
+      try {
+        sink.disconnect();
+      } catch {
+        // already disconnected
+      }
+      sampleSinkRef.current = null;
+    }
+    sampleAccumulatorRef.current = null;
+  };
+
+  /**
+   * Encode the captured PCM as a genuine WAV and publish it for playback and
+   * download.
+   *
+   * There is no fallback. If nothing was captured, or the samples cannot be
+   * encoded, the sample is reported as inconclusive with no player shown — the
+   * clip is never offered in a container that will not open.
+   */
+  const finishRecordingSample = () => {
+    const accumulator = sampleAccumulatorRef.current;
+    releaseSampleTap();
+    setIsRecording(false);
+
+    if (!accumulator || accumulator.frameCount <= 0) {
       emitRunRich(currentRun(), {
         status: 'inconclusive',
-        details: 'MediaRecorder is not available in this browser, so a local sample clip cannot be captured. Live level metering still works.',
+        details: 'The audio sample capture produced no PCM samples, so no clip was saved.',
+      });
+      return;
+    }
+
+    let wav: ArrayBuffer | null = null;
+    try {
+      wav = accumulator.toWav();
+    } catch (err: unknown) {
+      const detail = describeError(err);
+      emitRunRich(currentRun(), {
+        status: 'failed',
+        details: `The audio sample could not be encoded as WAV — ${detail}`,
+      });
+      return;
+    }
+
+    if (!wav) {
+      emitRunRich(currentRun(), {
+        status: 'inconclusive',
+        details: 'The audio sample produced no samples to encode.',
+      });
+      return;
+    }
+
+    const audioBlob = createWavBlob(wav);
+    const url = URL.createObjectURL(audioBlob);
+    recordedAudioUrlRef.current = url;
+    setRecordedAudioUrl(url);
+  };
+
+  // Self-monitoring sample clip. The audio is captured as raw PCM through a Web
+  // Audio tap and written out as a genuine WAV on completion. MediaRecorder is
+  // deliberately not used: on iOS Safari it produced a blob that would not open
+  // once downloaded, and its extension fell back to a hard-coded .webm.
+  const startRecordingSample = () => {
+    const context = audioContextRef.current;
+    const stream = streamRef.current;
+    if (!stream || !context || context.state === 'closed') {
+      emitRunRich(currentRun(), {
+        status: 'inconclusive',
+        details:
+          'The microphone is not running, so a local sample clip cannot be captured. Start the microphone test first.',
       });
       return;
     }
@@ -374,61 +443,57 @@ export function MicrophoneTester({
       URL.revokeObjectURL(recordedAudioUrlRef.current);
       recordedAudioUrlRef.current = null;
       setRecordedAudioUrl(null);
-      setSampleBlobType(null);
     }
 
     try {
-      audioChunksRef.current = [];
-      const mimeType = sampleMimeRef.current && MediaRecorder.isTypeSupported(sampleMimeRef.current)
-        ? sampleMimeRef.current
-        : undefined;
-      const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
-      mediaRecorderRef.current = recorder;
+      const accumulator = new PcmAccumulator(context.sampleRate, MIC_SAMPLE_SECONDS + 1);
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(PCM_BUFFER_FRAMES, 1, 1);
+      const sink = context.createGain();
+      // The processor only runs while connected to the destination, but routing
+      // a live microphone there would be audible feedback. A zero-gain sink
+      // keeps the graph pulled and completely silent.
+      sink.gain.value = 0;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
+      processor.onaudioprocess = (event: AudioProcessingEvent) => {
+        accumulator.append(event.inputBuffer.getChannelData(0));
       };
 
-      recorder.onstop = () => {
-        if (audioChunksRef.current.length > 0) {
-          const blobType = actualBlobMimeType(recorder.mimeType, sampleMimeRef.current ?? FALLBACK_MIME);
-          setSampleBlobType(blobType);
-          const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
-          const url = URL.createObjectURL(audioBlob);
-          recordedAudioUrlRef.current = url;
-          setRecordedAudioUrl(url);
-        }
-        setIsRecording(false);
-      };
+      sampleSourceRef.current = source;
+      sampleProcessorRef.current = processor;
+      sampleSinkRef.current = sink;
+      sampleAccumulatorRef.current = accumulator;
 
-      recorder.start();
-      setIsRecording(true);
-      setRecordTimeLeft(5);
-
-      countdownIntervalRef.current = setInterval(() => {
-        setRecordTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (countdownIntervalRef.current) {
-              clearInterval(countdownIntervalRef.current);
-              countdownIntervalRef.current = null;
-            }
-            if (recorder.state === 'recording') {
-              try {
-                recorder.stop();
-              } catch {
-                // ignore
-              }
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch {
+      source.connect(processor);
+      processor.connect(sink);
+      sink.connect(context.destination);
+    } catch (err: unknown) {
+      const detail = describeError(err);
+      releaseSampleTap();
       setIsRecording(false);
+      emitRunRich(currentRun(), {
+        status: 'failed',
+        details: `Could not start the audio sample capture — ${detail}`,
+      });
+      return;
     }
+
+    setIsRecording(true);
+    setRecordTimeLeft(MIC_SAMPLE_SECONDS);
+
+    countdownIntervalRef.current = setInterval(() => {
+      setRecordTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+          finishRecordingSample();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   // Unmount & route cleanup. Unmount must NOT clear a legitimately recorded
@@ -448,14 +513,7 @@ export function MicrophoneTester({
         clearInterval(countdownIntervalRef.current);
         countdownIntervalRef.current = null;
       }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch {
-          // ignore
-        }
-        mediaRecorderRef.current = null;
-      }
+      releaseSampleTap();
       if (pendingStreamRef.current) {
         pendingStreamRef.current.getTracks().forEach((track) => {
           try {
@@ -493,10 +551,10 @@ export function MicrophoneTester({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only cleanup for refs and stable controller functions
   }, []);
 
-  // Download extension derived from the ACTUAL recorded blob MIME type —
-  // never hardcoded .webm (fixes Ogg/mp4 Safari mismatch). State, not a ref:
-  // the value is captured when the recorder finishes, not read during render.
-  const sampleExtension = extensionForMimeType(recordedAudioUrl ? sampleBlobType : null) ?? 'webm';
+  // The sample clip is always a genuine WAV file, so the extension always is.
+  // There is deliberately no "?? 'webm'" fallback any more: a silent wrong
+  // extension was exactly how an unopenable download was produced before.
+  const sampleExtension = 'wav';
 
   return (
     <div className="w-full bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
@@ -644,8 +702,21 @@ export function MicrophoneTester({
             {/* Playback player */}
             {recordedAudioUrl && (
               <div className="mt-4 pt-3 border-t border-[#DFE5EB] dark:border-[#223043] flex flex-col sm:flex-row items-center gap-3">
-                <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">{t.micTest.playbackPrompt}</p>
-                <audio controls src={recordedAudioUrl} className="h-8 max-w-xs" />
+                <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
+                  {t.micTest.playbackPrompt}{' '}
+                  {/* The clip is always a genuine WAV; naming the format on screen
+                      makes the on-device result verifiable at a glance. */}
+                  <span className="font-mono text-[10px] text-[#0F766E] dark:text-[#14B8A6]">
+                    ({WAV_MIME_TYPE})
+                  </span>
+                </p>
+                <audio
+                  controls
+                  src={recordedAudioUrl}
+                  preload="metadata"
+                  playsInline
+                  className="h-8 max-w-xs"
+                />
                 <a
                   href={recordedAudioUrl}
                   download={`devicetry-mic-sample.${sampleExtension}`}
