@@ -1,5 +1,5 @@
 import type {Metadata} from 'next';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css'; // Global styles
 import { SITE_URL } from '@/lib/site';
 import { ThemeInitScript } from '@/lib/theme';
@@ -9,12 +9,21 @@ import { BackToTop } from '@/components/layout/BackToTop';
  * Brand wordmark face. Plus Jakarta Sans is a clean geometric sans with open
  * counters and a modern, even colour — the same feel as contemporary software
  * lockups — used only for the DeviceTry wordmark, not for page copy.
+ *
+ * Bundled locally (app/fonts) instead of fetched from Google at build time,
+ * so builds are deterministic and never depend on fonts.googleapis.com. The
+ * file is the official variable font covering wght 200–800, which includes
+ * the 500/600/700 weights this brand lockup uses; declaring that exact range
+ * keeps the browser interpolating weights exactly as the Google-served
+ * variable file did, so rendered glyphs are identical.
  */
-const brandFont = Plus_Jakarta_Sans({
-  subsets: ['latin'],
+const brandFont = localFont({
+  src: './fonts/plus-jakarta-sans-latin-wght-var.woff2',
   display: 'swap',
-  weight: ['500', '600', '700'],
+  weight: '200 800',
+  style: 'normal',
   variable: '--font-brand',
+  fallback: ['ui-sans-serif', 'system-ui', 'sans-serif'],
 });
 
 export const metadata: Metadata = {
