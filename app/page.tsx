@@ -5,6 +5,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { LandingClient, HomeGuidePick } from '@/components/LandingClient';
 import { getPublishedGuides } from '@/lib/guides/registry';
+import { SITE_URL } from '@/lib/site';
 
 /** Homepage guide picks — real published articles, troubleshooting-first mix.
  *  Resolved on the server so full article content stays out of the client
@@ -48,6 +49,10 @@ export const metadata: Metadata = {
     description:
       'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, gamepad, internet speed, and IP lookup.',
     type: 'website',
+    // Page-specific: without this the tag is omitted here, and on pages that
+    // define no Open Graph block it silently inherits the site root.
+    url: SITE_URL,
+    siteName: 'DeviceTry',
   },
 };
 

@@ -4,6 +4,7 @@ import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
+import { SITE_URL } from '@/lib/site';
 
 /**
  * Fixed, human-controlled revision date. Do not compute from build time —
@@ -12,9 +13,14 @@ import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
 const POLICY_REVISED = 'September 21, 2026';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const title = 'Privacy Policy — DeviceTry';
+  const description =
+    'DeviceTry privacy policy: client-side browser testing, local storage of inspection history, and how optional recordings are handled.';
   return {
-    title: 'Privacy Policy — DeviceTry',
-    description: 'DeviceTry privacy policy: client-side browser testing, local storage of inspection history, and how optional recordings are handled.',
+    title,
+    description,
+    alternates: { canonical: '/privacy' },
+    openGraph: { title, description, type: 'website', url: `${SITE_URL}/privacy`, siteName: 'DeviceTry' },
   };
 }
 

@@ -18,6 +18,8 @@ export const metadata: Metadata = {
     description:
       'Practical troubleshooting guides and specification-based buying guides for microphones, webcams, keyboards, controllers, screens, and home networks.',
     type: 'website',
+    url: `${SITE_URL}/guides`,
+    siteName: 'DeviceTry',
   },
 };
 

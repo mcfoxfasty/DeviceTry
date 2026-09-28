@@ -5,6 +5,7 @@ import { ArrowRight, LayoutGrid } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
+import { SITE_URL } from '@/lib/site';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
@@ -14,6 +15,14 @@ export const metadata: Metadata = {
   description:
     'Browse all 15 free browser-based device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup.',
   alternates: { canonical: '/tests' },
+  openGraph: {
+    title: 'All Tools — Free Online Device Tests | DeviceTry',
+    description:
+      'Browse all 15 free browser-based device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup.',
+    type: 'website',
+    url: `${SITE_URL}/tests`,
+    siteName: 'DeviceTry',
+  },
 };
 
 export default function TestsHub() {

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDictionary } from '@/lib/i18n';
+import { SITE_URL } from '@/lib/site';
 import { ALL_TOOL_PAGES, TOOLS_REGISTRY, findToolBySlug } from '@/lib/tools/registry';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
@@ -39,6 +40,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       type: 'website',
+      // Page-specific: omitted here means no tag at all, which is why these
+      // pages previously had no og:url while the site root leaked in elsewhere.
+      url: `${SITE_URL}/test/${tool.slug}`,
+      siteName: 'DeviceTry',
     },
     twitter: {
       card: 'summary_large_image',

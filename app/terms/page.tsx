@@ -4,6 +4,7 @@ import { getDictionary } from '@/lib/i18n';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { FileText } from 'lucide-react';
+import { SITE_URL } from '@/lib/site';
 
 /**
  * Fixed, human-controlled revision date. Do not compute from build time —
@@ -12,9 +13,14 @@ import { FileText } from 'lucide-react';
 const TERMS_REVISED = 'September 18, 2026';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const title = 'Terms of Service — DeviceTry';
+  const description =
+    'DeviceTry terms of service: Software scope, hardware testing disclaimers, and technical usage.';
   return {
-    title: 'Terms of Service — DeviceTry',
-    description: 'DeviceTry terms of service: Software scope, hardware testing disclaimers, and technical usage.',
+    title,
+    description,
+    alternates: { canonical: '/terms' },
+    openGraph: { title, description, type: 'website', url: `${SITE_URL}/terms`, siteName: 'DeviceTry' },
   };
 }
 

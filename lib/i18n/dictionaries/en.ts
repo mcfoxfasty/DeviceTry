@@ -343,7 +343,7 @@ export const enTranslations: Translations = {
   },
   seo: {
     metaTitleHome: 'DeviceTry — Free Online Mic, Webcam & Keyboard Tests',
-    metaDescHome: 'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, and gamepad. 100% private, runs entirely in your browser.',
+    metaDescHome: 'Free online device tester for microphone, webcam, keyboard, mouse, speakers, display, and gamepad. Hardware tests run entirely in your browser; Internet Speed Test and What’s My IP make real network requests to measurement and lookup services.',
     metaTitleMic: 'Microphone Test Online — Check Mic Volume & Record Sample | DeviceTry',
     metaDescMic: 'Test your microphone online with live sound wave levels, frequency visualizer, and instant 5-second playback. Free, secure, zero data uploaded.',
     metaTitleWebcam: 'Webcam Test Online — Check Camera Resolution & FPS | DeviceTry',

@@ -5,11 +5,17 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Cpu, Video, ShoppingBag, Wrench, CheckCircle } from 'lucide-react';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
+import { SITE_URL } from '@/lib/site';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const title = 'About & Hardware Testing Methodology — DeviceTry';
+  const description =
+    'Learn how DeviceTry uses modern browser WebRTC, Web Audio, and Gamepad APIs to test peripherals with zero installation.';
   return {
-    title: 'About & Hardware Testing Methodology — DeviceTry',
-    description: 'Learn how DeviceTry uses modern browser WebRTC, Web Audio, and Gamepad APIs to test peripherals with zero installation.',
+    title,
+    description,
+    alternates: { canonical: '/about' },
+    openGraph: { title, description, type: 'website', url: `${SITE_URL}/about`, siteName: 'DeviceTry' },
   };
 }
 
