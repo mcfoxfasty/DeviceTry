@@ -13,9 +13,10 @@ interface ToolAssetIconProps {
 }
 
 /**
- * Renders the exact supplied PNG for a primary catalog tool. Supporting
- * diagnostics are outside the 15-tool asset set and retain the existing SVG
- * artwork so this component never invents a generic PNG substitution.
+ * Renders the exact supplied PNG for a tool, keyed by slug in
+ * lib/tools/iconAssets.ts. A tool with no supplied artwork — Permission
+ * Diagnostics — keeps the original SVG so this component never invents a
+ * generic PNG substitution.
  */
 export function ToolAssetIcon({ slug, size = 40, className = '', title }: ToolAssetIconProps) {
   const src = toolIconSrc(slug);
