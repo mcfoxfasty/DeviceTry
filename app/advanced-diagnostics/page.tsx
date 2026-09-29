@@ -149,8 +149,8 @@ export default function AdvancedDiagnosticsPage() {
                 className={`glass tool-card group relative flex flex-col p-5 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md transition-all ${FOCUS_RING}`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#E6F4F2] dark:bg-[#133230] group-hover:scale-105 transition-transform">
-                    <ToolAssetIcon slug={tool.slug} size={28} />
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#E6F4F2] dark:bg-[#133230] group-hover:scale-105 transition-transform">
+                    <ToolAssetIcon slug={tool.slug} size={40} />
                   </span>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
