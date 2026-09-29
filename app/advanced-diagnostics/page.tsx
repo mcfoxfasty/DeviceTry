@@ -74,58 +74,6 @@ export default function AdvancedDiagnosticsPage() {
           </p>
         </div>
 
-        {/* Scope: what these checks do and do not do. Kept factual — every
-            statement here matches the implementation of the tool it names. */}
-        <section
-          aria-labelledby="scope-heading"
-          className="mt-8 glass p-5 sm:p-6 rounded-xl border border-[#E2E8F0] dark:border-[#223043]"
-        >
-          <h2
-            id="scope-heading"
-            className="text-xs font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2"
-          >
-            <Info className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#14B8A6]" />
-            What these checks do — and what they do not
-          </h2>
-          <ul className="mt-3 space-y-2.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
-            <li className="flex items-start gap-2">
-              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
-              <span>
-                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
-                  They stay on your device.
-                </strong>{' '}
-                None of the six requests microphone or camera access, and none uploads anything.
-                Permission Diagnostics reads the permission state your browser already holds rather
-                than triggering a prompt, and the Storage Inspector only reports what DeviceTry
-                itself has saved locally.
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
-              <span>
-                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
-                  The WebRTC check is a local capability test, not a leak test.
-                </strong>{' '}
-                It creates two peer connections inside your own browser with no external STUN or
-                TURN server, exchanges an SDP offer and answer, opens a data channel and passes five
-                messages through it. It reports handshake time, roundtrip timing and the ICE
-                candidate types it gathered — it does not test for IP leaks, VPN behavior or DNS.
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
-              <span>
-                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
-                  Capability is not a guarantee.
-                </strong>{' '}
-                A browser can report support for an API or codec and still behave differently in
-                practice, so read these results as what your browser claims it can do — not as a
-                performance measurement.
-              </span>
-            </li>
-          </ul>
-        </section>
-
         <section aria-labelledby="diagnostics-heading" className="mt-10">
           <h2
             id="diagnostics-heading"
@@ -178,6 +126,60 @@ export default function AdvancedDiagnosticsPage() {
               </Link>
             ))}
           </div>
+        </section>
+
+        {/* Scope: what these checks do and do not do. Sits after the cards so
+            the six tools read first and the caveats qualify what was just
+            listed. Kept factual — every statement here matches the
+            implementation of the tool it names. */}
+        <section
+          aria-labelledby="scope-heading"
+          className="mt-10 glass p-5 sm:p-6 rounded-xl border border-[#E2E8F0] dark:border-[#223043]"
+        >
+          <h2
+            id="scope-heading"
+            className="text-xs font-bold uppercase tracking-wider text-[#142033] dark:text-[#E9EEF4] flex items-center gap-2"
+          >
+            <Info className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#14B8A6]" />
+            What these checks do — and what they do not
+          </h2>
+          <ul className="mt-3 space-y-2.5 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
+            <li className="flex items-start gap-2">
+              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
+              <span>
+                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                  They stay on your device.
+                </strong>{' '}
+                None of the six requests microphone or camera access, and none uploads anything.
+                Permission Diagnostics reads the permission state your browser already holds rather
+                than triggering a prompt, and the Storage Inspector only reports what DeviceTry
+                itself has saved locally.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
+              <span>
+                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                  The WebRTC check is a local capability test, not a leak test.
+                </strong>{' '}
+                It creates two peer connections inside your own browser with no external STUN or
+                TURN server, exchanges an SDP offer and answer, opens a data channel and passes five
+                messages through it. It reports handshake time, roundtrip timing and the ICE
+                candidate types it gathered — it does not test for IP leaks, VPN behavior or DNS.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-bold text-[#0F766E] dark:text-[#14B8A6] shrink-0">•</span>
+              <span>
+                <strong className="font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                  Capability is not a guarantee.
+                </strong>{' '}
+                A browser can report support for an API or codec and still behave differently in
+                practice, so read these results as what your browser claims it can do — not as a
+                performance measurement.
+              </span>
+            </li>
+          </ul>
         </section>
 
         <p className="mt-10 text-xs text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">
