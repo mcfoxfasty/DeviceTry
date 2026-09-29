@@ -11,6 +11,23 @@ export const microphoneNotWorking: GuideArticle = {
   relatedGuideSlugs: ['microphone-too-quiet'],
   intro:
     'When a microphone produces nothing at all, the cause is almost always one of five things: a privacy permission, the wrong input device, the microphone being muted at the hardware level, a driver that reset itself, or a failed connection. Work through this guide in order — most people find the fault in the first two sections.',
+  // The lead figure is a supplied photograph. The three figures inside the
+  // article are original diagrams, never screenshots: nothing there asserts a
+  // reading, a permission state or a device the reader has not seen — each
+  // only restates, in pictures, a list the article already makes. `kind` is
+  // explicit on every figure so a drawn diagram is never read as a
+  // photograph of the reader's own setup.
+  featuredImage: {
+    kind: 'photo',
+    src: '/guides/microphone-not-working-hero',
+    width: 1672,
+    height: 941,
+    // Describes what is actually in the frame. It deliberately does not name
+    // the control the hand is touching: that detail could not be confirmed
+    // from the file at a resolution where it is legible, and an alt text that
+    // guesses is worse than one that stops short.
+    alt: 'A black desktop USB microphone on a small stand in the middle of a wooden desk, with a hand resting against the side of its body. An open laptop sits to the left, black over-ear headphones lie to the right, and a notebook and a potted plant are in the foreground. The room is a home office lit by daylight from a window behind, with a second plant on a shelf in the background.',
+  },
   published: true,
   publishedAt: new Date('2026-08-14'),
   updatedAt: new Date('2026-09-29'),
@@ -19,19 +36,36 @@ export const microphoneNotWorking: GuideArticle = {
     {
       h2: 'First: confirm whether the mic reaches the browser at all',
       paragraphs: [
-        'Before changing any settings, establish what is actually broken. Run the online microphone test on this site. If the meter moves when you speak, your microphone and its permission are fine — the problem is in the specific app that is silent, and you can skip to the last section of this guide. If the meter stays flat, continue below.',
+        'Before changing any settings, establish what is actually broken. Run the online microphone test on this site. If the meter moves when you speak, an audio signal has reached this browser test — which tells you the microphone and this page\u2019s permission are working here, and nothing beyond that. Another app may be opening a different input, or holding a permission of its own, so a test on this page is not a verdict on the microphone that app is using. If the silence is confined to one app, skip to the last section of this guide. If the meter stays flat, continue below.',
       ],
       steps: [
         'Open the Microphone Test and click Start Test.',
         'Speak at a normal volume about a hand-width from the microphone.',
         'Watch the input level meter: any movement means the signal path works.',
       ],
+      image: {
+        kind: 'diagram',
+        src: '/guides/microphone-not-working-signal-arrives',
+        width: 640,
+        height: 470,
+        alt: 'Diagram. A flow diagram of the first check. After speaking into the microphone a hand-width away, one question decides the rest of the guide: does the level meter move? If it does, an audio signal has reached this browser test, so the microphone and this page\u2019s permission are working here — not in the app that is still silent, which may open a different input or hold a permission of its own; skip to the last section. If it does not, the signal never arrived and the guide continues with permissions, device selection and then hardware.',
+        caption: 'One test tells you which half of this guide you actually need.',
+      },
     },
     {
       h2: 'Check the browser privacy permission',
       paragraphs: [
         'Modern browsers require explicit permission before any site can open your microphone. A previously granted permission can also silently revert after a browser update or a settings reset.',
       ],
+      image: {
+        kind: 'diagram',
+        src: '/guides/microphone-not-working-permission-layers',
+        width: 640,
+        height: 452,
+        alt: 'Diagram. Three stacked layers that must all allow microphone access before a page can use it: the operating system privacy setting, which is the master switch for every app on the machine; the browser site permissions, which record what this browser allows, kept per site; and the current page, which records what the tab in front of you is allowed to use. A note below warns that opening the top layer does not open the other two.',
+        caption:
+          'The three steps and bullets below cover these layers in turn, and name the exact menus.',
+      },
       steps: [
         'Click the padlock (or tune) icon at the left of the address bar.',
         'Find Microphone in the site permissions list.',
@@ -77,6 +111,18 @@ export const microphoneNotWorking: GuideArticle = {
     },
     {
       h2: 'Still nothing? The quick decision list',
+      // The full signal path, recapped now that the reader has walked it. It
+      // was the lead figure while this article had no photograph; as a
+      // summary it reads better than as a preamble.
+      image: {
+        kind: 'diagram',
+        src: '/guides/microphone-not-working-signal-path',
+        width: 640,
+        height: 672,
+        alt: 'Diagram. A numbered vertical chain of the five places a silent microphone can lose its signal, in the order to check them: microphone hardware (mute switch, boom arm, or a failed capsule); the connection (cable, USB port, or Bluetooth pairing); the operating system (wrong input device, level at zero, or muted); the browser permission (site permission, or the OS privacy switch); and the app you are using (its own device picker, or another app locking it).',
+        caption:
+          'The five checkpoints are the sections of this guide in order. The diagram repeats the list, it does not add to it.',
+      },
       bullets: [
         'Meter moves in the test but not in the app → fix the app\u2019s device selection or reinstall/re-login to the app.',
         'Permission resets itself after every reload → check the browser\u2019s global site-setting and any privacy/antivirus software.',

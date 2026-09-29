@@ -5,6 +5,7 @@ import { GuideArticle } from '@/lib/guides/registry';
 import { findToolBySlug } from '@/lib/tools/registry';
 import { getGuideBySlug } from '@/lib/guides/registry';
 import { ProductBuyBox } from './ProductBuyBox';
+import { GuideFigure } from './GuideFigure';
 import { GuideShareRow } from '@/components/ui/GuideShareRow';
 import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
@@ -17,6 +18,10 @@ function formatDate(d: Date): string {
  * Renders H1 + intro, typed sections (paragraphs/bullets/steps/tables/
  * product picks), FAQs, related tool & guide links, truthful editorial
  * dates, and the affiliate disclosure ONLY when affiliate links are present.
+ *
+ * Figures are optional and purely additive: an article with no `featuredImage`
+ * and no section `image` renders exactly as it did before, so the schema
+ * change costs the other fourteen guides nothing.
  */
 export function GuideArticleView({ guide }: { guide: GuideArticle }) {
   // findToolBySlug (ALL_TOOL_PAGES) rather than TOOLS_REGISTRY: six supporting
@@ -64,6 +69,10 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
         )}
       </header>
 
+      {/* Lead figure. Raised priority, but still lazily loaded: see
+          GuideFigure for why an eager image would download both themes. */}
+      {guide.featuredImage && <GuideFigure image={guide.featuredImage} priority />}
+
       <div className="space-y-10">
         {guide.sections.map((section, si) => (
           <section key={si}>
@@ -80,6 +89,10 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                 {p}
               </p>
             ))}
+            {/* Illustration for the steps below it. It goes AFTER the prose and
+                BEFORE the list so the reader meets the picture first, and so
+                the steps and bullets of a section stay contiguous. */}
+            {section.image && <GuideFigure image={section.image} />}
             {section.steps && (
               <ol className="mt-3 space-y-2">
                 {section.steps.map((s, i) => (
@@ -94,6 +107,8 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                 ))}
               </ol>
             )}
+            {/* Illustration for the steps above it, so the reader meets the
+                picture before working through the list it explains. */}
             {section.bullets && (
               <ul className="mt-3 space-y-2">
                 {section.bullets.map((b, i) => (
