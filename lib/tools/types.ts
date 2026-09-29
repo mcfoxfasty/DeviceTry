@@ -33,6 +33,13 @@ export interface ToolDefinition {
   instructions: string[];
   limitations: string[];
   troubleshooting: string[];
+  /**
+   * Hide `shortDesc` from the tool page header. The registry string is still
+   * the page's meta description and its catalog/related-tool card text; some
+   * tools only omit it from the header, where the widget below already says
+   * the same thing in the user's own words.
+   */
+  hideHeaderDescription?: boolean;
   /** Merged-tool tab addressed by a migration deep link (e.g. ?tab=mirror). */
   tabId?: string;
   /** Contextual links to supporting diagnostics shown on the tool page. */

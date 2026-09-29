@@ -39,6 +39,7 @@ export const enTranslations: Translations = {
   nav: {
     home: 'Home',
     tools: 'Tests',
+    advancedDiagnostics: 'Advanced Diagnostics',
     guides: 'Guides',
     openMenu: 'Open site menu',
     openTools: 'Open tools launcher',

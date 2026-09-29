@@ -205,6 +205,41 @@ test('speed progress - the UI shows live values under a short label, never a lon
   );
 });
 
+test('speedometer - the dial follows the live value of the phase that is running', () => {
+  // Both the needle and the printed number come from the engine's own
+  // callbacks: onPhaseChange reports the active phase (download/upload), and
+  // onProgress supplies the live value for it. Nothing is paced to a clock.
+  assert.match(
+    speedTesterSource,
+    /const gaugeMbps =[\s\S]{0,240}summary\.downloadMbps[\s\S]{0,200}summary\.uploadMbps/,
+    'the download and upload steps each drive the dial from their live value'
+  );
+  assert.match(
+    speedTesterSource,
+    /<SpeedometerGauge valueMbps=\{gaugeMbps\} phaseLabel=\{gaugePhase\} \/>/,
+    'the dial receives the live value and the phase label'
+  );
+  // Mounted only while a run is in progress: finishing, failing, or
+  // cancelling removes the dial rather than leaving a stale needle on screen.
+  assert.match(speedTesterSource, /\{running && \(\s*\n\s*<div className="space-y-3">/);
+  // …and every exit resets what the next run would otherwise inherit.
+  assert.match(
+    speedTesterSource,
+    /summaryRef\.current = EMPTY_SUMMARY;\s*\n\s*setPhaseInfo\(null\);/,
+    'starting a new run clears the previous phase and value'
+  );
+  assert.match(
+    speedTesterSource,
+    /setSummary\(EMPTY_SUMMARY\);\s*\n\s*summaryRef\.current = EMPTY_SUMMARY;\s*\n\s*setState\(\{ phase: 'aborted' \}\)/,
+    'cancelling clears the live values'
+  );
+  assert.match(
+    speedTesterSource,
+    /if \(phase === 'aborted' \|\| phase === 'error'\)/,
+    'a cancelled or failed run clears the live values it will never finish'
+  );
+});
+
 /* ------------------------------------------------------------------ */
 /* 3. Mobile labels wrap at word boundaries, not character by character */
 /* ------------------------------------------------------------------ */

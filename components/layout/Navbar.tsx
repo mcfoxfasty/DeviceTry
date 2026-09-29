@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Mail,
   History,
+  Wrench,
 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
@@ -35,11 +36,23 @@ interface NavbarProps {
 /** Links rendered inside the LEFT navigation drawer. */
 const DRAWER_LINKS: Array<{
   href: string;
-  labelKey: 'home' | 'tools' | 'guides' | 'guidedInspection' | 'testHistory' | 'about' | 'privacy' | 'contact';
+  labelKey:
+    | 'home'
+    | 'tools'
+    | 'advancedDiagnostics'
+    | 'guides'
+    | 'guidedInspection'
+    | 'testHistory'
+    | 'about'
+    | 'privacy'
+    | 'contact';
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   { href: '/', labelKey: 'home', icon: Home },
   { href: '/tests', labelKey: 'tools', icon: LayoutGrid },
+  // Directly beneath Tests: the supporting diagnostics are the companion to
+  // the catalog, but stay out of it (and out of its count).
+  { href: '/advanced-diagnostics', labelKey: 'advancedDiagnostics', icon: Wrench },
   { href: '/guides', labelKey: 'guides', icon: BookOpen },
   { href: '/inspection', labelKey: 'guidedInspection', icon: ClipboardCheck },
   { href: '/test-history', labelKey: 'testHistory', icon: History },

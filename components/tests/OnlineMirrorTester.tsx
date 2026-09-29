@@ -18,6 +18,18 @@ interface ToolComponentProps {
   onResultUpdate?: (status: 'passed' | 'warning' | 'failed' | 'inconclusive', details?: string) => void;
 }
 
+/**
+ * Shared metrics for every overlay control.
+ *
+ * On a phone the controls wrap inside the preview instead of running off both
+ * edges, and each keeps a comfortable tap target: min-h-9/min-w-9 (36px) with
+ * horizontal padding, and labels that can never break mid-word. From `sm` up
+ * the original compact 28px pill metrics are restored, so the desktop layout
+ * is unchanged.
+ */
+const CONTROL_BUTTON =
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg min-h-9 min-w-9 px-3 sm:min-h-7 sm:min-w-7 sm:py-1.5 cursor-pointer';
+
 export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
   const [isActive, setIsActive] = useState<boolean>(false);
   const [isMirrored, setIsMirrored] = useState<boolean>(true);
@@ -316,22 +328,29 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
           </div>
         )}
 
-        {/* Floating overlay controls when active */}
+        {/* Floating overlay controls when active.
+            Anchoring: `inset-x-3` sets both offsides, `w-fit` keeps the pill as
+            narrow as its content, and `mx-auto` centres it — so the wrap width
+            is the whole inner width of the preview instead of the 50% that
+            `left-1/2 -translate-x-1/2` gave a shrink-to-fit box. On a phone the
+            row therefore wraps (centred, two balanced rows) rather than
+            overflowing the preview and being clipped; on wider screens the
+            content fits one row and the desktop pill is unchanged. */}
         {isActive && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111D30]/90 backdrop-blur-md border border-[#223043] text-white text-xs shadow-lg">
+          <div className="absolute inset-x-3 bottom-3 sm:bottom-4 mx-auto w-fit flex flex-wrap items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#111D30]/90 backdrop-blur-md border border-[#223043] text-white text-xs shadow-lg">
             <button
               onClick={() => setIsMirrored(!isMirrored)}
-              className="px-3 py-1.5 rounded-lg bg-[#192332] hover:bg-[#223043] flex items-center gap-1.5 cursor-pointer font-medium"
+              className={`${CONTROL_BUTTON} bg-[#192332] hover:bg-[#223043] font-medium`}
               title="Flip Horizontal"
             >
-              <FlipHorizontal className="w-3.5 h-3.5" />
+              <FlipHorizontal className="w-3.5 h-3.5 shrink-0" />
               <span>{isMirrored ? 'Mirrored' : 'Natural'}</span>
             </button>
 
             <button
               onClick={() => setZoomLevel((z) => Math.max(1, z - 0.25))}
               disabled={zoomLevel <= 1}
-              className="p-1.5 rounded-lg bg-[#192332] hover:bg-[#223043] disabled:opacity-40 cursor-pointer"
+              className={`${CONTROL_BUTTON} sm:px-1.5 bg-[#192332] hover:bg-[#223043] disabled:opacity-40`}
               title="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
@@ -342,7 +361,7 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
             <button
               onClick={() => setZoomLevel((z) => Math.min(3, z + 0.25))}
               disabled={zoomLevel >= 3}
-              className="p-1.5 rounded-lg bg-[#192332] hover:bg-[#223043] disabled:opacity-40 cursor-pointer"
+              className={`${CONTROL_BUTTON} sm:px-1.5 bg-[#192332] hover:bg-[#223043] disabled:opacity-40`}
               title="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
@@ -350,15 +369,15 @@ export function OnlineMirrorTester({ onResultUpdate }: ToolComponentProps) {
 
             <button
               onClick={takeSnapshot}
-              className="px-3 py-1.5 rounded-lg bg-[#0F766E] hover:bg-[#0D665F] font-semibold flex items-center gap-1.5 cursor-pointer"
+              className={`${CONTROL_BUTTON} bg-[#0F766E] hover:bg-[#0D665F] font-semibold`}
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
               Snapshot
             </button>
 
             <button
               onClick={stopStream}
-              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 font-semibold cursor-pointer"
+              className={`${CONTROL_BUTTON} bg-red-600 hover:bg-red-700 font-semibold`}
             >
               Turn Off
             </button>

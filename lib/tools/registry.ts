@@ -417,6 +417,11 @@ export const TOOLS_REGISTRY: ToolDefinition[] = [
     categoryLabel: 'Network',
     title: 'Internet Speed Test',
     shortDesc: 'Real download, upload, and latency measurements via the Cloudflare measurement network.',
+    // Header copy only: the standing disclosure under the tester already
+    // states the same thing, so the header goes straight from the title to
+    // the "transfers real data" note. shortDesc stays as the page's meta
+    // description and its card text in the catalog.
+    hideHeaderDescription: true,
     supportHint: 'Transfers real data on start',
     keywords: ['internet speed test', 'speed test', 'bandwidth test', 'wifi speed test', 'download speed'],
     iconType: 'gauge',

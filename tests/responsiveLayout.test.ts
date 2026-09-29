@@ -100,3 +100,43 @@ test('guide related tools resolve against every registry', () => {
     'TOOLS_REGISTRY.find silently drops the six supporting tools (Permission Diagnostics, Codec Support, …)',
   );
 });
+
+test('the online mirror controls wrap inside the preview instead of off its edges', () => {
+  // Measured on the served preview at 320px: the old `left-1/2 -translate-x-1/2`
+  // pill was a shrink-to-fit box given only 50% of the preview as available
+  // width, so it rendered 412px wide inside a 288px card. Both ends were
+  // clipped — "Mirrored" lost its icon and "Turn Off" was squeezed to 54px and
+  // broke onto two lines 49px past the card's right edge. Anchoring both
+  // offsides and centring a fit-content box gives the row the full inner width
+  // so it wraps instead. Verified in Chromium and (harness) in WebKit.
+  const mirror = read('components/tests/OnlineMirrorTester.tsx');
+  assert.ok(
+    mirror.includes('absolute inset-x-3 bottom-3 sm:bottom-4 mx-auto w-fit flex flex-wrap items-center justify-center'),
+    'the overlay must wrap inside the preview and stay centred',
+  );
+  assert.ok(
+    !mirror.includes('absolute bottom-4 left-1/2'),
+    'the 50%-offset shrink-to-fit pill must not come back',
+  );
+
+  // Every control keeps a comfortable phone tap target and a label that cannot
+  // break mid-word, while the desktop pill keeps its original 28px metrics.
+  assert.ok(mirror.includes('whitespace-nowrap'), 'control labels must never wrap mid-word');
+  assert.ok(mirror.includes('min-h-9 min-w-9'), 'phone controls need a comfortable tap target');
+  assert.ok(mirror.includes('sm:min-h-7 sm:min-w-7'), 'the desktop pill keeps its compact metrics');
+});
+
+test('the speed test header drops its subtitle but keeps the data-use note', () => {
+  // The page header no longer repeats the sentence that is also the meta
+  // description and the catalog card copy; "TRANSFERS REAL DATA ON START"
+  // stays, and the standing disclosure further down is untouched.
+  const detail = read('components/ToolDetailView.tsx');
+  assert.ok(detail.includes('!tool.hideheaderdescription'), 'the header description must be opt-out per tool');
+  const registry = read('lib/tools/registry.ts');
+  assert.ok(registry.includes('hideheaderdescription: true'), 'the speed test opts out');
+  assert.ok(
+    registry.includes('shortdesc: \'real download, upload, and latency measurements via the cloudflare measurement network.\''),
+    'the string must survive as the meta description and card copy',
+  );
+  assert.ok(registry.includes("supporthint: 'transfers real data on start'"), 'the data-use hint stays in the header');
+});

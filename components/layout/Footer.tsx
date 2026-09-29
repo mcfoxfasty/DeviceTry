@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Lock, HardDrive, Cpu, ShieldCheck } from 'lucide-react';
+import { Lock, HardDrive, Cpu, ShieldCheck, Wrench } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
 import { DeviceTryLogo } from '@/components/ui/DeviceTryLogo';
 import { ShareSiteButton } from '@/components/ui/ShareSiteButton';
@@ -81,6 +81,15 @@ export function Footer({ t }: FooterProps) {
               <li><Link href="/test/gamepad-test" className={linkClass}>{t.gamepadTest.title}</Link></li>
               <li><Link href="/test/internet-speed-test" className={linkClass}>Internet Speed Test</Link></li>
             </ul>
+            {/* Supporting diagnostics: companion checks to the tests above,
+                deliberately outside the catalog's count. */}
+            <Link
+              href="/advanced-diagnostics"
+              className={`mt-4 inline-flex items-center gap-1.5 text-xs font-bold ${linkClass}`}
+            >
+              <Wrench className="w-3.5 h-3.5 text-[#5EEAD4]" aria-hidden="true" />
+              {t.nav.advancedDiagnostics}
+            </Link>
             <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[#F0FFFA] mt-6 mb-3">
               <Link href="/guides" className={linkClass}>Guides &amp; Troubleshooting</Link>
             </h3>

@@ -66,6 +66,9 @@ export interface Translations {
   nav: {
     home: string;
     tools: string;
+    /** Standalone home for the six supporting diagnostics (kept out of the
+     *  primary catalog count). Sits directly beneath "tools" in the side menu. */
+    advancedDiagnostics: string;
     guides: string;
     openMenu: string;
     openTools: string;

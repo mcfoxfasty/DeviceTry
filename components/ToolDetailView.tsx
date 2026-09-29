@@ -76,9 +76,15 @@ export function ToolDetailView({ tool, t, onResultUpdate, compact = false, title
           <TitleTag className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#142033] dark:text-[#E9EEF4] leading-tight">
             {tool.title}
           </TitleTag>
-          <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 leading-relaxed">
-            {tool.shortDesc}
-          </p>
+          {/* shortDesc is the title's subtitle by default. Tools that opt out
+              (hideHeaderDescription) go straight from the title to the
+              support-hint line — the string is still the meta description and
+              the card text elsewhere. */}
+          {!tool.hideHeaderDescription && (
+            <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1 leading-relaxed">
+              {tool.shortDesc}
+            </p>
+          )}
           <p className="mt-1.5 text-[11px] font-semibold text-[#8996A6] dark:text-[#677589] uppercase tracking-wide">
             {tool.supportHint}
           </p>

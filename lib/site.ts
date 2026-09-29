@@ -89,5 +89,8 @@ export const STATIC_PAGES: Array<{ path: string; priority: number; changeFrequen
   { path: '/inspection', priority: 0.7, changeFrequency: 'weekly' },
   { path: '/test-history', priority: 0.5, changeFrequency: 'weekly' },
   { path: '/tests', priority: 0.8, changeFrequency: 'weekly' },
+  // Standalone home for the six supporting diagnostics: linked from the side
+  // menu and the footer, and deliberately not part of the catalog listing.
+  { path: '/advanced-diagnostics', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/guides', priority: 0.8, changeFrequency: 'weekly' },
 ];
