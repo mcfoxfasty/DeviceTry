@@ -7,7 +7,7 @@ export const keyboardKeysNotRegistering: GuideArticle = {
     'Find out why specific keys stop responding or register intermittently: software filters, debris, failing switches, ribbon cables, and how a key test isolates the layer at fault.',
   category: 'input-gaming',
   type: 'troubleshooting',
-  relatedToolSlugs: ['keyboard-test', 'click-speed-test', 'mouse-test'],
+  relatedToolSlugs: ['keyboard-test', 'click-speed-test'],
   relatedGuideSlugs: ['mechanical-keyboards'],
   intro:
     'A dead key is one of the few faults you can pinpoint precisely, because each key\u2019s journey is independent: the switch (or membrane dome), the controller, the USB link, the OS, and finally the browser. Testing the keyboard key-by-key tells you whether the fault is physical, electrical, or software — before you open anything.',

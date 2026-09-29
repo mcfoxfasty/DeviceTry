@@ -3,6 +3,7 @@
 import React, { useState, useSyncExternalStore } from 'react';
 import { ListChecks, Search, CheckCircle, XCircle, MinusCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 interface TesterProps {
   t?: Translations;
@@ -210,7 +211,7 @@ export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden max-h-[420px] overflow-y-auto">
+      <ScrollableTable label="Browser API compatibility results" maxHeight="max-h-[420px]" className="mt-4" minWidthClass="min-w-[640px]">
         <table className="w-full text-left text-xs">
           <thead className="bg-[#F6F7F9] dark:bg-[#192332] sticky top-0">
             <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -251,7 +252,7 @@ export function BrowserCompatibilityTester({ onResultUpdate }: TesterProps) {
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollableTable>
     </div>
   );
 }

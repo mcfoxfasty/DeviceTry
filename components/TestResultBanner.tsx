@@ -192,7 +192,10 @@ export function TestResultBanner({ result, onClear, variant = 'card', toolId, to
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Actions wrap on very narrow phones (a 360px screen overflowed by
+            ~15px when Export + Share were locked to one non-shrinking line)
+            and stay side by side from `sm` up, so desktop is unchanged. */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
           {exportTool && (
             <ExportReportControl tool={exportTool} result={result} />
           )}

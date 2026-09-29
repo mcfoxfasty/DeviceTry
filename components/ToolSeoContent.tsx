@@ -38,7 +38,7 @@ export function ToolSeoContent({ tool }: ToolSeoContentProps) {
           <BookOpen className="w-4.5 h-4.5 text-[#0F766E] dark:text-[#14B8A6]" />
           {content.aboutTitle}
         </h2>
-        <div className="mt-4 space-y-4 leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8]">
+        <div className="mt-4 space-y-4 leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8] break-words [overflow-wrap:anywhere]">
           {content.about.map((paragraph, i) => (
             <p key={i}>{paragraph}</p>
           ))}
@@ -53,9 +53,9 @@ export function ToolSeoContent({ tool }: ToolSeoContentProps) {
         </h2>
         <ul className="mt-4 space-y-2.5">
           {content.tips.map((tip, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-[#3D4A5C] dark:text-[#AEB9C8]">
+            <li key={i} className="flex items-start gap-2.5 text-[#3D4A5C] dark:text-[#AEB9C8] min-w-0">
               <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0F766E] dark:bg-[#14B8A6] shrink-0" />
-              <span>{tip}</span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{tip}</span>
             </li>
           ))}
         </ul>
@@ -74,7 +74,7 @@ export function ToolSeoContent({ tool }: ToolSeoContentProps) {
               className="p-4 rounded-xl bg-[#FFFBEB]/60 dark:bg-[#1A1608] border border-amber-500/15 dark:border-amber-500/20"
             >
               <p className="font-semibold text-[#142033] dark:text-[#E9EEF4]">{item.problem}</p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8]">
+              <p className="mt-1.5 text-[13px] leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8] break-words [overflow-wrap:anywhere]">
                 {item.fix}
               </p>
             </div>
@@ -98,7 +98,7 @@ export function ToolSeoContent({ tool }: ToolSeoContentProps) {
                 <p className="text-xs font-bold uppercase tracking-wider text-[#0284C7]">
                   {guide.os}
                 </p>
-                <ol className="mt-2.5 space-y-1.5 text-[13px] text-[#3D4A5C] dark:text-[#AEB9C8] list-decimal list-inside marker:text-[#8996A6]">
+                <ol className="mt-2.5 space-y-1.5 text-[13px] text-[#3D4A5C] dark:text-[#AEB9C8] list-decimal list-inside marker:text-[#8996A6] break-words [overflow-wrap:anywhere]">
                   {guide.steps.map((step, i) => (
                     <li key={i}>{step}</li>
                   ))}
@@ -121,11 +121,11 @@ export function ToolSeoContent({ tool }: ToolSeoContentProps) {
               key={i}
               className="group rounded-xl bg-white dark:bg-[#111D30] border border-[#DFE5EB] dark:border-[#223043] overflow-hidden open:border-[#0F766E]/40 dark:open:border-[#14B8A6]/40 transition-colors"
             >
-              <summary className="flex items-center justify-between gap-4 p-4 sm:p-5 font-semibold text-[14px] text-[#142033] dark:text-[#E9EEF4] cursor-pointer select-none hover:bg-[#F6F8FB] dark:hover:bg-[#192332] transition-colors [&::-webkit-details-marker]:hidden">
+              <summary className="flex items-center justify-between gap-4 p-4 sm:p-5 font-semibold text-[14px] text-[#142033] dark:text-[#E9EEF4] cursor-pointer select-none hover:bg-[#F6F8FB] dark:hover:bg-[#192332] transition-colors [&::-webkit-details-marker]:hidden break-words [overflow-wrap:anywhere]">
                 {faq.q}
                 <ChevronDown className="w-4 h-4 shrink-0 text-[#8996A6] transition-transform duration-300 group-open:rotate-180" />
               </summary>
-              <p className="px-4 sm:px-5 pb-5 text-[13px] leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8]">
+              <p className="px-4 sm:px-5 pb-5 text-[13px] leading-relaxed text-[#3D4A5C] dark:text-[#AEB9C8] break-words [overflow-wrap:anywhere]">
                 {faq.a}
               </p>
             </details>

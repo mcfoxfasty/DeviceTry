@@ -101,7 +101,7 @@ export const PRODUCTS: Record<string, Product> = {
       'No headphone monitoring jack',
       'Fixed cardioid pattern only',
     ],
-    factualReviewDate: new Date('2026-09-10'),
+    factualReviewDate: new Date('2026-09-29'),
   },
 
   // ------------------------------------------------------------------ webcams
@@ -113,12 +113,12 @@ export const PRODUCTS: Record<string, Product> = {
     sourceUrl: 'https://www.logitech.com/en-us/products/webcams/brio-500-business-webcam.html',
     compatibility: ['USB-C', 'Windows', 'macOS', 'ChromeOS', 'Privacy shutter built in'],
     advantages: [
-      '1080p60 capture with auto light correction aimed at dim rooms',
+      '1080p at up to 30 fps (720p at up to 60 fps) with auto light correction aimed at dim rooms',
       'RightLight with Show Mode tilts the camera for desk-share',
       'Works with Logi Tune for framing and firmware updates',
     ],
     limitations: [
-      'No 4K capture on this model',
+      'No 4K capture, and no 1080p60 mode — 60 fps is 720p only',
       'Fixed focus — expect softness closer than about 30 cm',
     ],
     factualReviewDate: new Date('2026-09-10'),

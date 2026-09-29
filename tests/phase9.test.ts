@@ -110,6 +110,18 @@ test('Guide related tool slugs resolve against the final registry', () => {
   }
 });
 
+test('Guide related guide slugs resolve to published guides', () => {
+  // GuideArticleView filters unresolved slugs out silently, so a typo or a
+  // stale slug just removes a card from the page with no other symptom.
+  const slugs = new Set(getPublishedGuides().map((g) => g.slug));
+  for (const guide of GUIDE_ARTICLES) {
+    for (const related of guide.relatedGuideSlugs ?? []) {
+      assert.ok(slugs.has(related), `Guide ${guide.slug} links unknown guide ${related}`);
+      assert.notEqual(related, guide.slug, `Guide ${guide.slug} links itself`);
+    }
+  }
+});
+
 test('Draft guides never enter public listings', () => {
   const published = getPublishedGuides();
   for (const g of published) {

@@ -24,6 +24,7 @@ import { saveLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/l
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
 import { buildPdf, pdfBlob, reportLinesFromText } from '@/lib/testing/pdf';
 import { deliverOnce } from '@/lib/testing/deliver';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 import {
   attentionRows,
   buildInspectionReport,
@@ -63,7 +64,7 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
   },
   used_hardware: {
     title: 'Used Computer Hardware Inspection (5 Mins)',
-    desc: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
+    desc: 'Six checks for buying or selling a laptop or desktop: display, keyboard, mouse, speakers, microphone, and camera.',
     steps: ['display', 'keyboard', 'mouse', 'speakers', 'mic', 'webcam'],
   },
   classroom: {
@@ -73,7 +74,7 @@ const PRESET_SUITES: Record<string, { title: string; desc: string; steps: TestKe
   },
   full: {
     title: 'Full Diagnostic Check (All 7 Tests)',
-    desc: 'Complete inspection evaluating all available browser device APIs.',
+    desc: 'Runs every check in this inspection: microphone, camera, speakers, keyboard, mouse, display, and gamepad. It covers the hardware this guide can observe in a browser — it is not a substitute for a full device audit.',
     steps: ['mic', 'webcam', 'speakers', 'keyboard', 'mouse', 'display', 'gamepad'],
   },
 };
@@ -342,16 +343,10 @@ export function GuidedInspectionFlow({
       {/* MODE 1: Suite Preset Selection */}
       {activeStepIndex === -1 && (
         <div className="bg-white dark:bg-[#131B27] rounded-xl border border-[#DFE5EB] dark:border-[#223043] p-6 shadow-sm">
-          <div className="pb-5 border-b border-[#DFE5EB] dark:border-[#223043]">
-            <h2 className="text-xl font-semibold text-[#142033] dark:text-[#E9EEF4]">
-              {t.inspection.title}
-            </h2>
-            <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">
-              {t.inspection.subtitle}
-            </p>
-          </div>
-
-          <div className="mt-6 space-y-6">
+          {/* Page title and intro are rendered once by app/inspection/page.tsx
+              as the H1 — repeating them here showed the same heading and
+              paragraph twice on the page. */}
+          <div className="space-y-6">
             <div>
               <label className="block text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] mb-3 uppercase tracking-wider">
                 {t.inspection.selectPreset}
@@ -701,7 +696,7 @@ export function GuidedInspectionFlow({
             </div>
 
             {/* Test Results Table */}
-            <div className="mt-6 overflow-x-auto">
+            <ScrollableTable label="Inspection test results" className="mt-6" minWidthClass="min-w-[520px]">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -755,7 +750,7 @@ export function GuidedInspectionFlow({
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollableTable>
 
             {/* Honest summary: what the browser saw, what the user confirmed,
                 and what is still unverified — kept apart on purpose. */}

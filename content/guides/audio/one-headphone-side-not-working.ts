@@ -7,13 +7,13 @@ export const oneHeadphoneSideNotWorking: GuideArticle = {
     'Diagnose audio playing in only one ear or speaker: channel tests, balance settings, connector faults, Bluetooth mono modes, and how to tell a cable problem from a driver failure.',
   category: 'audio',
   type: 'troubleshooting',
-  relatedToolSlugs: ['speakers-test', 'tone-generator', 'internet-speed-test'],
-  relatedGuideSlugs: ['microphone-not-working'],
+  relatedToolSlugs: ['speakers-test', 'tone-generator'],
+  relatedGuideSlugs: ['budget-headphones'],
   intro:
     'When sound comes out of only one side of your headphones or speakers, the fault sits somewhere on a short chain: the audio source, the OS balance setting, the connector, the cable, or the driver inside the earcup. Each link fails in a characteristic way, and a two-minute channel test tells you which link to suspect.',
   published: true,
   publishedAt: new Date('2026-08-14'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {

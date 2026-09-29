@@ -251,12 +251,12 @@ const GUIDED_INSPECTION_OPTIONS = [
   },
   {
     title: 'Used Computer Hardware Inspection (5 Mins)',
-    description: 'Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video.',
+    description: 'Six checks for buying or selling a laptop or desktop: display, keyboard, mouse, speakers, microphone, and camera.',
     suite: 'used_hardware',
     image: '/inspection/used-computer-hardware-inspection.webp',
     imageWidth: 2560,
     imageHeight: 1440,
-    alt: 'Used Computer Hardware Inspection card, about 5 minutes. Comprehensive check for buying or selling a laptop or desktop: display, keyboard, mouse, audio, and video, with a Start Guided Inspection button.',
+    alt: 'Used Computer Hardware Inspection card, about 5 minutes. Six checks for buying or selling a laptop or desktop: display, keyboard, mouse, speakers, microphone, and camera, with a Start Guided Inspection button.',
   },
   {
     title: 'Classroom / Lab Kiosk Verification (4 Mins)',
@@ -269,12 +269,12 @@ const GUIDED_INSPECTION_OPTIONS = [
   },
   {
     title: 'Full Diagnostic Check (All 7 Tests)',
-    description: 'Complete inspection evaluating all available browser device APIs.',
+    description: 'Runs every check in the inspection: microphone, camera, speakers, keyboard, mouse, display, and gamepad.',
     suite: 'full',
     image: '/inspection/full-diagnostic-check-all-7-tests.webp',
     imageWidth: 2560,
     imageHeight: 1440,
-    alt: 'Full Diagnostic Check card covering all 7 tests, about 7 minutes. Complete inspection evaluating all available browser device APIs, with a Start Guided Inspection button.',
+    alt: 'Full Diagnostic Check card covering all 7 tests, about 7 minutes. Microphone, camera, speakers, keyboard, mouse, display, and gamepad, with a Start Guided Inspection button.',
   },
 ] as const;
 

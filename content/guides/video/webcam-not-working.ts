@@ -7,13 +7,13 @@ export const webcamNotWorking: GuideArticle = {
     'A structured fix list for a webcam that shows a black screen or is simply not detected: camera permissions, device conflicts, driver resets, and USB troubleshooting.',
   category: 'video',
   type: 'troubleshooting',
-  relatedToolSlugs: ['webcam-test', 'microphone-test', 'screen-test'],
+  relatedToolSlugs: ['webcam-test', 'microphone-test', 'permission-diagnostics'],
   relatedGuideSlugs: ['microphone-not-working', 'webcams-for-low-light-calls'],
   intro:
     'A webcam that refuses to show video is usually blocked by a permission, held hostage by another application, or misdetected after a driver update. This guide separates those causes quickly: first prove what the browser can see, then fix whichever layer is broken.',
   published: true,
   publishedAt: new Date('2026-08-14'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {

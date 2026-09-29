@@ -498,6 +498,9 @@ test('registry content - mic wording avoids calibrated decibel claims', () => {
   const recorder = registry.TOOLS_REGISTRY.find((tool) => tool.id === 'voice-recorder');
   assert.ok(recorder);
   const recText = recorder.limitations.join(' ');
-  assert.doesNotMatch(recText, /\bWAV\b/, 'the unsupported WAV claim is removed');
-  assert.match(recText, /extension always matches the actual recording/);
+  // The recorder genuinely encodes WAV locally since the wavEncoder work
+  // (implementation pinned in micSampleWav.test.ts), so the limitation must
+  // state that — and the old MediaRecorder-container claim stays removed.
+  assert.match(recText, /\bgenuine WAV\b/, 'the WAV limitation states the actual, implemented encoding');
+  assert.doesNotMatch(recText, /MediaRecorder containers/, 'the old container-claim stays removed');
 });

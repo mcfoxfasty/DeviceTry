@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Cpu, Play, Loader2 } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 interface TesterProps {
   t?: Translations;
@@ -159,7 +160,7 @@ export function JavascriptBenchmarkTester({ onResultUpdate }: TesterProps) {
 
       {result ? (
         <>
-          <div className="mt-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden">
+          <ScrollableTable label="JavaScript benchmark results" className="mt-5" minWidthClass="min-w-[560px]">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#F6F7F9] dark:bg-[#192332]">
                 <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -180,7 +181,7 @@ export function JavascriptBenchmarkTester({ onResultUpdate }: TesterProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
 
           <div className="mt-4 flex items-center justify-between p-4 rounded-xl bg-[#0F766E]/10 border border-[#0F766E]/30">
             <div>

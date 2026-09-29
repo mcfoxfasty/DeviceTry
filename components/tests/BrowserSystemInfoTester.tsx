@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, Cpu, MonitorSmartphone, Wifi, CheckCircle, XCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 interface TesterProps {
   t?: Translations;
@@ -167,7 +168,7 @@ export function BrowserSystemInfoTester({ onResultUpdate }: TesterProps) {
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-[#DFE5EB] dark:border-[#223043]">
+      <ScrollableTable label="Browser and system information" className="mt-4" minWidthClass="min-w-[440px]">
         <table className="w-full text-left text-xs">
           <tbody className="divide-y divide-[#DFE5EB] dark:divide-[#223043]">
             {rows.map((row) => (
@@ -178,7 +179,7 @@ export function BrowserSystemInfoTester({ onResultUpdate }: TesterProps) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollableTable>
 
       <details className="mt-3 text-xs">
         <summary className="cursor-pointer font-semibold text-[#0F766E] dark:text-[#14B8A6] flex items-center gap-1.5">

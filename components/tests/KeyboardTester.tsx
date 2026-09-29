@@ -268,14 +268,17 @@ export function KeyboardTester({ t, onRecordResult, onResultClear, startButtonLa
           <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">{t.keyboardTest.shortDesc}</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* flex-wrap: the layout selector and Reset button do not fit side by
+            side on a phone, and without wrapping the row pushed the page
+            ~127px wider than the viewport (horizontal scroll on mobile). */}
+        <div className="flex flex-wrap items-center gap-3">
           {/* Layout Selector */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">{t.keyboardTest.layoutSelector}</span>
             <select
               value={layout}
               onChange={(e) => setLayout(e.target.value as LayoutType)}
-              className="text-xs bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded px-2.5 py-1.5 focus:outline-none"
+              className="text-xs max-w-full bg-[#F6F7F9] dark:bg-[#192332] text-[#142033] dark:text-[#E9EEF4] border border-[#DFE5EB] dark:border-[#223043] rounded px-2.5 py-1.5 focus:outline-none"
             >
               <option value="qwerty">{t.keyboardTest.layoutQwerty}</option>
               <option value="azerty">{t.keyboardTest.layoutAzerty}</option>

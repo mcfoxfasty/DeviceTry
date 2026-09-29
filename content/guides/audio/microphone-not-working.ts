@@ -8,12 +8,12 @@ export const microphoneNotWorking: GuideArticle = {
   category: 'audio',
   type: 'troubleshooting',
   relatedToolSlugs: ['microphone-test', 'voice-recorder', 'speakers-test'],
-  relatedGuideSlugs: ['microphone-too-quiet', 'one-headphone-side-not-working'],
+  relatedGuideSlugs: ['microphone-too-quiet'],
   intro:
     'When a microphone produces nothing at all, the cause is almost always one of five things: a privacy permission, the wrong input device, the microphone being muted at the hardware level, a driver that reset itself, or a failed connection. Work through this guide in order — most people find the fault in the first two sections.',
   published: true,
   publishedAt: new Date('2026-08-14'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {

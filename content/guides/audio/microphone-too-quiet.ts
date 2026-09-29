@@ -7,13 +7,13 @@ export const microphoneTooQuiet: GuideArticle = {
     'Why your voice records at a whisper-quiet level and how to fix it: input gain, mic distance, OS level sliders, app boost, and when a different microphone type is the real answer.',
   category: 'audio',
   type: 'troubleshooting',
-  relatedToolSlugs: ['microphone-test', 'voice-recorder', 'tone-generator'],
+  relatedToolSlugs: ['microphone-test', 'voice-recorder', 'speakers-test'],
   relatedGuideSlugs: ['microphone-not-working'],
   intro:
     'A quiet microphone is not always a broken one — it is usually a level problem. Input gain, physical distance, and automatic processing all interact, and one wrong setting can cost you 20 dB of volume. This guide walks through every level that matters, from the microphone capsule to the conferencing app.',
   published: true,
   publishedAt: new Date('2026-08-14'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {

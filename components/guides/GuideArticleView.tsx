@@ -2,10 +2,11 @@ import React from 'react';
 import Link from 'next/link';
 import { CalendarDays, ArrowRight } from 'lucide-react';
 import { GuideArticle } from '@/lib/guides/registry';
-import { TOOLS_REGISTRY } from '@/lib/tools/registry';
+import { findToolBySlug } from '@/lib/tools/registry';
 import { getGuideBySlug } from '@/lib/guides/registry';
 import { ProductBuyBox } from './ProductBuyBox';
 import { GuideShareRow } from '@/components/ui/GuideShareRow';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -18,8 +19,12 @@ function formatDate(d: Date): string {
  * dates, and the affiliate disclosure ONLY when affiliate links are present.
  */
 export function GuideArticleView({ guide }: { guide: GuideArticle }) {
+  // findToolBySlug (ALL_TOOL_PAGES) rather than TOOLS_REGISTRY: six supporting
+  // diagnostics live in a separate registry, so a guide linking
+  // Permission Diagnostics or Codec Support silently dropped the card and
+  // rendered only the other related tools.
   const relatedTools = guide.relatedToolSlugs
-    .map((slug) => TOOLS_REGISTRY.find((t) => t.slug === slug))
+    .map((slug) => findToolBySlug(slug))
     .filter((t): t is NonNullable<typeof t> => Boolean(t));
   const relatedGuides = (guide.relatedGuideSlugs ?? [])
     .map((slug) => getGuideBySlug(slug))
@@ -39,7 +44,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
         <h1 className="text-2xl sm:text-3xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight leading-tight">
           {guide.title}
         </h1>
-        <p className="mt-3 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed">{guide.intro}</p>
+        <p className="mt-3 text-sm text-[#5F6B7A] dark:text-[#9AA6B8] leading-relaxed break-words">{guide.intro}</p>
         <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-[#8996A6]">
           <span className="inline-flex items-center gap-1.5">
             <CalendarDays className="w-3.5 h-3.5" />
@@ -63,8 +68,15 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
         {guide.sections.map((section, si) => (
           <section key={si}>
             <h2 className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] mb-3">{section.h2}</h2>
+            {/* break-words on body copy: guide text contains long unbreakable
+                tokens such as chrome://settings/content/microphone, which is
+                269px wide inside a 248px column on a narrow phone and forced
+                the whole page to scroll horizontally. */}
             {section.paragraphs?.map((p, i) => (
-              <p key={i} className="text-sm text-[#3D4A5C] dark:text-[#B7C1CE] leading-relaxed mb-3">
+              <p
+                key={i}
+                className="text-sm text-[#3D4A5C] dark:text-[#B7C1CE] leading-relaxed mb-3 break-words [overflow-wrap:anywhere]"
+              >
                 {p}
               </p>
             ))}
@@ -75,7 +87,9 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                     <span className="shrink-0 w-5 h-5 rounded-full bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] text-[11px] font-bold flex items-center justify-center mt-0.5">
                       {i + 1}
                     </span>
-                    <span className="leading-relaxed">{s}</span>
+                    {/* min-w-0 lets the flex item shrink below its content;
+                        break-words handles long URLs in the step text. */}
+                    <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">{s}</span>
                   </li>
                 ))}
               </ol>
@@ -83,20 +97,24 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
             {section.bullets && (
               <ul className="mt-3 space-y-2">
                 {section.bullets.map((b, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-[#3D4A5C] dark:text-[#B7C1CE]">
-                    <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0F766E] dark:text-[#14B8A6] shrink-0" />
-                    <span className="leading-relaxed">{b}</span>
+                <li key={i} className="flex items-start gap-2.5 text-sm text-[#3D4A5C] dark:text-[#B7C1CE]">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0F766E] dark:text-[#14B8A6] shrink-0" />
+                  <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">{b}</span>
                   </li>
                 ))}
               </ul>
             )}
             {section.table && section.table.rows.length > 0 && (
-              <div className="mt-4 overflow-x-auto rounded-xl border border-[#DFE5EB] dark:border-[#223043]">
+              <ScrollableTable
+                label={`Table: ${section.h2}`}
+                className="mt-4"
+                minWidthClass="min-w-[480px]"
+              >
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#F6F7F9] dark:bg-[#192332]">
                     <tr>
                       {section.table.columns.map((c, i) => (
-                        <th key={i} className="py-2.5 px-4 font-semibold text-[#142033] dark:text-[#E9EEF4]">
+                        <th key={i} className="py-2.5 px-4 font-semibold text-[#142033] dark:text-[#E9EEF4] whitespace-nowrap">
                           {c}
                         </th>
                       ))}
@@ -114,12 +132,12 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                     ))}
                   </tbody>
                 </table>
-                {section.table.caption && (
-                  <p className="px-4 py-2 text-[10px] text-[#8996A6] bg-[#F6F7F9] dark:bg-[#192332]">
-                    {section.table.caption}
-                  </p>
-                )}
-              </div>
+              </ScrollableTable>
+            )}
+            {section.table?.caption && (
+              <p className="mt-1.5 px-1 text-[10px] text-[#8996A6] dark:text-[#677589]">
+                {section.table.caption}
+              </p>
             )}
             {section.productIds && section.productIds.length > 0 && (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -139,8 +157,8 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
           <div className="space-y-3">
             {guide.faqs.map((faq, i) => (
               <div key={i} className="p-4 rounded-xl bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043]">
-                <p className="text-sm font-semibold text-[#142033] dark:text-[#E9EEF4]">{faq.q}</p>
-                <p className="mt-1.5 text-sm text-[#59677D] dark:text-[#9AA6B8] leading-relaxed">{faq.a}</p>
+                <p className="text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] break-words [overflow-wrap:anywhere]">{faq.q}</p>
+                <p className="mt-1.5 text-sm text-[#59677D] dark:text-[#9AA6B8] leading-relaxed break-words [overflow-wrap:anywhere]">{faq.a}</p>
               </div>
             ))}
           </div>

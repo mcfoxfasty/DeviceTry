@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Film, Play } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 interface TesterProps {
   t?: Translations;
@@ -121,7 +122,7 @@ export function CodecSupportTester({ onResultUpdate }: TesterProps) {
       </div>
 
       {rows ? (
-        <div className="mt-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden max-h-[420px] overflow-y-auto">
+        <ScrollableTable label="Codec support results" maxHeight="max-h-[420px]" className="mt-5" minWidthClass="min-w-[600px]">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F6F7F9] dark:bg-[#192332] sticky top-0">
               <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -149,7 +150,7 @@ export function CodecSupportTester({ onResultUpdate }: TesterProps) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       ) : (
         <div className="mt-5 p-8 border border-dashed border-[#DFE5EB] dark:border-[#223043] rounded-lg text-center text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">
           Press Run Codec Probe to detect which recording and playback formats this browser supports.
@@ -157,7 +158,7 @@ export function CodecSupportTester({ onResultUpdate }: TesterProps) {
       )}
 
       <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">
-        Playback detection uses HTMLMediaElement.canPlayType() heuristics (&quot;probably&quot; / &quot;maybe&quot;). Recording detection queries MediaRecorder.isTypeSupported() — a missing profile means the Voice Recorder tool will fall back to another container.
+        Playback detection uses HTMLMediaElement.canPlayType() heuristics (&quot;probably&quot; / &quot;maybe&quot;). Recording detection queries MediaRecorder.isTypeSupported() to map this browser’s typical recording containers. The Voice Recorder on this site is unaffected: it captures PCM and encodes a genuine WAV itself, so its downloads are always .wav on every engine.
       </div>
     </div>
   );

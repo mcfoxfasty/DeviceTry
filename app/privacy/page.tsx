@@ -134,12 +134,21 @@ export default function PrivacyPage() {
               5. Contact
             </h2>
             <p>
-              DeviceTry does not operate a message inbox. The{' '}
+              The only address we publish is{' '}
+              <a
+                href="mailto:contact@devicetry.com"
+                className="text-[#0F766E] dark:text-[#14B8A6] hover:underline font-semibold break-all"
+              >
+                contact@devicetry.com
+              </a>
+              . The{' '}
               <a href="/contact" className="text-[#0F766E] dark:text-[#14B8A6] hover:underline font-semibold">
                 contact page
               </a>{' '}
-              explains how to prepare your question locally so you can send it to us from your own email
-              application. We do not promise a specific response time.
+              composes your message in the browser and does not submit it anywhere — you copy or
+              download the text and email it to that address from your own email application, so
+              nothing you type there reaches us automatically. We do not promise a specific response
+              time.
             </p>
           </section>
         </div>

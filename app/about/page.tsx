@@ -47,7 +47,7 @@ export default function AboutPage() {
               1. Before Video Meetings (Zoom, Teams, Google Meet)
             </h2>
             <p>
-              Video conferencing platforms fail primarily due to OS permission revocation, background audio exclusivity locks, or virtual camera misconfigurations. DeviceTry initializes standard browser media streams with clean constraints, measures live RMS vocal decibels, and computes actual render framerates, ensuring you enter important meetings with 100% confidence.
+              Video conferencing platforms usually fail quietly: an OS update revoked a permission, a background app grabbed the audio device, or a virtual camera driver is pointing at hardware that no longer exists. DeviceTry opens the same standard browser media APIs your call app uses, shows the input level and the resolution and frame rate actually being delivered, and lets you confirm by ear and by eye — so you know what to fix, rather than guessing your way into a meeting.
             </p>
           </section>
 
@@ -57,7 +57,7 @@ export default function AboutPage() {
               2. Buying or Selling Used Computer Hardware
             </h2>
             <p>
-              When exchanging laptops on secondary marketplaces, buyers and sellers need transparent verification that keys don&apos;t chatter, the display has zero stuck subpixels, the microphone records voice clearly, and the battery health is reporting valid discharge rates.
+              When exchanging laptops on secondary marketplaces, both sides want evidence rather than adjectives. DeviceTry lets you record, in order: every key that fails to register, every pixel that stays dead across a full-screen pattern, and a real clip of what the microphone actually captures — all kept in your browser and exported as a printable report you can attach to the listing or the dispute.
             </p>
           </section>
 
@@ -67,7 +67,7 @@ export default function AboutPage() {
               3. Troubleshooting Audio & Peripheral Malfunctions
             </h2>
             <p>
-              Is the game controller drifting? Is the mouse wheel misfiring? DeviceTry isolates hardware input events directly in JavaScript, eliminating guesswork and vendor-bloat driver suites.
+              Is the game controller drifting? Is the mouse button double-registering? DeviceTry reads the raw input events in JavaScript and shows them as they arrive, so a chattery switch, an off-centre stick, and a healthy device look measurably different — before you install a vendor driver suite to fix something that was never the problem.
             </p>
           </section>
 

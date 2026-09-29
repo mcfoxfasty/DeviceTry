@@ -8,12 +8,12 @@ export const budgetHeadphones: GuideArticle = {
   category: 'audio',
   type: 'buying',
   relatedToolSlugs: ['speakers-test', 'tone-generator'],
-  relatedGuideSlugs: ['one-headphone-side-not-working', 'microphones-for-meetings'],
+  relatedGuideSlugs: ['one-headphone-side-not-working'],
   intro:
     'Headphone marketing leans on frequency-range claims no listener can verify, so this guide ignores them. The specifications that actually predict satisfaction are build choices: closed-back isolation, cable attachment, clamp force, and whether a microphone exists on the cable. Below are three picks chosen on those fundamentals, with manufacturer specifications as the source of record — no lab measurements, no fabricated ratings.',
   published: true,
   publishedAt: new Date('2026-09-01'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {

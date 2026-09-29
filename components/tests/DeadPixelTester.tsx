@@ -86,12 +86,14 @@ export function DeadPixelTester({ onResultUpdate }: ToolComponentProps) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-2 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold">
             <span>Color {colorIndex + 1} of {COLORS.length}:</span>
             <span>{activeColor.name} ({activeColor.hex})</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* flex-wrap: the three controls do not fit one 320px line, and the
+              non-wrapping row pushed the Fullscreen button past the viewport. */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={prevColor}
               className="p-1 rounded-lg hover:bg-black/10 cursor-pointer"

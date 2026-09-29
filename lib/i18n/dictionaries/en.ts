@@ -119,7 +119,7 @@ export const enTranslations: Translations = {
     title: 'Essential Diagnostic Instruments',
     subtitle: 'Every diagnostic runs entirely client-side using standard web APIs. No software downloads or extensions required.',
     runAllInspection: 'Run Complete 5-Minute Checklist',
-    runAllInspectionDesc: 'Combine all individual checks into a structured, printable pre-call or pre-purchase hardware report.',
+    runAllInspectionDesc: 'Walk the seven core checks — microphone, camera, speakers, keyboard, mouse, display, and gamepad — in order and build one printable pre-call or pre-purchase hardware report.',
     toolsListTitle: 'Individual Testing Tools',
   },
   micTest: {
@@ -141,7 +141,7 @@ export const enTranslations: Translations = {
     downloadRecording: 'Download Audio Sample',
     cleanFeedbackNotice: 'Acoustic safety: direct live monitoring is intentionally muted to avoid loud speaker feedback.',
     interpretationTitle: 'How to Interpret Results',
-    interpretationText: 'A healthy microphone shows a steady green level meter between 30% and 80% during normal speech. Constant 0% indicates physical mute, incorrect input source, or permission blocks. Constant 100% suggests aggressive gain or signal distortion.',
+    interpretationText: 'This meter is a relative, uncalibrated RMS level, not a sound pressure reading, so there is no universal “healthy” range — a level that is fine on one device is too quiet on another. Judge the shape instead: stay near zero in silence, swing well up the meter during normal speech, and never sit pinned at 100%, which means the signal is clipping.',
     troubleshootingTitle: 'Microphone Troubleshooting Steps',
     troubleshootingSteps: [
       'Check if your physical microphone or headset has an in-line hardware mute switch.',
@@ -291,7 +291,7 @@ export const enTranslations: Translations = {
   },
   inspection: {
     title: 'Guided Device Inspection',
-    subtitle: 'Step through an orderly sequence of hardware checks. Perfect for preparing for interviews, inspecting used laptops, or documenting device state.',
+    subtitle: 'Step through an orderly sequence of seven browser-based hardware checks — microphone, camera, speakers, keyboard, mouse, display, and gamepad — and record what you observe. Ideal for preparing for an interview, inspecting a used laptop, or documenting device state.',
     selectPreset: 'Select Inspection Checklist:',
     presetPreMeeting: 'Pre-Meeting Quick Check (Mic, Camera, Speakers)',
     presetPrePurchase: 'Used Computer Purchase (All Tests)',

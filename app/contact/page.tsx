@@ -72,6 +72,13 @@ export default function ContactPage() {
           <p className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8] mt-1">
             Questions about testing, permissions, or bug reports
           </p>
+          <a
+            href="mailto:contact@devicetry.com"
+            className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-[#0F766E] dark:text-[#14B8A6] hover:underline break-all"
+          >
+            <Mail className="w-4 h-4 shrink-0" />
+            contact@devicetry.com
+          </a>
         </div>
 
         <div className="bg-white dark:bg-[#131B27] rounded-2xl border border-[#DFE5EB] dark:border-[#223043] p-8 shadow-sm">
@@ -80,10 +87,21 @@ export default function ContactPage() {
             <Info className="w-4 h-4 mt-0.5 shrink-0 text-[#0F766E] dark:text-[#14B8A6]" />
             <p className="text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8]">
               This site runs entirely in your browser and has no message server. Nothing you type
-              here is submitted or sent anywhere. Fill in the form, then use{' '}
-              <span className="font-semibold">Copy Message</span> or{' '}
-              <span className="font-semibold">Download Message</span> to keep your text and send it
-              to us yourself from your own email app.
+              here is submitted or sent automatically — there is no form behind these fields. Fill
+              in the form, use <span className="font-semibold">Copy Message</span> or{' '}
+              <span className="font-semibold">Download Message</span> to keep your text, then send
+              it to us yourself at{' '}
+              <a
+                href="mailto:contact@devicetry.com"
+                className="font-semibold text-[#0F766E] dark:text-[#14B8A6] hover:underline break-all"
+              >
+                contact@devicetry.com
+              </a>
+              . <span className="font-semibold">To send it:</span> tap{' '}
+              <span className="font-semibold">Copy Message</span>, open your own email app, start a
+              new message to contact@devicetry.com, and paste it in. Or tap{' '}
+              <span className="font-semibold">Download Message</span> to save the text as a file and
+              attach that file to an email to the same address.
             </p>
           </div>
 
@@ -180,6 +198,17 @@ export default function ContactPage() {
               privacy policy
             </Link>{' '}
             cover most permission and storage questions.
+          </p>
+
+          <p className="mt-3 text-[11px] text-[#8996A6] leading-relaxed">
+            Email us at{' '}
+            <a
+              href="mailto:contact@devicetry.com"
+              className="text-[#0F766E] dark:text-[#14B8A6] hover:underline font-semibold break-all"
+            >
+              contact@devicetry.com
+            </a>{' '}
+            — this page prepares your message locally, so you send it from your own email app.
           </p>
         </div>
       </main>

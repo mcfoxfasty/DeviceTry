@@ -156,7 +156,11 @@ function DrawerOverlay({
   return (
     <div
       id={id}
-      className={`no-print fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}
+      // overflow-hidden: the closed panel sits translated 100% to one side but
+      // still occupies layout space (visibility, not display). Without this,
+      // its off-screen box widened the mobile layout viewport on very narrow
+      // screens and gave the whole page a few px of horizontal scroll.
+      className={`no-print fixed inset-0 z-50 overflow-hidden ${open ? '' : 'pointer-events-none'}`}
       // Keep the closed drawer out of the accessibility tree. `inert` already
       // implies hiding for supporting browsers; explicit `aria-hidden` covers
       // AT that queries aria-hidden directly. It must never be set on the OPEN
@@ -335,7 +339,11 @@ function NavbarInner({ t }: NavbarProps) {
     <>
       {/* ============ Sticky glass header ============ */}
       <header className="no-print sticky top-0 z-40 w-full glass-strong border-b border-[#E8E3F2] dark:border-[#223043]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 grid grid-cols-[1fr_auto_1fr] items-center">
+        {/* minmax(0,1fr) rather than 1fr: a bare 1fr track has a min-content
+            floor, so on a very narrow screen the centred logo pushed the whole
+            header (and therefore the page) wider than the viewport. The three
+            columns stay equal, so desktop is unchanged. */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
           {/* Left: hamburger (mobile) */}
           <div className="flex justify-start md:hidden">
             <button

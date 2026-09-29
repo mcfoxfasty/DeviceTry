@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Trash2, Download, FileText, AlertTriangle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 import { getLocalInspections, clearAllLocalInspections, LocalInspectionItem } from '@/lib/testing/localHistory';
 
 interface TesterProps {
@@ -149,7 +150,7 @@ export function PrivacyStorageInspectorTester({ onResultUpdate }: TesterProps) {
       {keys.length > 0 && (
         <div className="mt-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-[#5F6B7A] dark:text-[#9AA6B8] mb-2">localStorage Contents</p>
-          <div className="rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden">
+          <ScrollableTable label="localStorage contents" minWidthClass="min-w-[420px]">
             <table className="w-full text-left text-xs">
               <tbody className="divide-y divide-[#DFE5EB] dark:divide-[#223043]">
                 {keys.map((k) => (
@@ -160,7 +161,7 @@ export function PrivacyStorageInspectorTester({ onResultUpdate }: TesterProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
         </div>
       )}
 

@@ -7,13 +7,13 @@ export const controllerStickDrift: GuideArticle = {
     'How to confirm stick drift, separate calibration problems from worn potentiometers, run a neutral check, and choose between cleaning, calibration, replacement modules, or drift-resistant sticks.',
   category: 'input-gaming',
   type: 'troubleshooting',
-  relatedToolSlugs: ['gamepad-test', 'touchscreen-test'],
+  relatedToolSlugs: ['gamepad-test'],
   relatedGuideSlugs: ['pc-controllers'],
   intro:
     'Stick drift — your character or cursor creeping without you touching the stick — starts as a nuisance and ends as a reason to retire a controller. Not all drift is hardware death: some is calibration debt or debris. This guide helps you tell which kind you have before you spend anything.',
   published: true,
   publishedAt: new Date('2026-08-20'),
-  updatedAt: new Date('2026-09-15'),
+  updatedAt: new Date('2026-09-29'),
   hasAffiliateLinks: false,
   sections: [
     {
@@ -24,13 +24,13 @@ export const controllerStickDrift: GuideArticle = {
       steps: [
         'Connect the controller, then leave both sticks untouched.',
         'Run the Neutral Check and read the reported idle offsets.',
-        'Repeat twice; genuine drift is consistent, while electrical noise varies between runs.',
+        'Repeat twice. Worn potentiometer drift is usually consistent from run to run, while electrical noise tends to vary — treat a difference between runs as a hint, not a verdict.',
       ],
     },
     {
       h2: 'Calibration debt: the cheap explanation',
       paragraphs: [
-        'Some platforms store a per-controller neutral calibration. If the controller was moved during power-on, was calibrated on a shaky surface, or was previously recalibrated with the stick held off-center, the stored neutral no longer matches reality. Re-calibrate with the sticks untouched: console controllers recalibrate neutrals at power-on (so reconnect them while resting flat), and Windows exposes calibration via Control Panel → Devices and Printers → controller → Game controller settings → Properties → Calibrate. If drift vanishes after recalibration, you are done — no hardware fault exists.',
+        'Some platforms store a per-controller neutral calibration. If the controller was moved during power-on, was calibrated on a shaky surface, or was previously recalibrated with the stick held off-center, the stored neutral no longer matches reality. Re-calibrate with the sticks untouched: console controllers recalibrate neutrals at power-on (so reconnect them while resting flat), and Windows exposes calibration via Control Panel → Devices and Printers → controller → Game controller settings → Properties → Calibrate. If the offset disappears after recalibrating, that is good evidence the stored neutral was the cause rather than worn hardware — re-check periodically, since a worn stick can start drifting again later.',
       ],
     },
     {
@@ -42,21 +42,21 @@ export const controllerStickDrift: GuideArticle = {
     {
       h2: 'Worn potentiometers: the real drift',
       paragraphs: [
-        'Conventional sticks measure position with a potentiometer — a resistive track a wiper rides on. Thousands of hours of movement wear the track, and the worn region reports voltage incorrectly at rest. Cleaning cannot restore a worn track. Your options: replace the stick module (repairable with soldering on most controllers, or without soldering on models with module sockets), use the manufacturer\u2019s repair service, or replace the controller.',
+        'Conventional sticks measure position with a potentiometer — a resistive track a wiper rides on. Thousands of hours of movement wear the track, and the worn region can report voltage incorrectly at rest. Cleaning will not restore a worn track. Your options: replace the stick module (repairable with soldering on most controllers, or without soldering on models with module sockets), use the manufacturer\u2019s repair service, or replace the controller.',
       ],
     },
     {
       h2: 'Hall-effect sticks and what they change',
       paragraphs: [
-        'Hall-effect sticks measure position magnetically, with no physical wiper on a resistive track, so the wear mechanism that causes classic drift does not exist. Controllers such as the 8BitDo Ultimate 2C ship with them as standard, and aftermarket hall-effect modules exist for some popular controllers. The specification is meaningful: "drift-resistant" here is a mechanism claim, not a marketing one — the failure mode is simply absent. Our controller buying guide lists which models include them.',
+        'Hall-effect sticks measure position magnetically, with no physical wiper riding a resistive track, so the specific wear mechanism behind classic potentiometer drift does not apply. Controllers such as the 8BitDo Ultimate 2C ship with them as standard, and aftermarket hall-effect modules exist for some popular controllers. The specification is meaningful for that reason — but it is not a warranty: hall-effect sticks can still be miscalibrated, obstructed by debris, or damaged, so "drift-resistant" narrows the risk rather than removing it. Our controller buying guide lists which models include them.',
       ],
     },
     {
       h2: 'Decision list',
       bullets: [
-        'Drift disappears after recalibration → calibration debt; recalibrate whenever it returns.',
-        'Drift reduces after cleaning but returns → debris; repeat the alcohol cycle and keep the controller in a case.',
-        'Drift is constant, grows worse, and survives recalibration → worn potentiometer; module replacement or new controller.',
+        'Drift disappears after recalibration → most likely calibration, not hardware wear; recalibrate whenever it returns and keep watching.',
+        'Drift reduces after cleaning but returns → probably debris; repeat the alcohol cycle and keep the controller in a case.',
+        'Drift persists, grows worse, and survives recalibration → points to a worn potentiometer; module replacement or a new controller.',
         'Buying new: prefer hall-effect sticks and a warranty — see the controller buying guide.',
       ],
     },
@@ -64,11 +64,11 @@ export const controllerStickDrift: GuideArticle = {
   faqs: [
     {
       q: 'Does the Neutral Check prove my controller has no drift?',
-      a: 'It proves the resting offset stayed inside this tool\u2019s threshold during the check. Severe drift is obvious; marginal drift that only affects fine aiming needs your own in-game confirmation too.',
+      a: 'It shows the resting offset stayed inside this tool\u2019s threshold for the duration of that check. Severe drift is obvious; marginal drift that only affects fine aiming needs your own in-game confirmation too.',
     },
     {
       q: 'Can firmware updates fix drift?',
-      a: 'They can improve deadzone handling and calibration behavior, which masks mild drift. Hardware wear is not fixable in firmware.',
+      a: 'They can improve deadzone handling and calibration behavior, which often masks mild drift. Firmware cannot reverse physical wear, so a controller that is genuinely worn will usually still need hardware work.',
     },
     {
       q: 'Why does drift matter more in some games?',

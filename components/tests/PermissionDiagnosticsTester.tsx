@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, RefreshCw, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 interface TesterProps {
   t?: Translations;
@@ -140,7 +141,7 @@ export function PermissionDiagnosticsTester({ onResultUpdate }: TesterProps) {
           </p>
         </div>
       ) : (
-        <div className="mt-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] overflow-hidden">
+        <ScrollableTable label="Permission state results" className="mt-5" minWidthClass="min-w-[520px]">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F6F7F9] dark:bg-[#192332]">
               <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
@@ -165,7 +166,7 @@ export function PermissionDiagnosticsTester({ onResultUpdate }: TesterProps) {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
 
       <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-[#192332] text-[11px] text-[#5F6B7A] dark:text-[#9AA6B8]">

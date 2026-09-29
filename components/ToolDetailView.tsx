@@ -30,9 +30,13 @@ interface ToolDetailViewProps {
  *  troubleshooting sections below.
  */
 export function ToolDetailView({ tool, t, onResultUpdate, compact = false, titleHeading: TitleTag = 'h2' }: ToolDetailViewProps) {
-  const needsPermission =
-    tool.supportHint.toLowerCase().includes('permission') ||
-    tool.requiredApis.includes('navigator.mediaDevices.getUserMedia');
+  /**
+   * The permission card tells the user their browser will prompt them to allow
+   * access. Only tools that actually request a permission via getUserMedia may
+   * show it — Permission Diagnostics only READS permission states through
+   * navigator.permissions.query() and never prompts, so it must not claim to.
+   */
+  const needsPermission = tool.requiredApis.includes('navigator.mediaDevices.getUserMedia');
 
   return (
     <div className="space-y-6">
