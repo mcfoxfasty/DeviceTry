@@ -45,15 +45,20 @@ interface GuideFigureProps {
  * The width/height attributes are the CLS guard: they give the browser the
  * exact aspect ratio before the bytes arrive, so the article never reflows as
  * a figure pops in.
+ *
+ * There is deliberately NOTHING drawn on top of a figure — no badge, no chip,
+ * no overlay, and no absolutely positioned child inside the <figure>. A
+ * "Diagram" chip was tried and removed: at 320-375px it sat on top of the
+ * diagram's own title text and obscured the very first thing a reader needs.
+ * The diagrams are dense at phone width, so any overlay competes with the
+ * artwork. The alt text already names each one as a diagram, which is where a
+ * non-visual reader gets that information without costing a sighted one
+ * anything.
  */
 export function GuideFigure({ image, priority = false, className = '' }: GuideFigureProps) {
-  // Omitted means `diagram`: a figure is drawn artwork unless an author
-  // explicitly says it is a photograph. The chip matters most once a real
-  // photo heads the article — an unlabelled illustration beside a photograph
-  // reads as a picture of the reader's own desk.
-  const isDiagram = (image.kind ?? 'diagram') === 'diagram';
-  // A photo resolves to a single, theme-agnostic file; only a diagram needs
-  // a light and a dark raster.
+  // A photo resolves to a single, theme-agnostic file; only a diagram needs a
+  // light and a dark raster. `kind` also carries the editorial rule: an
+  // omitted kind means `diagram`.
   const themes = guideImageThemes(image.kind);
 
   const render = (theme: GuideImageTheme | null) => (
@@ -80,18 +85,9 @@ export function GuideFigure({ image, priority = false, className = '' }: GuideFi
 
   return (
     <figure
-      className={`relative my-6 overflow-hidden rounded-xl border border-[#DFE5EB] dark:border-[#223043] ${className}`}
+      className={`my-6 overflow-hidden rounded-xl border border-[#DFE5EB] dark:border-[#223043] ${className}`}
     >
       {themes.map(render)}
-
-      {isDiagram && (
-        <span
-          className="pointer-events-none absolute left-2.5 top-2.5 rounded-md bg-[#0B111A]/70 px-2 py-[3px] text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-[2px]"
-          aria-hidden="true"
-        >
-          Diagram
-        </span>
-      )}
 
       {image.caption && (
         <figcaption className="border-t border-[#DFE5EB] dark:border-[#223043] px-4 py-2.5 text-[11px] leading-relaxed text-[#59677D] dark:text-[#9AA6B8]">

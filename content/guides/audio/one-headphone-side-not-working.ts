@@ -8,7 +8,7 @@ export const oneHeadphoneSideNotWorking: GuideArticle = {
   category: 'audio',
   type: 'troubleshooting',
   relatedToolSlugs: ['speakers-test', 'tone-generator'],
-  relatedGuideSlugs: ['budget-headphones'],
+  relatedGuideSlugs: ['budget-headphones', 'bluetooth-headphones-no-sound-windows-11'],
   intro:
     'When sound comes out of only one side of your headphones or speakers, the fault sits somewhere on a short chain: the audio source, the OS balance setting, the connector, the cable, or the driver inside the earcup. Each link fails in a characteristic way, and a two-minute channel test tells you which link to suspect.',
   published: true,
@@ -36,7 +36,7 @@ export const oneHeadphoneSideNotWorking: GuideArticle = {
     {
       h2: 'Rule out the source: try another device',
       paragraphs: [
-        'Plug the headphones into a phone, another computer, or a music player and replay a known stereo track. If both sides work elsewhere, your computer\u2019s jack, DAC, or settings are at fault — not the headphones. If the same side stays silent on every device, the headphones themselves have failed, almost always at the cable or connector rather than both drivers at once.',
+        'Plug the headphones into a phone, another computer, or a music player and replay a known stereo track. If both sides work elsewhere, the fault points at this computer\u2019s jack, DAC, or settings \u2014 though that is evidence, not a verdict: a fault that depends on pairing state, the headset\u2019s own volume, or interference can appear on one machine and not another. If the same side stays silent on every device, the headphones themselves have failed, almost always at the cable or connector rather than both drivers at once.',
       ],
     },
     {
@@ -47,6 +47,18 @@ export const oneHeadphoneSideNotWorking: GuideArticle = {
         '3.5 mm plugs with three black rings (TRRS) can fail to seat fully in older jacks — pull the plug out one millimeter and retest; if both sides return, the jack\u2019s switch contacts are worn.',
         'Detachable-cable headphones: swap the cable before condemning the headphones.',
         'Bluetooth headsets: mono "hands-free" mode used for calls collapses stereo to one channel; in music mode both channels should return.',
+        'If both channels are silent rather than one, the fault is upstream of the balance setting — the Bluetooth output-routing guide starts at the right place for that.',
+      ],
+      // Incoming link for the Bluetooth article. This line already told readers
+      // where to go next in words, so making the destination a real anchor
+      // costs nothing and stops the advice from being unactionable.
+      proseLinks: [
+        {
+          field: 'bullet',
+          index: 5,
+          text: 'the Bluetooth output-routing guide',
+          href: '/guides/bluetooth-headphones-no-sound-windows-11',
+        },
       ],
     },
     {

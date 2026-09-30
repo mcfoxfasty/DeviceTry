@@ -7,6 +7,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { getGuideBySlug, getPublishedGuides } from '@/lib/guides/registry';
+import { GUIDE_IMAGE_WIDTHS, guideImageFile } from '@/lib/guides/images';
 import { GuideArticleView } from '@/components/guides/GuideArticleView';
 import { SITE_URL } from '@/lib/site';
 
@@ -24,6 +25,28 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const guide = getGuideBySlug(slug);
   if (!guide) return { title: 'Guide Not Found — DeviceTry' };
 
+  // Social card image, taken from the article's OWN lead asset rather than a
+  // generic site image, so a shared link previews the article the reader is
+  // actually being sent to. The largest pre-rasterised width is used: these
+  // figures already ship at 480/768/1152, and re-running them through an
+  // optimiser at request time would add a runtime dependency for no gain.
+  //
+  // A photo has no theme segment; a drawn diagram does, and the LIGHT raster is
+  // the right one here because a social card renders on its own background
+  // rather than inside the site's dark theme.
+  const socialImage = guide.featuredImage
+    ? {
+        url: `${SITE_URL}${guideImageFile(
+          guide.featuredImage.src,
+          guide.featuredImage.kind === 'photo' ? null : 'light',
+          GUIDE_IMAGE_WIDTHS[GUIDE_IMAGE_WIDTHS.length - 1]
+        )}`,
+        width: guide.featuredImage.width,
+        height: guide.featuredImage.height,
+        alt: guide.featuredImage.alt,
+      }
+    : undefined;
+
   return {
     title: `${guide.title} | DeviceTry`,
     description: guide.description,
@@ -35,11 +58,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       url: `${SITE_URL}/guides/${guide.slug}`,
       publishedTime: guide.publishedAt.toISOString(),
       modifiedTime: guide.updatedAt.toISOString(),
+      ...(socialImage ? { images: [socialImage] } : {}),
     },
     twitter: {
-      card: 'summary_large_image',
+      card: socialImage ? 'summary_large_image' : 'summary',
       title: guide.title,
       description: guide.description,
+      ...(socialImage ? { images: [socialImage.url] } : {}),
     },
   };
 }

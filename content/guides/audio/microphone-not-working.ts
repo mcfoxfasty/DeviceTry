@@ -127,7 +127,18 @@ export const microphoneNotWorking: GuideArticle = {
         'Meter moves in the test but not in the app → fix the app\u2019s device selection or reinstall/re-login to the app.',
         'Permission resets itself after every reload → check the browser\u2019s global site-setting and any privacy/antivirus software.',
         'Silent on every device you try → hardware fault; replace or claim warranty.',
-        'Works wired, silent on Bluetooth → re-pair the headset and check it is in headset (hands-free) mode for calls.',
+        'Works wired, silent on Bluetooth → re-pair the headset and check it is in headset (hands-free) mode for calls; if the playback side goes silent too, the Bluetooth audio guide covers the output side.',
+      ],
+      // Incoming link for the Bluetooth article, from the one line in this
+      // guide where the two faults meet: a headset that loses playback when
+      // the microphone opens.
+      proseLinks: [
+        {
+          field: 'bullet',
+          index: 3,
+          text: 'the Bluetooth audio guide',
+          href: '/guides/bluetooth-headphones-no-sound-windows-11',
+        },
       ],
     },
   ],

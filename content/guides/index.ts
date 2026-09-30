@@ -3,6 +3,7 @@ import { GuideArticle } from './schema';
 import { microphoneNotWorking } from './audio/microphone-not-working';
 import { microphoneTooQuiet } from './audio/microphone-too-quiet';
 import { oneHeadphoneSideNotWorking } from './audio/one-headphone-side-not-working';
+import { bluetoothHeadphonesNoSoundWindows11 } from './audio/bluetooth-headphones-no-sound-windows-11';
 import { webcamNotWorking } from './video/webcam-not-working';
 import { keyboardKeysNotRegistering } from './input-gaming/keyboard-keys-not-registering';
 import { mouseDoubleClicking } from './input-gaming/mouse-double-clicking';
@@ -24,6 +25,7 @@ export const GUIDE_ARTICLES: GuideArticle[] = [
   microphoneNotWorking,
   microphoneTooQuiet,
   oneHeadphoneSideNotWorking,
+  bluetoothHeadphonesNoSoundWindows11,
   webcamNotWorking,
   keyboardKeysNotRegistering,
   mouseDoubleClicking,

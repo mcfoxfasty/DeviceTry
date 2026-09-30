@@ -2,6 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { CalendarDays, ArrowRight } from 'lucide-react';
 import { GuideArticle } from '@/lib/guides/registry';
+import type { GuideProseLink, GuideSection } from '@/content/guides/schema';
+import { linksForField, splitProse } from '@/lib/guides/proseLinks';
 import { findToolBySlug } from '@/lib/tools/registry';
 import { getGuideBySlug } from '@/lib/guides/registry';
 import { ProductBuyBox } from './ProductBuyBox';
@@ -11,6 +13,88 @@ import { ScrollableTable } from '@/components/ui/ScrollableTable';
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * Anchor id for a section heading. Derived rather than authored so a heading
+ * can be reworded without a hand-maintained list of ids quietly going stale and
+ * leaving a table of contents full of dead links.
+ */
+function slugifyHeading(h: string): string {
+  return h
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+/** Site-relative paths route through next/link; anything else is external. */
+function isInternal(href: string): boolean {
+  return href.startsWith('/');
+}
+
+/**
+ * A link inside running text.
+ *
+ * Underlined rather than colour-only: these sit mid-sentence in body copy that
+ * is already the same size and weight as everything around it, and a reader
+ * scanning for the source has to be able to see the phrase is a link without
+ * already knowing it is one. The underline is a low-alpha tint of the same
+ * teal used by the step links, so a citation reads as part of the sentence
+ * rather than as a callout bolted onto it.
+ */
+const PROSE_LINK_CLASS =
+  'text-[#0F766E] dark:text-[#14B8A6] underline decoration-[#0F766E]/40 dark:decoration-[#14B8A6]/40 underline-offset-2 hover:decoration-[#0F766E] dark:hover:decoration-[#14B8A6] break-words [overflow-wrap:anywhere]';
+
+/**
+ * One paragraph, bullet, or step, with its declared inline links resolved.
+ *
+ * Sourcing is INLINE by design. A per-section "Sources" block was removed
+ * because a bibliography is read once at most, and because a list at the foot
+ * of a section reads as "these links cover everything above" — exactly the
+ * vagueness that lets a claim drift away from its evidence. Anchoring the
+ * phrase beside the claim it supports puts the check where the decision is
+ * made.
+ */
+function Prose({
+  text,
+  links,
+}: {
+  text: string;
+  links: GuideProseLink[];
+}) {
+  return (
+    <>
+      {splitProse(text, links).map((segment, i) =>
+        segment.kind === 'text' ? (
+          <span key={i}>{segment.value}</span>
+        ) : isInternal(segment.href) ? (
+          <Link key={i} href={segment.href} className={PROSE_LINK_CLASS}>
+            {segment.value}
+          </Link>
+        ) : (
+          <a
+            key={i}
+            href={segment.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={PROSE_LINK_CLASS}
+          >
+            {segment.value}
+          </a>
+        )
+      )}
+    </>
+  );
+}
+
+/** The `proseLinks` that belong to one string of a section, by field + index. */
+function fieldLinks(
+  section: GuideSection,
+  field: GuideProseLink['field'],
+  index: number
+): GuideProseLink[] {
+  return linksForField(section.proseLinks, field, index);
 }
 
 /**
@@ -73,10 +157,45 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
           GuideFigure for why an eager image would download both themes. */}
       {guide.featuredImage && <GuideFigure image={guide.featuredImage} priority />}
 
+      {/* Linked table of contents. Opt-in per article (`showToc`), and only
+          once there are enough headings for one to be worth the space. */}
+      {guide.showToc && guide.sections.length >= 3 && (
+        <nav
+          aria-label="Table of contents"
+          className="mb-8 p-4 rounded-xl bg-[#F6F8FB] dark:bg-[#192332] border border-[#DFE5EB] dark:border-[#223043]"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6] dark:text-[#677589] mb-2.5">
+            On this page
+          </p>
+          <ol className="space-y-1.5">
+            {guide.sections.map((s, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-[13px]">
+                <span className="shrink-0 tabular-nums text-[#A9B4C2] dark:text-[#5A6B82]">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <a
+                  href={`#${slugifyHeading(s.h2)}`}
+                  className="leading-relaxed text-[#0F766E] dark:text-[#14B8A6] hover:underline break-words [overflow-wrap:anywhere]"
+                >
+                  {s.h2}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
       <div className="space-y-10">
         {guide.sections.map((section, si) => (
           <section key={si}>
-            <h2 className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] mb-3">{section.h2}</h2>
+            {/* scroll-mt clears the sticky navbar when a table-of-contents
+                anchor is followed. */}
+            <h2
+              id={slugifyHeading(section.h2)}
+              className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] mb-3 scroll-mt-24"
+            >
+              {section.h2}
+            </h2>
             {/* break-words on body copy: guide text contains long unbreakable
                 tokens such as chrome://settings/content/microphone, which is
                 269px wide inside a 248px column on a narrow phone and forced
@@ -86,7 +205,7 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                 key={i}
                 className="text-sm text-[#3D4A5C] dark:text-[#B7C1CE] leading-relaxed mb-3 break-words [overflow-wrap:anywhere]"
               >
-                {p}
+                <Prose text={p} links={fieldLinks(section, 'paragraph', i)} />
               </p>
             ))}
             {/* Illustration for the steps below it. It goes AFTER the prose and
@@ -95,16 +214,60 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
             {section.image && <GuideFigure image={section.image} />}
             {section.steps && (
               <ol className="mt-3 space-y-2">
-                {section.steps.map((s, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm text-[#3D4A5C] dark:text-[#B7C1CE]">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] text-[11px] font-bold flex items-center justify-center mt-0.5">
-                      {i + 1}
-                    </span>
-                    {/* min-w-0 lets the flex item shrink below its content;
-                        break-words handles long URLs in the step text. */}
-                    <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">{s}</span>
-                  </li>
-                ))}
+                {section.steps.map((s, i) => {
+                  // A link belongs to the step that calls for it, so it lives
+                  // inside that <li> rather than in the cards at the foot of
+                  // the article.
+                  const links = (section.stepLinks ?? []).filter((l) => l.stepIndex === i);
+                  return (
+                    <li
+                      key={i}
+                      className="flex items-start gap-3 text-sm text-[#3D4A5C] dark:text-[#B7C1CE]"
+                    >
+                      <span className="shrink-0 w-5 h-5 rounded-full bg-[#0F766E]/10 text-[#0F766E] dark:text-[#14B8A6] text-[11px] font-bold flex items-center justify-center mt-0.5">
+                        {i + 1}
+                      </span>
+                      {/* min-w-0 lets the flex item shrink below its content;
+                          break-words handles long URLs in the step text. */}
+                      <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">
+                        <Prose text={s} links={fieldLinks(section, 'step', i)} />
+                        {links.length > 0 && (
+                          <span className="block mt-2">
+                            {links.map((l) => (
+                              <span
+                                key={l.href}
+                                className="block pl-3 border-l-2 border-[#0F766E]/30 dark:border-[#14B8A6]/30"
+                              >
+                                {isInternal(l.href) ? (
+                                  <Link
+                                    href={l.href}
+                                    className="font-semibold text-[#0F766E] dark:text-[#14B8A6] hover:underline break-words [overflow-wrap:anywhere]"
+                                  >
+                                    {l.label}
+                                  </Link>
+                                ) : (
+                                  <a
+                                    href={l.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-semibold text-[#0F766E] dark:text-[#14B8A6] hover:underline break-words [overflow-wrap:anywhere]"
+                                  >
+                                    {l.label}
+                                  </a>
+                                )}
+                                {l.note && (
+                                  <span className="block text-[11px] text-[#8996A6] dark:text-[#677589] leading-relaxed mt-0.5">
+                                    {l.note}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
               </ol>
             )}
             {/* Illustration for the steps above it, so the reader meets the
@@ -114,7 +277,9 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
                 {section.bullets.map((b, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-sm text-[#3D4A5C] dark:text-[#B7C1CE]">
                   <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0F766E] dark:text-[#14B8A6] shrink-0" />
-                  <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">{b}</span>
+                  <span className="leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]">
+                    <Prose text={b} links={fieldLinks(section, 'bullet', i)} />
+                  </span>
                   </li>
                 ))}
               </ul>

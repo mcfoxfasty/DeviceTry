@@ -14,6 +14,8 @@ import { microphoneNotWorking } from '../content/guides/audio/microphone-not-wor
 
 const component = readFileSync('components/guides/GuideFigure.tsx', 'utf8');
 const view = readFileSync('components/guides/GuideArticleView.tsx', 'utf8');
+const imagesLib = readFileSync('lib/guides/images.ts', 'utf8');
+const globals = readFileSync('app/globals.css', 'utf8');
 /** Component source with comments stripped, so a guard cannot match its own docs. */
 const componentCode = component.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
@@ -28,6 +30,34 @@ function allFigures() {
   }
   return out;
 }
+
+test('guide figures - a theme pair prints as its light variant', () => {
+  // Every diagram ships a light and a dark raster and swaps them with `dark:`
+  // classes, which the class-based dark mode resolves from the `.dark` class on
+  // <html>. The print stylesheet forces the page white, but that class survives
+  // printing — so without an explicit rule, a reader who prints from dark mode
+  // gets the dark raster as a black rectangle on paper. This was found by
+  // reading a printed PDF, and nothing on screen would ever reveal it.
+  const printBlock = globals.slice(globals.lastIndexOf('@media print'));
+  assert.match(
+    printBlock,
+    /img\.dark\\:block\s*\{[^}]*display:\s*none\s*!important/,
+    'print hides the dark raster of a theme pair'
+  );
+  assert.match(
+    printBlock,
+    /img\.dark\\:hidden\s*\{[^}]*display:\s*block\s*!important/,
+    'print shows the light raster of a theme pair'
+  );
+  // The selectors must stay scoped to <img>: `dark:hidden` is also the class on
+  // the theme-toggle icon, and a bare `.dark\:hidden` rule would reveal it in
+  // print for no reason.
+  assert.doesNotMatch(
+    printBlock,
+    /^\s*\.dark\\:hidden\s*\{/m,
+    'the rule is scoped to img so a non-image use of the class is untouched'
+  );
+});
 
 test('guide figures - the file behind every declared image actually exists', () => {
   const figures = allFigures();
@@ -178,27 +208,22 @@ test('guide figures - the template renders them additively and is theme-correct'
 });
 
 test('guide figures - a drawn diagram is never presented as a photograph', () => {
-  // Once a real photograph heads an article, an unlabelled illustration
-  // beside it reads as "a picture of my own desk". So every figure declares
-  // what kind of image it is, diagrams get a visible chip, and the chip is
-  // hidden from assistive tech (the alt text already names the figure as a
-  // diagram, so announcing it twice would just be noise).
+  // Every figure declares what kind of image it is. The distinction is what
+  // lets a reader tell a supplied photograph from drawn artwork, and it drives
+  // the one-file-vs-two decision in lib/guides/images.
   for (const { where, image } of allFigures()) {
     assert.ok(image.kind, `${where}: declares whether it is a diagram or a photo`);
   }
 
-  // The corpus now holds one real photograph and three diagrams, so the check
-  // is that they are correctly distinguished rather than that only one kind
-  // exists.
+  // The corpus holds real photographs and drawn diagrams, so the check is
+  // that they are correctly distinguished rather than that only one kind
+  // exists. Counts are pinned so a figure cannot be added or dropped silently.
   const photos = allFigures().filter((f) => f.image.kind === 'photo');
   const diagrams = allFigures().filter((f) => f.image.kind === 'diagram');
-  assert.equal(photos.length, 1, 'exactly one supplied photograph');
-  assert.equal(diagrams.length, 3, 'three drawn diagrams, all still inside the article');
+  assert.equal(photos.length, 2, 'two supplied photographs (microphone + Bluetooth articles)');
+  assert.equal(diagrams.length, 5, 'five drawn diagrams, all still inside their articles');
 
-  assert.match(component, /image\.kind \?\? 'diagram'/, 'an omitted kind defaults to diagram, the truthful default');
-  assert.match(component, /isDiagram && \(\s*<span/, 'a diagram gets a visible chip');
-  assert.match(component, /Diagram\s*<\/span>/, 'and the chip says Diagram');
-  assert.match(component, /aria-hidden="true"/, 'the chip is hidden from assistive tech');
+  assert.match(imagesLib, /kind \?\? 'diagram'/, 'an omitted kind defaults to diagram, the truthful default');
 
   for (const { where, image } of diagrams) {
     assert.match(image.alt, /^Diagram\./, `${where}: every diagram alt text names itself as a diagram`);
@@ -207,6 +232,33 @@ test('guide figures - a drawn diagram is never presented as a photograph', () =>
   for (const { where, image } of photos) {
     assert.doesNotMatch(image.alt, /^Diagram\./, `${where}: a photograph is not described as a diagram`);
   }
+});
+
+test('guide figures - nothing is drawn on top of a figure', () => {
+  // A "Diagram" chip was tried and removed: at 320-375px it sat over the
+  // diagram's own title and obscured the first thing a reader needs. The
+  // diagrams are dense at phone width, so any overlay competes with the
+  // artwork. The alt text carries the distinction instead, which costs a
+  // sighted reader nothing.
+  //
+  // This guards the whole <figure>, not just the chip that was removed: no
+  // absolutely positioned child, no visible label, no overlay of any kind.
+  assert.doesNotMatch(componentCode, /absolute/, 'the figure positions nothing on top of its image');
+  assert.doesNotMatch(componentCode, />\s*Diagram\s*</, 'no visible Diagram label is rendered');
+  assert.doesNotMatch(componentCode, /<span[^>]*>\s*Diagram/, 'and no chip element is emitted');
+
+  // The <figure> holds images and, optionally, a caption — nothing else.
+  const body = componentCode.slice(componentCode.indexOf('return ('), componentCode.lastIndexOf('};\n}'));
+  const children = [...body.matchAll(/<(\w+)/g)].map((m) => m[1]);
+  for (const tag of children) {
+    assert.ok(
+      ['figure', 'img', 'figcaption'].includes(tag),
+      `only figure/img/figcaption may render inside a figure (found <${tag}>)`
+    );
+  }
+
+  // A caption sits BELOW the image in normal flow, never over it.
+  assert.doesNotMatch(componentCode, /className="[^"]*\brelative\b/, 'the figure is not a positioning context for an overlay');
 });
 
 test('guide photo - the alt text stays inside what the frame actually shows', () => {

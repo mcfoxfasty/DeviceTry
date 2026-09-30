@@ -353,4 +353,19 @@ body {
     background: #ffffff !important;
     color: #000000 !important;
   }
+
+  /* A light/dark image pair must print as its LIGHT variant.
+   *
+   * The two rules above force the page white, but the `.dark` class on <html>
+   * survives printing, so a theme-paired image would still resolve to its dark
+   * raster and land on the paper as a black rectangle — the guide diagrams and
+   * the brand logo alike. Scoping the pair to `img` matters: `dark:hidden` is
+   * also used for the theme-toggle icon, and forcing every element with that
+   * class to display would reveal it in print for no reason. */
+  img.dark\:block {
+    display: none !important;
+  }
+  img.dark\:hidden {
+    display: block !important;
+  }
 }

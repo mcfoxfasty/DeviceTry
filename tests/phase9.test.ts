@@ -85,8 +85,8 @@ test('FINAL_CATALOG lists exactly the 15 primary tools in registry order', () =>
 
 // ------------------------------------------------------------------ guides
 
-test('All 15 guide articles exist with unique slugs', () => {
-  assert.equal(GUIDE_ARTICLES.length, 15, '9 troubleshooting + 6 buying guides');
+test('All 16 guide articles exist with unique slugs', () => {
+  assert.equal(GUIDE_ARTICLES.length, 16, '10 troubleshooting + 6 buying guides');
   const slugs = new Set(GUIDE_ARTICLES.map((g) => g.slug));
   assert.equal(slugs.size, GUIDE_ARTICLES.length, 'Guide slugs must be unique');
 });
