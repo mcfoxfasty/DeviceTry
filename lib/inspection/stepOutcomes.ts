@@ -144,15 +144,20 @@ const GENERIC_GUIDANCE: Record<InspectionStep, string> = {
 /**
  * Guidance for a step that is not a clean completion: blocked, incomplete,
  * or skipped. A clean completion needs no next step.
+ *
+ * `step` is a plain string, not an InspectionStep: a report rebuilt from a
+ * SAVED record can contain a key this build no longer runs, and refusing to
+ * classify it would mean refusing to describe the record at all. An unknown key
+ * still gets an outcome, a label and a next step - it just gets no guide link.
  */
 export function guidanceFor(
-  step: InspectionStep,
+  step: string,
   outcome: StepOutcome,
   blockedReason?: BlockedReason
 ): StepGuidance | null {
   if (outcome === 'completed' || outcome === 'confirmed') return null;
 
-  const guide = GUIDE_BY_STEP[step];
+  const guide = GUIDE_BY_STEP[step as InspectionStep];
   const base = { guideHref: guide?.href, guideLabel: guide?.label };
 
   if (outcome === 'blocked') {
@@ -177,7 +182,7 @@ export function guidanceFor(
   if (outcome === 'skipped') {
     return { ...base, nextStep: 'This check was skipped and remains unverified. Re-run it from the report if you want it covered.' };
   }
-  return { ...base, nextStep: GENERIC_GUIDANCE[step] };
+  return { ...base, nextStep: GENERIC_GUIDANCE[step as InspectionStep] ?? 'Re-run this check from the report so its result is recorded.' };
 }
 
 /** Does this outcome mean the step still needs the user's attention? */
@@ -187,7 +192,8 @@ export function needsAttention(outcome: StepOutcome): boolean {
 
 /** One row of the final report. */
 export interface ReportRow {
-  step: InspectionStep;
+  /** A step key. A saved record may carry a key this build no longer runs. */
+  step: string;
   label: string;
   outcome: StepOutcome;
   outcomeLabel: string;
@@ -209,6 +215,27 @@ const STEP_LABEL: Record<InspectionStep, string> = {
 };
 
 /**
+ * Human label for a step key, including keys this build does not recognise.
+ *
+ * A record saved by an older build can hold a step the current checklist no
+ * longer offers. Rendering it as the raw key would look like a database field;
+ * dropping it would silently shorten the report. So an unknown key is titled
+ * from the key itself and shown plainly as not currently available.
+ */
+export function stepLabel(step: string): string {
+  const known = STEP_LABEL[step as InspectionStep];
+  if (known) return known;
+  const words = String(step).replace(/[_-]+/g, ' ').trim();
+  if (!words) return 'Unnamed check';
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+/** True when this build still runs the step. */
+export function isCurrentStep(step: string): boolean {
+  return Object.prototype.hasOwnProperty.call(STEP_LABEL, step);
+}
+
+/**
  * The disclaimer the report always carries. It is the reason this feature
  * cannot be mistaken for a certification, and it is stated in the summary
  * and the PDF alike.
@@ -225,7 +252,7 @@ export const SCOPE_NOTICE =
  * never contribute twice.
  */
 export function buildInspectionReport(
-  steps: InspectionStep[],
+  steps: readonly string[],
   results: Record<string, StepResult | undefined>
 ): ReportRow[] {
   return steps.map((step) => {
@@ -234,7 +261,7 @@ export function buildInspectionReport(
     const source = evidenceSource(outcome);
     return {
       step,
-      label: STEP_LABEL[step],
+      label: stepLabel(step),
       outcome,
       outcomeLabel: OUTCOME_LABEL[outcome],
       source,
@@ -291,8 +318,18 @@ export function inspectionReportText(options: {
   operatorName?: string;
   dateLabel: string;
   rows: ReportRow[];
+  /**
+   * The notes the user typed. They are part of the report the user is looking
+   * at, so they must be part of the file they take away: a PDF that silently
+   * dropped the notes section would disagree with the screen it came from.
+   * Omitted when there is nothing to say, and stated as "none recorded" when
+   * the section was shown but left empty.
+   */
+  notes?: string;
+  /** One honest line about where this report's own contents came from. */
+  provenance?: string;
 }): string {
-  const { suiteTitle, deviceLabel, operatorName, dateLabel, rows } = options;
+  const { suiteTitle, deviceLabel, operatorName, dateLabel, rows, notes, provenance } = options;
   const lines: string[] = [];
 
   lines.push('DeviceTry — Local Inspection Report');
@@ -337,6 +374,24 @@ export function inspectionReportText(options: {
   lines.push('-'.repeat(29));
   lines.push(SCOPE_NOTICE);
   lines.push('');
+
+  // The notes are the user's own record of the physical device, so they travel
+  // with the file. An absent notes argument means "this export has no notes
+  // surface" (nothing is claimed); an empty one means the field was shown and
+  // left blank, which is stated rather than left as a missing section.
+  if (notes !== undefined) {
+    lines.push('Notes');
+    lines.push('-'.repeat(5));
+    lines.push(notes.trim() ? notes.trim() : 'No notes were recorded for this inspection.');
+    lines.push('');
+  }
+
+  if (provenance) {
+    lines.push('About this report');
+    lines.push('-'.repeat(17));
+    lines.push(provenance);
+    lines.push('');
+  }
 
   lines.push(
     'Privacy: generated locally in your browser. No recordings, no IP addresses, ' +

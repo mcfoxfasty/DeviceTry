@@ -20,7 +20,7 @@ import { KeyboardTester } from '../tests/KeyboardTester';
 import { MouseTester } from '../tests/MouseTester';
 import { DisplayTester } from '../tests/DisplayTester';
 import { GamepadTester } from '../tests/GamepadTester';
-import { saveLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/localHistory';
+import { saveLocalInspection, updateLocalInspection, updateLocalInspectionNotes } from '@/lib/testing/localHistory';
 import { calculateReportStatus, TestResultItem } from '@/lib/testing/reportStatus';
 import { buildPdf, pdfBlob, reportLinesFromText } from '@/lib/testing/pdf';
 import { deliverOnce } from '@/lib/testing/deliver';
@@ -210,13 +210,19 @@ export function GuidedInspectionFlow({
     const finalStatus = calculateReportStatus(suite.steps, currentResults);
     const saveRun = ++saveRunRef.current;
     if (savedIdRef.current) {
-      // This run already saved once (user went back and re-finished):
-      // update the SAME history entry instead of duplicating it. Notes may
-      // have changed since the first save — sync them too.
-      const updated = updateLocalInspectionNotes(savedIdRef.current, notes);
+      // This run already saved once (the user went back to a step and
+      // re-finished). Refresh the SAME record: its results, its overall
+      // summary AND its notes. Updating only the notes left a re-tested
+      // check showing the verdict from the run before the retest, which is
+      // the one thing a re-run was supposed to replace.
+      const updated = updateLocalInspection(savedIdRef.current, {
+        summaryStatus: finalStatus,
+        testsResults: currentResults,
+        notes,
+      });
       if (!updated && saveRun === saveRunRef.current) {
         setSaveError(
-          'The re-finished report could NOT be refreshed in your browser history. Local storage is unavailable or full — use Print / Save as PDF or Export JSON to keep a copy.'
+          'The re-finished report could NOT be refreshed in your browser history. Local storage is unavailable or full — use Download PDF to keep a copy.'
         );
       }
       return;
@@ -228,6 +234,12 @@ export function GuidedInspectionFlow({
       summaryStatus: finalStatus,
       testsResults: currentResults,
       notes,
+      // The checklist identity travels with the record so the saved report
+      // can be reopened and exported later: without it a record can only be
+      // listed, never reconstructed.
+      suiteKey: selectedSuiteKey,
+      suiteTitle: suite.title,
+      steps: [...suite.steps],
     });
     if (savedItem.saved) {
       savedIdRef.current = savedItem.id;
@@ -237,9 +249,26 @@ export function GuidedInspectionFlow({
     // claim the report was stored when it was not.
     if (!savedItem.saved && saveRun === saveRunRef.current) {
       setSaveError(
-        'This inspection could NOT be saved to your browser history. Local storage is unavailable or full — use Print / Save as PDF or Export JSON to keep a copy.'
+        'This inspection could NOT be saved to your browser history. Local storage is unavailable or full — use Download PDF to keep a copy.'
       );
     }
+  };
+
+  /**
+   * Return to a specific check from the finished report.
+   *
+   * The guidance for a skipped, blocked or incomplete step says it can be
+   * re-run from the report. That sentence was a promise with no action behind
+   * it: the report had no way back into a step, so a check that was skipped
+   * stayed skipped forever. This is that action. It moves the flow back to the
+   * step's own position in the current checklist, leaving every other
+   * recorded result in place.
+   */
+  const returnToStep = (stepKey: string) => {
+    const index = suite.steps.indexOf(stepKey as TestKey);
+    if (index < 0) return;
+    setActiveStepIndex(index);
+    setSaveError(null);
   };
 
   const nextStep = () => {
@@ -317,6 +346,10 @@ export function GuidedInspectionFlow({
       operatorName: operatorName || undefined,
       dateLabel: new Date().toLocaleDateString('en', { dateStyle: 'full' }),
       rows: reportRows,
+      // The notes are part of the report on screen, so they are part of the
+      // file. Passing the live value (not a stored copy) means a note typed
+      // after the auto-save is still in the PDF the user downloads.
+      notes,
     });
     const model = reportLinesFromText(text);
     const blob = pdfBlob(buildPdf({ title: model.title, lines: model.lines }), model.title);
@@ -642,11 +675,16 @@ export function GuidedInspectionFlow({
             <button
               onClick={() => {
                 // Invalidate any in-flight save attempt and clear the flow's
-                // own state so a new inspection starts clean.
+                // own state so a new inspection starts clean. savedIdRef must
+                // be cleared too: leaving it set made the NEXT inspection
+                // overwrite the record the previous run had saved, so a reset
+                // silently destroyed history instead of starting a new record.
                 saveRunRef.current += 1;
                 setResults({});
                 resultsRef.current = {};
                 setSaveError(null);
+                setNotes('');
+                savedIdRef.current = null;
                 setActiveStepIndex(-1);
               }}
               className="px-4 py-2 text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#142033] dark:hover:text-[#E9EEF4] flex items-center gap-1.5 cursor-pointer"
@@ -803,6 +841,20 @@ export function GuidedInspectionFlow({
                           </Link>
                         </>
                       )}
+                      {/* The action the guidance above promises. Without it,
+                          "re-run it from the report" had no way to happen. */}
+                      {suite.steps.includes(row.step as TestKey) && (
+                        <>
+                          {' '}
+                          <button
+                            type="button"
+                            onClick={() => returnToStep(row.step)}
+                            className="underline underline-offset-2 font-semibold cursor-pointer"
+                          >
+                            Return to this check
+                          </button>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -826,8 +878,8 @@ export function GuidedInspectionFlow({
                 onChange={(e) => {
                   setNotes(e.target.value);
                   // Keep the saved local history entry in sync with what the
-                  // user sees and prints. Best-effort: if storage fails, the
-                  // printed copy is still authoritative.
+                  // user sees and exports. Best-effort: if storage fails, the
+                  // downloaded copy is still authoritative.
                   if (savedIdRef.current) {
                     updateLocalInspectionNotes(savedIdRef.current, e.target.value);
                   }
