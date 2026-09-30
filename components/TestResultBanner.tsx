@@ -416,6 +416,19 @@ interface TesterWithBannerProps {
  */
 export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, onResultClear, toolId, toolTitle, toolSlug }: TesterWithBannerProps) {
   const { result, emit, reset } = useTestResult({ onResultUpdate, onResultClear });
+  /**
+   * Counter bumped by every host reset. Testers that keep their own visible
+   * output (tables, cards, figures) receive it as `resetSignal` and wipe that
+   * state too, so "Clear result" leaves nothing on screen describing a run the
+   * user just cancelled. Wrapping in a `key` was rejected: it would remount
+   * testers that legitimately re-query on load and restart work the user did
+   * not ask to restart.
+   */
+  const [resetSignal, setResetSignal] = useState(0);
+  const handleReset = useCallback(() => {
+    reset();
+    setResetSignal((value) => value + 1);
+  }, [reset]);
 
   return (
     <div className="w-full">
@@ -425,8 +438,8 @@ export function TesterWithBanner({ tester: Tester, testerProps, onResultUpdate, 
           banner's Clear button has — previously only the banner had a way to
           clear, so an in-card Reset left a stale verdict describing state that
           no longer existed. Testers that ignore the prop are unaffected. */}
-      <Tester {...testerProps} onResultUpdate={emit} onResultClear={reset} />
-      <TestResultBanner result={result} onClear={reset} variant="attached" toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
+      <Tester {...testerProps} onResultUpdate={emit} onResultClear={reset} resetSignal={resetSignal} />
+      <TestResultBanner result={result} onClear={handleReset} variant="attached" toolId={toolId} toolTitle={toolTitle} toolSlug={toolSlug} />
     </div>
   );
 }

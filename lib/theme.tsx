@@ -19,7 +19,9 @@ import React, { createContext, useCallback, useContext, useMemo, useSyncExternal
 
 export type ThemeChoice = 'light' | 'dark';
 
-export const THEME_STORAGE_KEY = 'devicetry-theme';
+import { THEME_STORAGE_KEY } from '@/lib/testing/storageKeys';
+
+export { THEME_STORAGE_KEY };
 
 /**
  * The theme a visitor gets when nothing is stored yet. Dark is the default;

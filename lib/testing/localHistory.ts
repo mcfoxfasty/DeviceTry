@@ -1,4 +1,7 @@
 import { TestResultItem, ReportSummaryStatus } from './reportStatus';
+import { LOCAL_INSPECTIONS_KEY, notifyStorageChanged } from './storageKeys';
+
+export { LOCAL_INSPECTIONS_KEY };
 
 export interface LocalInspectionItem {
   id: string;
@@ -11,7 +14,7 @@ export interface LocalInspectionItem {
   notes?: string;
 }
 
-const LOCAL_STORAGE_KEY = 'devicetry_local_inspections';
+const LOCAL_STORAGE_KEY = LOCAL_INSPECTIONS_KEY;
 
 export function getLocalInspections(): LocalInspectionItem[] {
   if (typeof localStorage === 'undefined') return [];
@@ -48,6 +51,9 @@ export function saveLocalInspection(item: Omit<LocalInspectionItem, 'id' | 'crea
     const existing = getLocalInspections();
     const updated = [newItem, ...existing].slice(0, 50); // retain last 50 locally
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+    // Same-tab readers (the storage inspector) never see the native `storage`
+    // event, so this write has to announce itself or the inventory goes stale.
+    notifyStorageChanged();
     return { ...newItem, saved: true };
   } catch {
     // quota exceeded or storage disabled — return with saved:false
@@ -61,6 +67,7 @@ export function deleteLocalInspection(id: string): void {
     const existing = getLocalInspections();
     const filtered = existing.filter((i) => i.id !== id);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+    notifyStorageChanged();
   } catch {
     // ignore
   }
@@ -78,6 +85,7 @@ export function updateLocalInspectionNotes(id: string, notes: string): boolean {
     const existing = getLocalInspections();
     const updated = existing.map((i) => (i.id === id ? { ...i, notes } : i));
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+    notifyStorageChanged();
     return true;
   } catch {
     return false;
@@ -88,6 +96,7 @@ export function clearAllLocalInspections(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
+    notifyStorageChanged();
   } catch {
     // ignore
   }

@@ -929,48 +929,60 @@ function permissionDiagnosticsContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} queries the browser’s Permissions API (navigator.permissions.query) for the states that matter on this site — microphone, camera, clipboard read/write, notifications, geolocation, MIDI, and persistent storage — and shows each as granted, denied, or “prompt” without ever triggering a prompt itself.`,
-      'A silent “denied” is the single most common reason a webcam, microphone, or notification-based test fails. This page surfaces those states in one glance, so you know what to fix before running the real hardware test.',
+      `The ${tool.title} calls navigator.permissions.query() once per permission name and reports exactly what the browser answered: granted, denied, or prompt. It never calls getUserMedia and never asks for anything, so no permission prompt appears while you read this page.`,
+      'The point of the page is the difference between a blocked permission and an unknown one. A row that reads "Not queryable" or "Query error" is not a pass and not a failure — it means this browser did not answer for that name at all, and the page says so rather than quietly counting it as healthy. Coverage is not universal: Chromium browsers implement the widest set, Firefox a subset, and iOS Safari very few, which is why the card states how many names were actually read.',
     ],
-    tipsTitle: 'Tips for a reliable result',
+    tipsTitle: 'Tips for getting the full picture',
     tips: [
-      'Read the state column before changing anything: “granted” needs no action, “prompt” just means you have not decided yet, and “denied” blocks the feature until you reset it.',
-      'Refresh after every change — permission states are re-read only when you ask.',
-      'Note that Firefox reports only a subset of these names, so some rows can be unavailable there even though the feature works.',
-      'If everything reads denied, a hardened browser profile or an enterprise policy may be enforcing it, not your own settings.',
+      'Read the What that means column, not just the colour: Prompt means undecided, Denied means blocked, and Granted means permitted — none of the three tells you whether the hardware works.',
+      'Re-query after every change. Permission states are only re-read when the page asks, so a stale table is simply out of date.',
+      'Change a blocked permission in the browser, not here: Chromium uses the lock/tune icon left of the address bar, Firefox the padlock or its Permissions entry, Safari the aA menu → Website Settings.',
+      'If a tool still fails after the row says granted, the problem is downstream — hardware, driver, another app holding the device — not the permission.',
     ],
-    problemsTitle: 'Common problems and fixes',
+    problemsTitle: 'What the states mean in practice',
     problems: [
       {
-        problem: 'A permission shows denied and the hardware test fails',
-        fix: 'Reset it at the source: click the padlock (or sliders) icon in the address bar while on the test page, set the permission back to Allow, then reload and re-check here.',
+        problem: 'A permission shows Denied and the matching tool fails',
+        fix: 'Reset it at the source: open the browser\'s site-settings control for this page, set the permission to Allow, then reload this page and re-query. This page cannot change permissions, only read them.',
       },
       {
-        problem: 'The page says the Permissions API is unavailable',
-        fix: 'Older engines and some hardened browsers do not implement navigator.permissions.query. Diagnose manually: open the target tool, trigger the feature, and answer the prompt — the outcome tells you the state.',
+        problem: 'The page reports that the Permissions API is unavailable',
+        fix: 'That is an unsupported or inconclusive result, not a clean bill of health: nothing was read. Open the tool that fails, trigger the feature, and answer its prompt — how the prompt resolves is the real state.',
       },
       {
-        problem: 'Everything resets after a browser update',
-        fix: 'Browser updates and permission managers can clear site decisions. Re-run this page after an update, and re-allow what you actually use.',
+        problem: 'Rows change after a browser update',
+        fix: 'Browser updates can add permission names, which changes coverage rather than your settings. Re-query afterwards and read the coverage line at the top of the table rather than assuming a change.',
+      },
+      {
+        problem: 'Microphone and camera are Denied here but work on another site',
+        fix: 'Permissions are per-site, so another site being allowed says nothing about this one. Check the control in the address bar while you are on the page that actually fails.',
+      },
+      {
+        problem: 'Everything reads Granted but the microphone test still fails',
+        fix: 'Granted is permission bookkeeping, not a hardware result. A granted microphone with no signal points at the input device, its level, or another application holding the capture device — use the Microphone Test next, not this page.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
         q: 'Will checking these permissions pop up prompts?',
-        a: 'No. navigator.permissions.query only reads the current state — that is its purpose. Prompts appear only when a page actually tries to use the feature.',
+        a: 'No. navigator.permissions.query() only reads the current state; that is its purpose. A prompt appears only when a page actually tries to use the feature, which this page never does.',
       },
       {
-        q: 'Why does Firefox show fewer rows?',
-        a: 'Firefox implements a subset of the permission names and may not resolve all queries. A missing row there is a browser gap, not a problem with your device.',
+        q: 'Why does this browser show fewer rows?',
+        a: 'Permission names are implemented unevenly. Firefox supports a subset of the names Chromium does, and iOS Safari exposes very few — a missing row there is a gap in the API surface, not a statement about your device or your settings.',
+      },
+      {
+        q: 'What does Prompt mean — is it granted?',
+        a: 'No. Prompt means no decision has been made yet: the feature has neither been allowed nor blocked. It will ask you the first time the feature is used, and only that answer will change the state.',
       },
       {
         q: 'Does granting here give the site access to anything?',
-        a: 'This page grants nothing and cannot. It only reports states; actual access happens inside the individual tools when you explicitly allow their prompts.',
+        a: 'This page grants nothing and cannot. It only reports states; access happens inside individual tools when you answer their own prompts.',
       },
       {
-        q: 'Why do microphone and camera show “denied” when other sites work?',
-        a: 'Permissions are per-site. Another site being allowed says nothing about this one — check the address-bar icon while on the page that fails.',
+        q: 'Does a green Granted row mean the microphone works?',
+        a: 'No. It means the browser is willing to hand over the device. Whether sound actually arrives is what the Microphone Test measures, and this page cannot answer it.',
       },
     ],
   };
@@ -980,44 +992,56 @@ function browserCompatibilityContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} probes your browser for the APIs this site’s testers depend on — media capture, Web Audio, WebGL, WebGPU, WebCodecs, workers, storage, input events, sensors, network transports, and more — and shows a support matrix you can search by name.`,
-      'Each row answers one question: is this API present in your current browser? It is the fastest way to explain why a specific tester is unavailable here but works on another machine or browser.',
+      `The ${tool.title} probes this browser for the APIs the site\'s testers depend on and reports one of four states per row: Available, Exposed but off, Missing, or a Probe error. The distinction matters. An API that exists but reports \u2018off\u2019 is a different situation from one that is not implemented, and an existence check cannot tell them apart — so every row here reads a value or calls a function rather than testing for a property name.`,
+      'For example, the media-capture row checks that navigator.mediaDevices.getUserMedia is actually callable, not merely that a mediaDevices object exists; the picture-in-picture row reads document.pictureInPictureEnabled as a value, so a browser that exposes the property with it set to false is reported as exposed-but-off rather than as supported.',
     ],
-    tipsTitle: 'Tips for a reliable result',
+    tipsTitle: 'Tips for reading the matrix',
     tips: [
-      'Search the matrix for the API named in a tester’s requirements rather than scanning all rows.',
-      'Test in the same browser profile you use the failing tool in — extensions and flags change the result.',
-      'Keep the page in a normal window: private modes disable some storage and caching APIs.',
-      'Re-run after a browser update; support rows can flip either way.',
+      'Search by what a tester needs rather than scanning every row \u2014 the search matches API names, categories, and the property each row reads.',
+      'Use the category buttons to narrow the list; the selected category is marked as pressed so you always know which filter is active.',
+      'Run it in the same browser profile that fails. Extensions, flags and enterprise policy all change the surface, and a private window may disable whole categories.',
+      'Compare two machines row by row when one works and the other does not: the differing row is your first clue.',
     ],
     problemsTitle: 'Common problems and fixes',
     problems: [
       {
-        problem: 'A tester’s required API shows as unsupported',
-        fix: 'Update your browser first. If it stays missing, check content blockers and enterprise policies — they can hide APIs — then try a different browser engine as a fallback.',
+        problem: 'A tester\'s required API shows as Missing',
+        fix: 'Update the browser first. If it is still missing afterwards, check content blockers and enterprise policies \u2014 they can hide APIs \u2014 then try a different engine as a fallback.',
       },
       {
-        problem: 'Everything shows supported but a tool still fails',
-        fix: 'Presence is not permission: getUserMedia can exist and still be denied at the permission layer, and hardware features can fail at the driver layer. Follow up in the Permission Diagnostics page and the failing tool itself.',
+        problem: 'A row shows Exposed, off',
+        fix: 'The browser ships the API but reports it disabled. Updating will not help; look for the operating-system, browser-setting, or policy switch that turns it off \u2014 for example per-site permissions or a reduced-functionality mode.',
+      },
+      {
+        problem: 'Everything looks Available but a tool still fails',
+        fix: 'Presence is not permission, and it is not hardware. getUserMedia can be callable and still be denied at the permission layer, and a working API can still be blocked by a driver or another application. Check Permission Diagnostics, then the failing tool itself.',
       },
       {
         problem: 'Results differ between two computers',
-        fix: 'Different browsers, versions, and privacy settings expose different API surfaces. That difference is exactly what this matrix documents — compare row by row to find the gap.',
+        fix: 'Different browsers, versions, and privacy settings expose different API surfaces. That difference is exactly what this matrix documents \u2014 compare row by row to find the gap.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
-        q: 'Does “supported” mean the feature fully works?',
-        a: 'No — and the page says so. Presence of an API means the browser exposes it; a working implementation also depends on hardware, drivers, permissions, and the site itself. This matrix is the first check, not the last.',
+        q: 'Does \u201cAvailable\u201d mean the feature fully works?',
+        a: 'No. Available means the API is present and usable \u2014 a function exists, a context was created, or the value is affirmative. A working implementation still depends on hardware, drivers, permissions, and the site itself.',
+      },
+      {
+        q: 'What does \u201cExposed, off\u201d mean?',
+        a: 'The browser implements the API but reports it switched off, so using it will fail even though the name exists. It is reported separately from Missing because the fix is a setting, not an update.',
+      },
+      {
+        q: 'Does the matrix request permissions or capture anything?',
+        a: 'No. Every check is passive: function-existence checks, value reads, and throwaway canvas contexts that are released immediately. No permission prompt appears and no request leaves the page.',
       },
       {
         q: 'Is anything sent to a server to decide support?',
-        a: 'No. Every check runs locally with feature detection (typeof and in checks against your browser’s objects). No network request is involved in producing the matrix.',
+        a: 'No. Every check runs locally against your browser\'s own objects. No network request is involved in producing the matrix.',
       },
       {
         q: 'Why do older browsers show so many gaps?',
-        a: 'The APIs this site uses are recent. Browsers ship them at different times — updating is the single most effective fix, and often the only one.',
+        a: 'The APIs this site uses ship at different times in different engines, so a matrix is naturally uneven. Updating is often the simplest fix \u2014 but a row that reads Exposed, off will not change with an update.',
       },
     ],
   };
@@ -1027,48 +1051,56 @@ function codecSupportContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} reports which audio and video codecs your browser can record and play back. Recording rows use MediaRecorder.isTypeSupported to map the container formats a browser’s MediaRecorder can typically produce (WebM with VP8/VP9/AV1 and Opus, plus MP4/H.264 variants); playback rows use the HTMLMediaElement.canPlayType heuristic for common call and streaming codecs. Our own Voice Recorder does not appear in these rows: it captures raw PCM in the Web Audio graph and encodes a genuine WAV (audio/wav) itself, on every engine.`,
-      'This matters in practice for other apps: an app built on MediaRecorder has to settle for whatever container its browser supports, and missing H.264 or VP8 playback support can degrade video-call quality. The page shows you that before it surprises you — our own Voice Recorder is unaffected, because it never depends on MediaRecorder.',
+      `The ${tool.title} asks two metadata APIs what this browser reports about media formats. Recording rows call MediaRecorder.isTypeSupported() for containers such as WebM with VP8/VP9/AV1, MP4 with H.264/AAC and audio-only WebM/Ogg. Playback rows call canPlayType() on the media element that matches the row\u2019s kind \u2014 an audio mime string is never handed to a <video> element \u2014 for H.264, HEVC, VP9, AV1, AAC, MP3, FLAC and Opus.`,
+      'Both are capability answers drawn from the browser\u2019s own tables. Nothing is recorded, downloaded, decoded or accelerated while this page runs, so no row is evidence that a format actually works, that a codec is hardware-accelerated, or that a WebRTC call will negotiate it. Where the API cannot answer at all, the row says \u2018API unavailable\u2019 rather than reporting a negative, and a probe that throws is marked as an error instead of being folded into \u2018missing\u2019.',
     ],
-    tipsTitle: 'Tips for a reliable result',
+    tipsTitle: 'Tips for reading the report',
     tips: [
-      'Read the recording table to understand the format options other recording apps have in this browser, and the playback table for calls and streaming; recordings made on this site are always WAV regardless of what the table shows.',
-      'A “maybe” from canPlayType is a real answer: the browser cannot confirm the codec fully, so treat it as uncertain rather than supported.',
-      'Re-check after switching browsers — codec support varies more between engines than any other capability here.',
-      'Codec support is about software; it says nothing about hardware acceleration or performance.',
+      'Read the Raw answer column: it shows the literal value the browser returned, so \u2018probably\u2019, \u2018maybe\u2019 and an empty string are all visible as themselves.',
+      'Treat Maybe as uncertain. canPlayType returns confidence strings by design, so \u2018maybe\u2019 is not a soft \u2018yes\u2019 \u2014 it is the browser declining to commit.',
+      'A missing optional format is normal rather than a fault; browser builds ship different codec sets, and some Linux Chromium builds ship without proprietary codecs.',
+      'This page\u2019s own Voice Recorder is unaffected by anything in the table: it captures raw PCM and encodes a genuine WAV itself, so its downloads are always .wav.',
     ],
     problemsTitle: 'Common problems and fixes',
     problems: [
       {
-        problem: 'A recording format shows unsupported',
-        fix: 'Nothing is broken: an app built on MediaRecorder will simply produce its recordings in a different container. That concern applies to other apps, not to the Voice Recorder on this site — it captures raw PCM and encodes WAV itself, so its downloads are always .wav on every engine.',
+        problem: 'A recording format shows as reported missing',
+        fix: 'Nothing is broken: an app built on MediaRecorder simply produces its recordings in a different container. That concern applies to other apps, not to this site\u2019s Voice Recorder.',
       },
       {
-        problem: 'H.264 shows unsupported and video calls look poor',
-        fix: 'Chromium builds without proprietary codecs (some Linux distributions) cannot decode H.264. Install a codec-complete browser build, or accept the VP8/VP9-based fallback the call service negotiates.',
+        problem: 'H.264 is reported missing',
+        fix: 'Chromium builds without proprietary codecs cannot decode H.264. Install a codec-complete browser build, or accept that a call or stream will negotiate VP8/VP9 instead \u2014 this page reports the fallback availability, it does not choose one.',
       },
       {
-        problem: 'Support differs between two machines with the same browser',
-        fix: 'Build configuration and platform codec licenses differ. Trust each machine’s own result — this page is per-browser, not per-brand.',
+        problem: 'Every row says API unavailable',
+        fix: 'Then the browser exposes neither MediaRecorder nor a usable canPlayType path, so no codec information could be gathered at all. That is an unsupported result, not a list of missing codecs.',
+      },
+      {
+        problem: 'Results differ between two machines with the same browser',
+        fix: 'Build configuration and platform codec licences differ. Trust each machine\u2019s own report \u2014 this page is per-browser and per-build, not per-brand.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
         q: 'Does this page download or play any media?',
-        a: 'No. It queries MediaRecorder.isTypeSupported and canPlayType — both are metadata-only API calls. No media is fetched, decoded, or recorded.',
+        a: 'No. It queries MediaRecorder.isTypeSupported and canPlayType \u2014 both metadata-only calls. No media is fetched, decoded, or recorded, and nothing leaves your browser.',
       },
       {
-        q: 'Why does canPlayType return “probably” or “maybe” instead of yes?',
-        a: 'The HTML standard deliberately returns confidence strings, not booleans, because real codec support depends on build flags and platform licenses. “Probably” is the strongest affirmative the API offers.',
+        q: 'Why canPlayType returns \u201cprobably\u201d or \u201cmaybe\u201d instead of yes or no?',
+        a: 'The HTML standard deliberately returns confidence strings, because real codec support depends on build flags and platform licences. \u2018Probably\u2019 is the strongest affirmative the API offers, and \u2018maybe\u2019 genuinely means uncertain.',
+      },
+      {
+        q: 'Does this tell me whether my calls will be good quality?',
+        a: 'No. These rows say what the browser claims about container and codec formats. Call quality also depends on the codec a session actually negotiates, the network, the capture hardware and the other end\u2019s support \u2014 none of which this probe observes.',
       },
       {
         q: 'Can I add codecs to my browser?',
-        a: 'Not usually. Support is compiled in per browser build. On Linux distributions that strip proprietary codecs, installing the standard branded browser build restores H.264/AAC.',
+        a: 'Not usually. Support is compiled into each build. On Linux distributions that strip proprietary codecs, installing the standard branded browser build restores H.264/AAC.',
       },
       {
-        q: 'Does codec support affect audio quality?',
-        a: 'Indirectly. If a preferred codec is missing, calls and streamed media fall back to another one with different quality and compression characteristics — the page shows you which fallbacks exist. Recordings made on this site are unaffected because they are encoded as WAV locally.',
+        q: 'A codec is reported missing \u2014 is my browser broken?',
+        a: 'No. Codec sets differ between builds and platforms by design, and an optional codec is not required for normal web use. The Voice Recorder on this site encodes WAV locally, so it is unaffected either way.',
       },
     ],
   };
@@ -1078,48 +1110,56 @@ function webrtcContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} verifies that your browser can create an RTCPeerConnection and gather ICE candidates — the two primitives every video-call app (Meet, Teams, Zoom-in-browser, Discord) needs to establish a peer-to-peer media path. The check runs locally: it builds a connection and inspects what your own browser reports.`,
-      'This is a capability test, not a leak test. It tells you whether WebRTC works at all in this browser — the right question when calls fail to connect — and it deliberately does not evaluate VPN, DNS, or IP exposure.',
+      `The ${tool.title} runs a genuine local loopback: two RTCPeerConnection objects are created inside this tab with iceServers set to an empty list, an offer/answer exchange completes, and the second peer echoes back five individually identified messages. A run counts as a data exchange only when all five replies come back matched to the ping that produced them.`,
+      'Because the receiving peer must be listening before the channel exists, the echo handler is attached before negotiation begins \u2014 and because a reply only means something if it can be tied to a request, each message carries its own identifier and is timed from its own send timestamp. Duplicate echoes and unrelated payloads are counted and ignored rather than rounded up into a success, and the handshake time is reported separately from the median round-trip time.',
     ],
     tipsTitle: 'Tips for a reliable result',
     tips: [
-      'Run the check in the browser you actually make calls in — capability differs between engines and profiles.',
-      'If the check fails, disable privacy extensions that block peer connections, then retest.',
-      'Corporate networks can filter the traffic call apps need; a pass here does not guarantee the network allows it.',
-      'Re-run after changing VPN or firewall settings, since both can affect the connection path.',
+      'Run the check in the browser you actually make calls in \u2014 capability differs between engines and profiles.',
+      'Read the Echo Replies figure first. It counts unique matched echoes only; if it is below five, the step list says why the exchange did not complete.',
+      'Compare Handshake with Echo RTT as separate measurements: a fast handshake with slow round trips, or the reverse, points at different things.',
+      'Re-run after changing VPN, firewall or extension settings, since each can affect whether a peer connection is permitted at all.',
     ],
     problemsTitle: 'Common problems and fixes',
     problems: [
       {
-        problem: 'The check reports no peer connection possible',
-        fix: 'Strict privacy extensions (and some hardened browsers) disable RTCPeerConnection entirely. Disable them for this site and retest; if it still fails, the browser build itself lacks WebRTC.',
+        problem: 'The run fails before the connection opens',
+        fix: 'Privacy-focused extensions and hardened browser builds disable RTCPeerConnection entirely. Disable them for this site and retest; if it still fails, the browser build does not offer WebRTC.',
       },
       {
-        problem: 'Peer connections work but calls still fail',
-        fix: 'The capability exists, so the failure is downstream: TURN/STUN reachability, network filtering, or the service’s own signalling. Check the call app’s network diagnostics next.',
+        problem: 'The connection opens but the echo exchange is incomplete',
+        fix: 'A connected peer with missing echoes points at the data channel rather than the connection: a blocked or throttled channel can open and then drop messages. Retry, and check extensions that modify page content or networking.',
       },
       {
-        problem: 'Candidates mention mDNS hostnames',
-        fix: 'Modern browsers hide local IP addresses behind .local mDNS names during candidate gathering — that is privacy protection working as designed, not a failure.',
+        problem: 'ICE candidates were rejected when added',
+        fix: 'The step list counts rejected candidates instead of hiding them. That normally indicates a mismatch between what was gathered and what the far side expected \u2014 often a proxy or an extension rewriting candidates.',
+      },
+      {
+        problem: 'The loopback passes but calls still fail',
+        fix: 'The local path works, so the failure is elsewhere: network filtering, TURN reachability, or the service\u2019s own signalling. Use the failing call app\u2019s network diagnostics next.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
-        q: 'Does this test reveal my IP addresses?',
-        a: 'No addresses are shown to you or collected. The test only verifies that candidate gathering succeeds; browsers increasingly mask local addresses behind mDNS names in any case.',
-      },
-      {
         q: 'Is this a WebRTC leak test?',
-        a: 'No — by design. It checks local capability only and does not evaluate VPN or DNS behavior. Use a dedicated leak test if that is your question.',
+        a: 'No \u2014 by design. It checks local capability only and does not evaluate VPN or DNS behaviour. Use a dedicated leak test if that is your question.',
       },
       {
-        q: 'Why would a browser disable WebRTC?',
-        a: 'Some privacy-focused builds and extensions disable it to prevent IP exposure in peer-to-peer connections. The trade-off is that video-call apps cannot connect — this test tells you which side of that trade-off you are on.',
+        q: 'Does a pass mean my calls will work?',
+        a: 'It removes one failure cause and no more. A pass shows this browser can build a local peer connection and exchange data; internet calls additionally depend on the network path, relay reachability, and the service itself.',
       },
       {
-        q: 'Does a pass guarantee my calls will work?',
-        a: 'It removes one failure cause. Calls also depend on the network path, TURN relays, and the service itself — a pass here means the browser side is ready.',
+        q: 'Does it use my microphone or camera?',
+        a: 'No. The loopback adds no media tracks and requests no permission. If you want to know whether capture works, use the Microphone Test or Webcam Test, which do open a stream.',
+      },
+      {
+        q: 'Why are duplicate replies not counted?',
+        a: 'Because a repeated reply proves less than a matched one: it does not show that this specific ping made the round trip. Ignoring duplicates keeps the figure honest about how many distinct messages completed the exchange.',
+      },
+      {
+        q: 'Does it contact any server?',
+        a: 'No. Both peers are created with an empty iceServers list, so no STUN or TURN server is contacted and no address is sent anywhere. Only host candidates are gathered, locally.',
       },
     ],
   };
@@ -1129,48 +1169,56 @@ function systemInfoContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} shows the device facts your browser chooses to expose: the full user-agent string, the platform string, parsed engine and operating system, language preferences, logical CPU core count, bucketed device memory, and screen properties such as resolution and pixel ratio.`,
-      'Browsers increasingly reduce this detail to fight fingerprinting, so some fields can be missing or genericized — that is expected behavior, not a fault. Use the page to capture exactly what a web app on this device can see.',
+      `The ${tool.title} takes a labelled snapshot of what this browser chooses to expose. Screen area, usable screen area, viewport size and device pixel ratio are reported as four separate readings because they are four separate facts: the viewport changes when you resize the window, and the pixel ratio describes the scaling between the two. The panel\u2019s true physical resolution is not knowable from a web page, and this page never claims to know it.`,
+      'Engine, operating system and architecture are parsed from the user-agent string, so every such row is labelled as an estimate. That string can be rewritten by a spoofing extension, and it carries genuine ambiguities this page refuses to paper over: Windows 10 and 11 send the identical token, browsers other than Safari on iOS deliberately report a desktop Safari string, and an iPad in desktop mode reports macOS \u2014 so each of those is reported as ambiguous or unidentified rather than guessed.',
     ],
-    tipsTitle: 'Tips for a reliable result',
+    tipsTitle: 'Tips for reading the snapshot',
     tips: [
-      'Compare the user-agent string with the parsed engine/OS rows — they should agree, and disagreements reveal spoofing extensions.',
-      'Expect reduced values in private windows or with anti-fingerprinting tools; the browser is deliberately hiding detail.',
-      'Screen values reflect the window and display the browser sees, including OS scaling — not the panel’s marketing spec.',
-      'Use the copy action to capture everything for a bug report or support ticket.',
+      'Compare the raw user-agent string with the parsed rows: a disagreement is a strong hint that an extension is rewriting it.',
+      'Treat CPU cores and device memory as coarse \u2014 browsers cap and bucket both, so a lower-than-actual number is normal.',
+      'Press Re-read after resizing the window or changing display scaling to watch the viewport and pixel-ratio rows change.',
+      'A genuine zero (such as 0 max touch points) is shown as a value, while an absent property reads \u2018Not exposed\u2019 \u2014 the two are never conflated.',
     ],
-    problemsTitle: 'Common problems and fixes',
+    problemsTitle: 'Common questions',
     problems: [
       {
-        problem: 'CPU cores or memory show “Not exposed”',
-        fix: 'Safari and Firefox omit those APIs (hardwareConcurrency / deviceMemory) entirely or partially. Nothing is wrong — the information is simply not available to any web page in that browser.',
+        problem: 'CPU cores or memory read \u2018Not exposed\u2019',
+        fix: 'Those APIs are absent in some browsers and partially implemented in others. Nothing is wrong \u2014 the information is simply not available to any web page in that browser.',
       },
       {
-        problem: 'The user-agent does not match my actual system',
-        fix: 'A spoofing extension or a browser’s “reduced user-agent” feature is rewriting it. Disable the extension to see the real string, or accept that sites will classify this browser by the spoofed value.',
+        problem: 'The operating system row looks wrong',
+        fix: 'Check the caveat line beneath it. Where the user agent is genuinely ambiguous \u2014 iPadOS in desktop mode, a non-Safari iOS browser, Windows 10 versus 11 \u2014 this page says so rather than picking a confident answer.',
       },
       {
-        problem: 'Screen resolution looks wrong',
-        fix: 'The browser reports CSS pixels after OS scaling, not raw panel pixels. A 4K panel at 200% scaling reports half its pixel dimensions — that is the value web content actually uses.',
+        problem: 'The screen resolution looks smaller than the panel',
+        fix: 'The browser reports CSS pixels after operating-system scaling, not raw panel pixels. A 4K panel at 200% scaling legitimately reports half its dimensions, and that is the value web content actually uses.',
+      },
+      {
+        problem: 'Architecture says ARM but the machine is 64-bit (or the reverse)',
+        fix: 'An ARM token identifies the CPU family, not the instruction set, and 32-bit ARM builds exist. This page never infers AArch64 from the word ARM.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
         q: 'Is this the same information websites use to track me?',
-        a: 'Yes, these are among the surfaces used for fingerprinting — which is why browsers keep shrinking them. This page is a representative sample, not a complete one: a site can also read canvas and font metrics, storage, and other APIs that this page deliberately never touches.',
+        a: 'Yes, these are among the surfaces used for fingerprinting \u2014 which is why browsers keep shrinking them. This page is a representative sample, not a complete one: a site can also read canvas and font metrics, storage and other APIs that this page deliberately never touches.',
       },
       {
-        q: 'Does this show my device’s real specifications?',
-        a: 'Only partially. CPU and memory values are coarse or absent, the user-agent can be reduced or spoofed, and screen values reflect scaling. Treat it as “what the browser exposes”, not a spec sheet.',
+        q: 'Does this show my device\u2019s real specifications?',
+        a: 'No, and it is not trying to. Core counts are capped, memory is bucketed, the user agent can be reduced or spoofed, and the physical panel resolution is not exposed at all. It is a snapshot of what the browser reveals.',
       },
       {
-        q: 'Is any of this information sent anywhere?',
-        a: 'No. Everything shown is read from your own browser and rendered locally; the page sends nothing.',
+        q: 'Does this page test anything?',
+        a: 'No. It reports values and deliberately produces no pass or fail verdict \u2014 an informational snapshot cannot certify hardware. Use the dedicated testers for anything you need judged.',
       },
       {
         q: 'Why does the platform string say something odd?',
-        a: 'The legacy platform string is unreliable and browser-specific — modern Chrome on Windows, for example, may report “Win32” even on 64-bit systems. The parsed engine/OS rows are the dependable summary.',
+        a: 'The legacy platform string is frozen and browser-specific: modern Chrome on Windows reports \u2018Win32\u2019 even on 64-bit systems. The estimated engine and OS rows are the more useful summary, and they are labelled as estimates.',
+      },
+      {
+        q: 'Is any of this information sent anywhere?',
+        a: 'No. Everything shown is read from your own browser and rendered locally; this page sends nothing.',
       },
     ],
   };
@@ -1180,48 +1228,56 @@ function storageInspectorContent(tool: ToolDefinition): ToolContent {
   return {
     aboutTitle: `About the ${tool.title}`,
     about: [
-      `The ${tool.title} lists what DeviceTry itself has saved in your browser’s localStorage — test history entries, saved comparisons, and settings such as your theme choice and language — with the byte size of every key. One button clears the site’s stored data; nothing outside this site’s own keys is read or touched.`,
-      'This is the site’s privacy control rather than a generic browser tool: it exists so you can see and delete the (browser-local) data DeviceTry keeps, the same data the privacy policy describes.',
+      `The ${tool.title} lists every localStorage key DeviceTry itself writes \u2014 individual test history, saved guided inspections, rerun-comparison values and your theme choice \u2014 with the byte size of each and whether it is currently stored. The inventory comes from a fixed registry of owned keys, so the deletion target is a known list rather than a name pattern that might match something this site never wrote.`,
+      'The two record counts are shown separately because they are separate things: individual test results accumulate as you use the tools, while guided inspections only appear when you save a report. Export is available whenever either is present \u2014 test history on its own is worth keeping \u2014 and produces a versioned JSON file containing exactly the data on this page. Clearing asks for confirmation, removes the registered keys, then re-reads the store so the result can state what was verified rather than what was intended.',
     ],
-    tipsTitle: 'Tips for a reliable result',
+    tipsTitle: 'Tips before you clear',
     tips: [
-      'Check the key list before clearing — you will see exactly which features have saved state, including your theme and language preferences.',
-      'Clearing is immediate and cannot be undone; export anything you want to keep first.',
-      'If the list shows many keys after light use, that is test history accumulating — clearing it frees the space.',
-      'Your browser’s broader site-data settings (cookies, cache, storage for all sites) live in the browser’s own settings, not here.',
+      'Export first if you might want the history back \u2014 deletion is permanent and there is no server-side copy, because none exists.',
+      'A page that says storage is unavailable is reporting a blocked store, not an empty one. In that state nothing can be inspected, exported or deleted.',
+      'Clearing resets your theme choice to the default; that is the only preference affected, and the tools themselves keep working.',
+      'The cookie figure shown counts only what document.cookie can see for this site. HttpOnly cookies are invisible to any page, so it is a floor, not a total.',
     ],
-    problemsTitle: 'Common problems and fixes',
+    problemsTitle: 'Common questions',
     problems: [
       {
-        problem: 'The list is empty but I saved results before',
-        fix: 'Either the data was already cleared, you are in a private window (which discards storage when it closes), or your browser blocks site data for this origin. Check the address-bar site settings.',
+        problem: 'The page says storage is unavailable rather than empty',
+        fix: 'Your browser is blocking site data for this origin \u2014 common in private windows and hardened profiles. Allow cookies/site data for this site in the address-bar settings, then reload.',
       },
       {
-        problem: 'Test history will not save at all',
-        fix: 'Site data is being blocked. Allow cookies/site data for this origin, then reload — the testers save to localStorage exactly like other site features.',
+        problem: 'Test history will not save',
+        fix: 'The same site-data block prevents writes. Allow storage for this origin and reload; the testers save to localStorage exactly like every other part of the site.',
       },
       {
-        problem: 'Clearing did not reset everything I expected',
-        fix: 'The button removes this site’s localStorage keys. Browser-level data (cache, IndexedDB, cookies for other purposes) is managed in your browser’s settings, which is a separate surface.',
+        problem: 'Clearing reported a partial failure',
+        fix: 'The page lists which key survived or threw, and deliberately does not claim a clean wipe. Reload and try again; if it persists, the browser is likely enforcing a storage policy on that key.',
+      },
+      {
+        problem: 'There are other localStorage keys I did not expect',
+        fix: 'They are listed so nothing is hidden from you, but they are not part of the DeviceTry registry, so this page neither claims nor deletes them. Clearing them is a browser site-data setting, not this page\u2019s job.',
       },
     ],
     faqTitle: 'FAQ',
     faqs: [
       {
-        q: 'What exactly does “clear” delete?',
-        a: 'Every DeviceTry-prefixed localStorage key: your test history, saved comparisons, and local preferences like theme. The deletion is immediate and permanent.',
+        q: 'What exactly does \u201cClear Owned Data\u201d delete?',
+        a: 'Only the keys in DeviceTry\u2019s owned registry: test history, saved guided inspections, rerun-comparison values and the theme choice. The page verifies afterwards and reports any key it could not remove.',
+      },
+      {
+        q: 'Does it clear cookies, IndexedDB or the cache?',
+        a: 'No \u2014 and it does not claim to. Those are separate browser surfaces, managed in your browser\u2019s site-data settings. This page only reads localStorage keys the site owns, and only counts the cookies a page can see.',
       },
       {
         q: 'Is any of this stored data uploaded?',
-        a: 'No. All of it lives in your browser’s localStorage for this site only; it is never transmitted anywhere. Clearing removes it from your device and nowhere else, because it exists nowhere else.',
+        a: 'No. It all lives in this browser for this site, and it is never transmitted. Export is a download you initiate; clearing removes it from your device and nowhere else, because it exists nowhere else.',
       },
       {
         q: 'Will clearing log me out or break the site?',
-        a: 'There are no accounts here. After clearing you lose saved history and your theme/language preference resets — the tools themselves work exactly as before.',
+        a: 'There are no accounts here. After clearing you lose your history and inspections, and your theme reverts to the default \u2014 the tools themselves work exactly as before.',
       },
       {
-        q: 'Can I inspect or clear this data outside this page?',
-        a: 'Yes — your browser’s developer tools (Application → Local Storage) show the same keys, and the browser’s site-data settings can clear them too. This page is the friendly front end for the same data.',
+        q: 'What does the backup file contain?',
+        a: 'A versioned JSON document with a format marker, an export timestamp, an explicit scope statement, your test history entries, your saved inspections, the comparison store and your theme preference \u2014 nothing from any other site.',
       },
     ],
   };

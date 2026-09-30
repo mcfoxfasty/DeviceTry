@@ -20,7 +20,11 @@
  *    that depends on context the browser cannot know.
  */
 
-const COMPARE_KEY = 'devicetry_compare_v1';
+import { COMPARE_STORAGE_KEY, notifyStorageChanged } from './storageKeys';
+
+const COMPARE_KEY = COMPARE_STORAGE_KEY;
+
+export { COMPARE_STORAGE_KEY };
 
 export interface CompareEntry {
   value: number;
@@ -53,7 +57,17 @@ function readStore(): CompareStore {
 function writeStore(store: CompareStore): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(COMPARE_KEY, JSON.stringify(store));
+    // An emptied store is removed rather than written as "{}": leaving the key
+    // behind makes the storage inspector report a stored value that holds no
+    // comparisons, which is exactly the kind of false claim these tools avoid.
+    if (Object.keys(store).length === 0) {
+      localStorage.removeItem(COMPARE_KEY);
+    } else {
+      localStorage.setItem(COMPARE_KEY, JSON.stringify(store));
+    }
+    // Comparisons are written lazily (dynamic import) and silently; without this
+    // the storage inspector keeps showing this key as absent after a verdict.
+    notifyStorageChanged();
   } catch {
     // Quota exceeded / storage disabled — comparisons are best-effort.
   }

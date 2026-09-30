@@ -12,6 +12,8 @@
  *    the browser.
  */
 
+import * as STORAGE_KEYS from './storageKeys';
+
 export interface TestHistoryEntry {
   id: string;
   /** Registry slug, e.g. "webcam-test". */
@@ -25,7 +27,10 @@ export interface TestHistoryEntry {
   timestamp: number;
 }
 
-const HISTORY_KEY = 'devicetry_test_history';
+/** Same key as the storage inspector's owned registry (lib/testing/storageKeys.ts). */
+const HISTORY_KEY = STORAGE_KEYS.HISTORY_KEY;
+
+export { HISTORY_KEY };
 /** Same-tab notification used because localStorage changes do not emit storage in their own tab. */
 export const TEST_HISTORY_CHANGE_EVENT = 'devicetry:test-history-change';
 /** Reasonable entry cap; oldest entries are dropped first. */
@@ -89,6 +94,9 @@ function isEntry(v: unknown): v is TestHistoryEntry {
 function notifyTestHistoryChanged(): void {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
   window.dispatchEvent(new Event(TEST_HISTORY_CHANGE_EVENT));
+  // Owned-key readers other than this module's own subscribers listen for the
+  // general storage event instead.
+  STORAGE_KEYS.notifyStorageChanged();
 }
 
 /** Subscribe to same-tab writes and cross-tab storage events. */
