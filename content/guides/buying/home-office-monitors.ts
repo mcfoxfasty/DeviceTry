@@ -4,7 +4,7 @@ export const homeOfficeMonitors: GuideArticle = {
   slug: 'home-office-monitors',
   title: 'Buying Guide: Home-Office Monitors Worth Your Desk Space',
   description:
-    'Resolution, panel type, USB-C docking, and ergonomics explained for real workloads — with specification-based picks for 4K desks, budget upgrades, and single-cable setups.',
+    'Resolution, panel type, USB-C docking, and ergonomics for real workloads — with picks for 4K desks, budget upgrades, and single-cable setups.',
   category: 'display',
   type: 'buying',
   relatedToolSlugs: ['screen-test', 'refresh-rate-test'],

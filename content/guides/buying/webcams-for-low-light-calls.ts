@@ -4,7 +4,7 @@ export const webcamsForLowLightCalls: GuideArticle = {
   slug: 'webcams-for-low-light-calls',
   title: 'Buying Guide: Webcams for Low-Light Calls',
   description:
-    'Why dim rooms make webcams grainy and which sensor and exposure specifications actually help — with specification-based picks for dim home offices, bright rooms, and tight budgets.',
+    'Why dim rooms make webcams grainy and which sensor and exposure specifications help — with picks for dim rooms, bright rooms, and tight budgets.',
   category: 'video',
   type: 'buying',
   relatedToolSlugs: ['webcam-test', 'permission-diagnostics'],

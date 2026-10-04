@@ -4,7 +4,7 @@ export const keyboardKeysNotRegistering: GuideArticle = {
   slug: 'keyboard-keys-not-registering',
   title: 'Keyboard Keys Not Registering: Diagnose Dead Keys and Random Dropouts',
   description:
-    'Find out why specific keys stop responding or register intermittently: software filters, debris, failing switches, ribbon cables, and how a key test isolates the layer at fault.',
+    'Why specific keys stop responding or register intermittently: software filters, debris, failing switches, ribbon cables, and how a key test isolates the layer.',
   category: 'input-gaming',
   type: 'troubleshooting',
   relatedToolSlugs: ['keyboard-test', 'click-speed-test'],

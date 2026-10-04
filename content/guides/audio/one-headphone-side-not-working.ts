@@ -4,7 +4,7 @@ export const oneHeadphoneSideNotWorking: GuideArticle = {
   slug: 'one-headphone-side-not-working',
   title: 'One Headphone or Speaker Side Not Working: Fixes That Actually Work',
   description:
-    'Diagnose audio playing in only one ear or speaker: channel tests, balance settings, connector faults, Bluetooth mono modes, and how to tell a cable problem from a driver failure.',
+    'Audio in only one ear or speaker: channel tests, balance settings, connector faults, Bluetooth mono modes, and cable versus driver.',
   category: 'audio',
   type: 'troubleshooting',
   relatedToolSlugs: ['speakers-test', 'tone-generator'],

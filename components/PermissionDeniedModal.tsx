@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Video, Mic, ShieldAlert, RotateCw, ExternalLink, Lock, Loader2, CheckCircle2 } from 'lucide-react';
+import { APPLE_PRIVACY_SETTINGS_URL, WINDOWS_CAMERA_MICROPHONE_PRIVACY_URL } from '@/lib/permissions/helpLinks';
 
 export type PermissionKind = 'microphone' | 'camera' | 'both';
 
@@ -250,7 +251,7 @@ export function PermissionDeniedModal({ open, kind, onRetry, onClose }: Permissi
           {/* Help links */}
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <a
-              href="https://support.microsoft.com/en-us/windows/windows-privacy-settings-8d6c1b1e-1f4b-4d9c-9d1a-2b4c3d5e6f7a"
+              href={WINDOWS_CAMERA_MICROPHONE_PRIVACY_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors"
@@ -259,7 +260,7 @@ export function PermissionDeniedModal({ open, kind, onRetry, onClose }: Permissi
               <ExternalLink className="w-3 h-3" />
             </a>
             <a
-              href="https://security.apple.com/guides/privacy/"
+              href={APPLE_PRIVACY_SETTINGS_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors"

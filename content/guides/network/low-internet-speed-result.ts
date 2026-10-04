@@ -4,7 +4,7 @@ export const lowInternetSpeedResult: GuideArticle = {
   slug: 'low-internet-speed-result',
   title: 'Understanding an Unexpectedly Low Internet Speed Test Result',
   description:
-    'Why real speed tests return less than your plan promises: Wi-Fi physics, shared bandwidth, latency, provider routing, and a method for finding where your throughput actually disappears.',
+    'Why a fast line still measures slow: Wi-Fi physics, shared bandwidth, latency, provider routing, and how to find where your throughput disappears.',
   category: 'network',
   type: 'how-to',
   relatedToolSlugs: ['internet-speed-test', 'what-is-my-ip'],

@@ -4,7 +4,7 @@ export const webcamNotWorking: GuideArticle = {
   slug: 'webcam-not-working',
   title: 'Webcam Not Working: From Black Screen to Working Camera',
   description:
-    'A structured fix list for a webcam that shows a black screen or is simply not detected: camera permissions, device conflicts, driver resets, and USB troubleshooting.',
+    'A structured fix list for a webcam that shows a black screen or is not detected: permissions, device conflicts, driver resets, and USB.',
   category: 'video',
   type: 'troubleshooting',
   relatedToolSlugs: ['webcam-test', 'microphone-test', 'permission-diagnostics'],

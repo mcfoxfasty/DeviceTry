@@ -6,6 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Cpu, Video, ShoppingBag, Wrench, CheckCircle } from 'lucide-react';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { SITE_URL } from '@/lib/site';
+import { siteOpenGraph } from '@/lib/seo/metadata';
 
 export async function generateMetadata(): Promise<Metadata> {
   const title = 'About & Hardware Testing Methodology — DeviceTry';
@@ -15,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: '/about' },
-    openGraph: { title, description, type: 'website', url: `${SITE_URL}/about`, siteName: 'DeviceTry' },
+    openGraph: siteOpenGraph({ title, description, type: 'website', url: `${SITE_URL}/about` }),
   };
 }
 
@@ -26,7 +27,7 @@ export default function AboutPage() {
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
       <Navbar t={t} />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
+      <main id="main-content" className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         <div className="text-center max-w-2xl mx-auto">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] mb-3">
             <Cpu className="w-3.5 h-3.5" />

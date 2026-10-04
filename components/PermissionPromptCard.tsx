@@ -3,6 +3,7 @@
 import React from 'react';
 import { ShieldCheck, Lock, ExternalLink } from 'lucide-react';
 import { Translations } from '@/lib/i18n/types';
+import { APPLE_PRIVACY_SETTINGS_URL, WINDOWS_CAMERA_MICROPHONE_PRIVACY_URL } from '@/lib/permissions/helpLinks';
 
 interface PermissionPromptCardProps {
   t: Translations;
@@ -51,7 +52,7 @@ export function PermissionPromptCard({ t }: PermissionPromptCardProps) {
               {t.permissionPrompt.deviceSettings}
             </span>
             <a
-              href="https://support.microsoft.com/en-us/windows/windows-privacy-settings-8d6c1b1e-1f4b-4d9c-9d1a-2b4c3d5e6f7a"
+              href={WINDOWS_CAMERA_MICROPHONE_PRIVACY_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors"
@@ -60,7 +61,7 @@ export function PermissionPromptCard({ t }: PermissionPromptCardProps) {
               <ExternalLink className="w-3 h-3" />
             </a>
             <a
-              href="https://support.apple.com/en-us/HT210192"
+              href={APPLE_PRIVACY_SETTINGS_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors"

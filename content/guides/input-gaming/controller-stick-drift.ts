@@ -4,7 +4,7 @@ export const controllerStickDrift: GuideArticle = {
   slug: 'controller-stick-drift',
   title: 'Controller Stick Drift: Diagnose It, Calibrate It, Fix It',
   description:
-    'How to confirm stick drift, separate calibration problems from worn potentiometers, run a neutral check, and choose between cleaning, calibration, replacement modules, or drift-resistant sticks.',
+    'How to confirm stick drift, separate calibration problems from worn potentiometers, and choose between cleaning, calibration, or replacement modules.',
   category: 'input-gaming',
   type: 'troubleshooting',
   relatedToolSlugs: ['gamepad-test'],

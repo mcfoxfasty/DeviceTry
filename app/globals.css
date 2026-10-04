@@ -284,6 +284,126 @@ body {
   animation: pulseDot 2.2s ease-in-out infinite;
 }
 
+/* ===== One dot per curved outline =====
+   A single soft dot rides the border of each decorative outline, then fades,
+   so the four curves read as drawn rather than stamped. The dot is a CHILD of
+   its own outline (see app/page.tsx), which is the whole trick: the child is
+   placed in the outline's own box and inherits its rotation, so the path below
+   is written once in local pixels and lands on the visible border at any
+   viewport width. There is no JS, no measurement, and no second copy of the
+   positioning classes that could drift away from the line it is tracing.
+
+   Each `offset-path` is the centreline of the 2px border — the border-box
+   centre with the radius reduced by the 1px half-border — expressed against
+   the padding-box origin an absolutely positioned child is placed at:
+
+     --circle   672x672 rounded-full      circle, r 335, about (334, 334)
+     --disc     320x320 rounded-[4rem]    rounded square, r 63, about (157, 157)
+     --ellipse  512x176 rounded-full      stadium,  r 87, about ( 86,  86) and (422, 86)
+     --diamond  144x144 rounded-[2.5rem]  rounded square, r 39, about ( 70,  70)
+
+   A uniform border-radius only paints a true ellipse when the box is square.
+   `rounded-full` on the 512x176 outline clamps to 88px — half the SHORT side —
+   so what the browser draws is a STADIUM: straight top and bottom runs of
+   512 - 176 = 336px, joined by two semicircular caps of that same radius. Its
+   path is therefore four 87px arcs and two straight runs. Drawing it as a
+   true ellipse (rx 255, ry 87) agrees with the drawn line only at the four
+   extremes and bows up to 25px away from it in between, which would leave the
+   dot visibly cutting across empty space instead of riding the line.
+
+   The two explicit radii are the same story in miniature: 64px corners on a
+   320px box and 40px on a 144px one are true rounded squares, so their paths
+   are four corner arcs joined by straight runs. Every arc in every path uses
+   the SAME radius — the outline's own radius less the 1px half-border — and
+   tests/uiCorrections.test.ts pins that, so a path can no longer quietly
+   disagree with the border it is supposed to trace.
+
+   `offset-path` is the one primitive that traces a curve the compositor
+   honours without a per-frame script, and animating `offset-distance` moves
+   the dot without touching layout — no reflow, no scroll handlers, no canvas.
+
+   The glow is a symmetric envelope over the traversal, not a step on and off.
+   The dot leaves one end of the curve invisible, brightens steadily to its
+   peak exactly when it reaches the MIDDLE of the path, then dims by the same
+   shape on the way out and is gone by the far end. The rest of the cycle
+   (78% to 100%) it rests unseen at the end of the path, so the effect still
+   reads as an occasional glint rather than a line that is permanently lit.
+
+   That peak has to land on the middle of the PATH, not the middle of the
+   cycle, which is why offset-distance is driven linearly here. Under the
+   ease-in-out this animation used to carry, the dot was only a quarter of the
+   way along the curve when the cycle was half over, so a "half way" glow
+   peak would have lit up in the wrong place. The curves are long and the
+   periods are 34-58s, so linear still reads as drift — the circle covers
+   2105px in about 45s, roughly 47px/s.
+
+   Each outline gets its own period and its own negative delay, so the four
+   never pulse together and no viewer can learn a rhythm. Peak opacity is the
+   light-mode value because the pale background is the harsher of the two —
+   the near-black dark theme reads at the same alpha. */
+@keyframes curve-spark-travel {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  5%   { opacity: 0.08; }
+  14%  { opacity: 0.19; }
+  26%  { opacity: 0.31; }
+  39%  { opacity: 0.42; }
+  52%  { opacity: 0.31; }
+  64%  { opacity: 0.19; }
+  73%  { opacity: 0.08; }
+  78%  { offset-distance: 100%; opacity: 0; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+
+.curve-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  /* A dot has no facing direction, so it is kept from rolling with the
+     tangent — otherwise a shape is rotated for no visual gain. */
+  offset-rotate: 0deg;
+  pointer-events: none;
+  background-color: #15803D;
+  box-shadow:
+    0 0 4px rgba(21, 128, 61, 0.38),
+    0 0 11px rgba(21, 128, 61, 0.18);
+  opacity: 0;
+  animation: curve-spark-travel var(--curve-period) linear var(--curve-delay) infinite;
+}
+
+.curve-spark--circle {
+  offset-path: path("M 669 334 A 335 335 0 1 1 -1 334 A 335 335 0 1 1 669 334 Z");
+  --curve-period: 58s;
+  --curve-delay: -12s;
+}
+
+.curve-spark--disc {
+  offset-path: path("M 62 -1 L 254 -1 A 63 63 0 0 1 317 62 L 317 254 A 63 63 0 0 1 254 317 L 62 317 A 63 63 0 0 1 -1 254 L -1 62 A 63 63 0 0 1 62 -1 Z");
+  --curve-period: 44s;
+  --curve-delay: -31s;
+}
+
+.curve-spark--ellipse {
+  offset-path: path("M 86 -1 L 422 -1 A 87 87 0 0 1 509 86 A 87 87 0 0 1 422 173 L 86 173 A 87 87 0 0 1 -1 86 A 87 87 0 0 1 86 -1 Z");
+  --curve-period: 50s;
+  --curve-delay: -38s;
+}
+
+.curve-spark--diamond {
+  offset-path: path("M 38 -1 L 102 -1 A 39 39 0 0 1 141 38 L 141 102 A 39 39 0 0 1 102 141 L 38 141 A 39 39 0 0 1 -1 102 L -1 38 A 39 39 0 0 1 38 -1 Z");
+  --curve-period: 34s;
+  --curve-delay: -6s;
+}
+
+.dark .curve-spark {
+  background-color: #4ADE80;
+  box-shadow:
+    0 0 5px rgba(74, 222, 128, 0.42),
+    0 0 13px rgba(74, 222, 128, 0.2);
+}
+
 /* Subtle engineering dot-grid used behind the hero */
 .dot-grid {
   background-image: radial-gradient(circle, rgba(15, 118, 110, 0.14) 1px, transparent 1px);
@@ -299,6 +419,12 @@ body {
   .fade-up,
   .animate-pulse-dot {
     animation: none;
+  }
+  /* The curve sparks are decoration too, so reduced motion does not merely
+     slow them down — the dots are never placed on screen at all. */
+  .curve-spark {
+    animation: none;
+    opacity: 0;
   }
   .tool-card:hover {
     transform: none;

@@ -1,5 +1,6 @@
 import type {NextConfig} from 'next';
 import {nextRedirects} from './next.config.redirects';
+import {securityHeaders} from './lib/security/headers';
 
 /**
  * The production site URL is defined ONCE in lib/site.ts (validated
@@ -23,6 +24,24 @@ const nextConfig: NextConfig = {
     return nextRedirects();
   },
   reactStrictMode: true,
+  // Do not advertise the framework and its version on every response. Nothing
+  // on this site needs X-Powered-By, and removing it costs no functionality.
+  poweredByHeader: false,
+  // Security headers are defined once, in lib/security/headers.ts, together
+  // with the reasoning for each source in the CSP. They are applied here —
+  // the application level — because that is where every response that Next.js
+  // serves passes, and it is the only level that also applies to `next start`
+  // in staging, so the policy can actually be observed here before the
+  // Cloudflare build is cut. HSTS is intentionally absent until the production
+  // domain exists (see lib/security/headers.ts).
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: securityHeaders(),
+      },
+    ];
+  },
   // LINT ENFORCEMENT (2026-09-21): this 2 GiB container OOM-killed two
   // production builds when Next's in-build lint worker ran alongside the
   // resident compile worker (evidence: "Cannot find module for page" ENOENT

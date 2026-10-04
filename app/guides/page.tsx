@@ -7,20 +7,20 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { getPublishedGuides, GUIDE_CATEGORIES } from '@/lib/guides/registry';
 import { SITE_URL } from '@/lib/site';
+import { siteOpenGraph } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = {
   title: 'Guides — Troubleshooting & Buying Advice | DeviceTry',
   description:
     'Practical troubleshooting guides and specification-based buying guides for microphones, webcams, keyboards, controllers, screens, and home networks.',
   alternates: { canonical: '/guides' },
-  openGraph: {
+  openGraph: siteOpenGraph({
     title: 'Guides — Troubleshooting & Buying Advice | DeviceTry',
     description:
       'Practical troubleshooting guides and specification-based buying guides for microphones, webcams, keyboards, controllers, screens, and home networks.',
     type: 'website',
     url: `${SITE_URL}/guides`,
-    siteName: 'DeviceTry',
-  },
+  }),
 };
 
 export default function GuidesHub() {
@@ -30,7 +30,7 @@ export default function GuidesHub() {
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <main id="main-content" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] text-[11px] font-bold uppercase tracking-wider mb-4">
             <BookOpen className="w-3.5 h-3.5" />

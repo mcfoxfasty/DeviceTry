@@ -4,7 +4,7 @@ export const mouseDoubleClicking: GuideArticle = {
   slug: 'mouse-double-clicking',
   title: 'Unwanted Mouse Double-Clicking: Causes and Real Fixes',
   description:
-    'Why a single click fires twice or a drag releases itself: switch chatter versus software settings, how to tell them apart with a button test, and what can actually be repaired.',
+    'Why one click fires twice or a drag releases itself: switch chatter versus software settings, how to tell them apart, and what can be repaired.',
   category: 'input-gaming',
   type: 'troubleshooting',
   relatedToolSlugs: ['mouse-test', 'click-speed-test'],

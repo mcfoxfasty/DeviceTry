@@ -462,7 +462,13 @@ export function GuidedInspectionFlow({
                 Previous
               </button>
 
-              <div className="flex items-center gap-2" aria-label={`Step ${activeStepIndex + 1} of ${suite.steps.length}`}>
+              {/* The checklist strip is an ordered list, not a row of bare <div>s. A
+                  screen reader otherwise hears only "1 2 3 4" with no idea what
+                  the numbers are, and the per-step status existed only in a
+                  `title` tooltip — reachable by mouse, never by keyboard.
+                  Each item now carries its own visually hidden text; the dots
+                  themselves look exactly as before. */}
+                <ol className="flex items-center gap-2" aria-label="Inspection steps">
                 {suite.steps.map((st, i) => {
                   const stepResult = results[st];
                   const stepCls =
@@ -480,7 +486,7 @@ export function GuidedInspectionFlow({
                                 ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 line-through'
                                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
                   return (
-                    <div
+                    <li
                       key={st}
                       title={
                         stepResult
@@ -491,10 +497,19 @@ export function GuidedInspectionFlow({
                       className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors ${stepCls}`}
                     >
                       {i + 1}
-                    </div>
+                      <span className="sr-only">
+                        {` — ${TEST_LABELS[st] ?? st}, ${
+                          i === activeStepIndex
+                            ? 'current step'
+                            : stepResult
+                              ? stepResult.status
+                              : 'not evaluated yet'
+                        }`}
+                      </span>
+                    </li>
                   );
                 })}
-              </div>
+                </ol>
 
               <button
                 id="btn-next-inspection-step"

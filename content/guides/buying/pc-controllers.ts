@@ -4,7 +4,7 @@ export const pcControllers: GuideArticle = {
   slug: 'pc-controllers',
   title: 'Buying Guide: PC Controllers',
   description:
-    'Connection standards, stick technology, and platform compatibility explained — with specification-based picks including drift-resistant hall-effect sticks, and how to verify a controller before committing.',
+    'Connection standards, stick technology, and platform compatibility — with specification-based picks, including drift-resistant hall-effect sticks.',
   category: 'input-gaming',
   type: 'buying',
   relatedToolSlugs: ['gamepad-test', 'reaction-time-test'],

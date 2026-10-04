@@ -23,10 +23,18 @@ interface LogoProps {
 export const DEVICE_TRY_GREEN = '#7ED957';
 export const DEVICE_TRY_NAVY = '#0E1B2E';
 
-/** Screen + check artwork, trimmed to its ink: 1536 x 1010 px. */
+/** Screen + check artwork, trimmed to its ink. */
 const MARK_ASPECT = 1536 / 1010;
-const DEVICE_TRY_LOGO_SRC = '/brand/devicetry-logo.png';
-const DEVICE_TRY_LOGO_SRC_LIGHT = '/brand/devicetry-logo-light.png';
+/**
+ * The mark is rendered at ~25 CSS px tall (the largest call site is size=30,
+ * times MARK_HEIGHT_RATIO 0.82) and ~38 px wide, but it shipped as the full
+ * 1536 x 1010 source — 56 KB per ink variant, fetched on every page load to
+ * fill a 38 px slot. These are the SAME artwork re-encoded at 152 x 100 (four
+ * times the largest rendered size, well past any 2x/3x display): 3.7 KB, same
+ * aspect, same ink bounds, so nothing about the mark's appearance changes.
+ */
+const DEVICE_TRY_LOGO_SRC = '/brand/devicetry-mark.png';
+const DEVICE_TRY_LOGO_SRC_LIGHT = '/brand/devicetry-mark-light.png';
 
 /**
  * Optical balance. Plus Jakarta Sans has a cap height of ~0.73em, so the mark

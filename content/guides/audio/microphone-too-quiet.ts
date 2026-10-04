@@ -4,7 +4,7 @@ export const microphoneTooQuiet: GuideArticle = {
   slug: 'microphone-too-quiet',
   title: 'Microphone Too Quiet? How to Raise Your Input Level',
   description:
-    'Why your voice records at a whisper-quiet level and how to fix it: input gain, mic distance, OS level sliders, app boost, and when a different microphone type is the real answer.',
+    'Why your voice records at a whisper-quiet level, and how to fix it: input gain, mic distance, OS level sliders, and app boost.',
   category: 'audio',
   type: 'troubleshooting',
   relatedToolSlugs: ['microphone-test', 'voice-recorder', 'speakers-test'],

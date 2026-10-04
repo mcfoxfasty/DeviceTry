@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/site';
+import { siteOpenGraph } from '@/lib/seo/metadata';
 
 /**
  * The test-history page is a client component (it reads results from local
@@ -10,16 +11,15 @@ import { SITE_URL } from '@/lib/site';
 export const metadata: Metadata = {
   title: 'Test History — DeviceTry',
   description:
-    'Review the DeviceTry test results saved on this device, including past microphone, webcam, speaker, screen, and network tests. History is stored locally in your browser.',
+    'Review DeviceTry results saved on this device: past microphone, webcam, speaker, screen, and network tests, stored in your browser.',
   alternates: { canonical: '/test-history' },
-  openGraph: {
+  openGraph: siteOpenGraph({
     title: 'Test History — DeviceTry',
     description:
-      'Review the DeviceTry test results saved on this device, including past microphone, webcam, speaker, screen, and network tests. History is stored locally in your browser.',
+      'Review DeviceTry results saved on this device: past microphone, webcam, speaker, screen, and network tests, stored in your browser.',
     type: 'website',
     url: `${SITE_URL}/test-history`,
-    siteName: 'DeviceTry',
-  },
+  }),
 };
 
 export default function TestHistoryLayout({ children }: { children: React.ReactNode }) {

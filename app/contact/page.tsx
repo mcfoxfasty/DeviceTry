@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Mail, Copy, Download, Check, Info } from 'lucide-react';
+import { Mail, Copy, Download, Check, AlertTriangle, Info } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
@@ -13,7 +13,11 @@ export default function ContactPage() {
   const [email, setEmail] = useState<string>('');
   const [topic, setTopic] = useState<string>('Technical Support');
   const [message, setMessage] = useState<string>('');
-  const [copied, setCopied] = useState<boolean>(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  /** Clear the copy feedback. Held in a ref so a second click restarts the
+   *  timer instead of stacking two timeouts that fight over the same state. */
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * This form has no backend by design: DeviceTry is a fully client-side site,
@@ -32,15 +36,36 @@ export default function ContactPage() {
     ].join('\n');
   }, [name, email, topic, message]);
 
+  /**
+   * Copy the composed message, and ALWAYS say what happened.
+   *
+   * The old handler set "Copied!" on success and did nothing at all on
+   * failure: a denied clipboard permission, an insecure context, or a browser
+   * without the async Clipboard API left the button looking untouched, which
+   * reads as "my click did nothing" — the visitor assumes the copy worked and
+   * pastes an empty clipboard into their email. A visible failure that points
+   * at the working alternative (Download Message) is the honest outcome.
+   */
   const handleCopy = async () => {
+    const finish = (next: 'copied' | 'failed') => {
+      setCopyState(next);
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+      copyResetTimer.current = setTimeout(() => setCopyState('idle'), 4000);
+    };
+
     try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(composedMessage);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      finish('copied');
     } catch {
-      // Clipboard API unavailable (e.g. insecure context) — download still works.
+      finish('failed');
     }
   };
+
+  // Never leave a timer running into an unmount.
+  useEffect(() => () => {
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+  }, []);
 
   const handleDownload = () => {
     const blob = new Blob([composedMessage], { type: 'text/plain;charset=utf-8' });
@@ -60,7 +85,7 @@ export default function ContactPage() {
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
       <Navbar t={t} />
 
-      <main className="flex-1 max-w-xl w-full mx-auto px-4 py-12">
+      <main id="main-content" className="flex-1 max-w-xl w-full mx-auto px-4 py-12">
         <div className="text-center mb-8">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] mb-3">
             <Mail className="w-3.5 h-3.5" />
@@ -171,10 +196,17 @@ export default function ContactPage() {
                 type="button"
                 onClick={handleCopy}
                 disabled={!message.trim()}
+                aria-describedby="contact-copy-status"
                 className="py-2.5 bg-[#0F766E] hover:bg-[#0D665F] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied!' : 'Copy Message'}
+                {copyState === 'copied' ? (
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                ) : copyState === 'failed' ? (
+                  <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Copy failed' : 'Copy Message'}
               </button>
               <button
                 type="button"
@@ -182,10 +214,29 @@ export default function ContactPage() {
                 disabled={!message.trim()}
                 className="py-2.5 bg-[#F6F7F9] dark:bg-[#192332] hover:border-[#0F766E] disabled:opacity-40 disabled:cursor-not-allowed border border-[#DFE5EB] dark:border-[#223043] text-[#142033] dark:text-[#E9EEF4] font-semibold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" aria-hidden="true" />
                 Download Message
               </button>
             </div>
+
+            {/* The outcome of the last copy attempt, in text as well as in the
+                button label: a live region so it reaches a screen reader, and a
+                failed copy names the action that still works. `min-h` reserves
+                the row so appearing and disappearing text shifts nothing. */}
+            <p
+              id="contact-copy-status"
+              role="status"
+              aria-live="polite"
+              className={`mt-2 min-h-[16px] text-[11px] leading-relaxed ${
+                copyState === 'failed' ? 'text-amber-700 dark:text-amber-300' : 'text-[#5F6B7A] dark:text-[#9AA6B8]'
+              }`}
+            >
+              {copyState === 'copied'
+                ? 'Message copied to your clipboard. Paste it into your email app.'
+                : copyState === 'failed'
+                  ? 'Your browser blocked the copy. Select the text above, or use Download Message to save it as a file.'
+                  : ''}
+            </p>
           </form>
 
           <p className="mt-6 text-[11px] text-[#8996A6] leading-relaxed">

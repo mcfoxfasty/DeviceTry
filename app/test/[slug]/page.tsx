@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDictionary } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
+import { DEFAULT_OG_IMAGE, siteOpenGraph } from '@/lib/seo/metadata';
 import { ALL_TOOL_PAGES, TOOLS_REGISTRY, findToolBySlug } from '@/lib/tools/registry';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
@@ -36,19 +37,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     alternates: {
       canonical: `/test/${tool.slug}`,
     },
-    openGraph: {
+    openGraph: siteOpenGraph({
       title,
       description,
       type: 'website',
       // Page-specific: omitted here means no tag at all, which is why these
       // pages previously had no og:url while the site root leaked in elsewhere.
       url: `${SITE_URL}/test/${tool.slug}`,
-      siteName: 'DeviceTry',
-    },
+    }),
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: [DEFAULT_OG_IMAGE.url],
     },
   };
 }
@@ -73,7 +74,7 @@ export default async function ToolPage({ params }: PageProps) {
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+      <main id="main-content" className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
         <ToolDetailView tool={tool} t={t} titleHeading="h1" />
 
         {/* Long-form content: about, tips, problems, OS guides, FAQ */}

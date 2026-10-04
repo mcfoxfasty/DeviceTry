@@ -6,6 +6,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
+import { siteOpenGraph } from '@/lib/seo/metadata';
 import { TOOLS_REGISTRY } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
 import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
@@ -13,16 +14,15 @@ import { ToolAssetIcon } from '@/components/ui/ToolAssetIcon';
 export const metadata: Metadata = {
   title: 'All Tools — Free Online Device Tests | DeviceTry',
   description:
-    'Browse all 15 free browser-based device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup.',
+    'Browse all 15 free browser device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, screen, refresh rate, speed, and IP lookup.',
   alternates: { canonical: '/tests' },
-  openGraph: {
+  openGraph: siteOpenGraph({
     title: 'All Tools — Free Online Device Tests | DeviceTry',
     description:
-      'Browse all 15 free browser-based device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, touchscreen, click speed, reaction time, screen, refresh rate, internet speed, and IP lookup.',
+      'Browse all 15 free browser device tests: microphone, webcam, speakers, keyboard, mouse, gamepad, screen, refresh rate, speed, and IP lookup.',
     type: 'website',
     url: `${SITE_URL}/tests`,
-    siteName: 'DeviceTry',
-  },
+  }),
 };
 
 export default function TestsHub() {
@@ -31,7 +31,7 @@ export default function TestsHub() {
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <main id="main-content" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] text-[11px] font-bold uppercase tracking-wider mb-4">
             <LayoutGrid className="w-3.5 h-3.5" />

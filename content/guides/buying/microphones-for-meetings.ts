@@ -4,7 +4,7 @@ export const microphonesForMeetings: GuideArticle = {
   slug: 'microphones-for-meetings',
   title: 'Buying Guide: Microphones for Video Meetings',
   description:
-    'How to choose a meeting microphone by pickup pattern, connection type, and room treatment — with specification-based picks for desk setups, untreated rooms, and travel kits.',
+    'Choosing a meeting microphone by pickup pattern, connection type, and room treatment — with picks for desks, untreated rooms, and travel kits.',
   category: 'audio',
   type: 'buying',
   relatedToolSlugs: ['microphone-test', 'voice-recorder'],

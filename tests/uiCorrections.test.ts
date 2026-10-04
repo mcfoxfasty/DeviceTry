@@ -106,9 +106,13 @@ test('brand - the logo renders the supplied Logo.png file and Try shares its gre
   assert.match(logo, /<span style=\{\{ color: DEVICE_TRY_GREEN \}\}>Try<\/span>/);
   assert.doesNotMatch(logo, /text-\[#0F766E\] dark:text-\[#14B8A6\]">Try/);
 
-  // The mark is the supplied file, not a redrawn SVG.
+  // The mark is the supplied artwork, not a redrawn SVG. It is served from a
+  // downscaled derivative of that artwork (the component renders it at ~25 CSS
+  // px, so shipping the 1536x1010 source cost 56 KB per ink variant to fill a
+  // 38 px slot), never from an SVG.
   assert.match(logo, /import Image from 'next\/image'/);
-  assert.match(logo, /const DEVICE_TRY_LOGO_SRC = '\/brand\/devicetry-logo\.png'/);
+  assert.match(logo, /const DEVICE_TRY_LOGO_SRC = '\/brand\/devicetry-mark\.png'/);
+  assert.match(logo, /const DEVICE_TRY_LOGO_SRC_LIGHT = '\/brand\/devicetry-mark-light\.png'/);
   assert.match(logo, /src=\{DEVICE_TRY_LOGO_SRC\}/);
   assert.match(logo, /alt=""/);
   assert.match(logo, /aria-hidden="true"/);
@@ -116,7 +120,18 @@ test('brand - the logo renders the supplied Logo.png file and Try shares its gre
 
   // Untouched source file plus the generated brand/app/favicon assets.
   assert.ok(existsSync(join(repoRoot, 'public', 'Logo.png')), 'the supplied source logo must stay in the repo');
-  assert.ok(existsSync(join(repoRoot, 'public', 'brand', 'devicetry-logo.png')), 'generated brand logo must exist');
+  assert.ok(existsSync(join(repoRoot, 'public', 'brand', 'devicetry-logo.png')), 'the full-size generated brand logo must exist');
+  // The rendered mark must be a real, small derivative of the same artwork:
+  // it exists, it is a PNG (not an SVG renamed), and it is dramatically
+  // smaller than the source it was scaled from.
+  for (const file of ['devicetry-mark.png', 'devicetry-mark-light.png']) {
+    const rendered = join(repoRoot, 'public', 'brand', file);
+    assert.ok(existsSync(rendered), `${file} must exist`);
+    assert.ok(
+      statSync(rendered).size < statSync(join(repoRoot, 'public', 'brand', 'devicetry-logo.png')).size / 4,
+      `${file} must be a downscaled derivative, not a copy of the full-size mark`
+    );
+  }
   assert.ok(existsSync(join(repoRoot, 'app', 'icon.png')), 'app icon must exist');
   assert.equal(existsSync(join(repoRoot, 'app', 'icon.svg')), false, 'the old vector icon is replaced by the supplied artwork');
   assert.ok(existsSync(join(repoRoot, 'public', 'favicon.ico')), 'favicon must exist');
@@ -474,6 +489,252 @@ test('homepage background - outlines and grid use the tool-icon green', () => {
   }
 });
 
+test('homepage curve sparks - one dot per curved outline, riding that outline, off under reduced motion', () => {
+  const page = readFileSync('app/page.tsx', 'utf8');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  const decorative = page.slice(page.indexOf('function DecorativeBackground'), page.indexOf('export default function HomePage'));
+
+  // Exactly one dot per outline, and the dot is a CHILD of the line it traces.
+  // That parenting is the mechanism, not a stylistic choice: the child is
+  // placed in the outline's own box and inherits its rotation, so a path
+  // written in local pixels stays welded to the border at any viewport width.
+  // A sibling would have needed a second copy of the positioning classes, and
+  // that copy is precisely what drifts and leaves a dot crossing empty space.
+  const sparks = [...decorative.matchAll(/className="curve-spark (curve-spark--[a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(
+    sparks,
+    ['curve-spark--circle', 'curve-spark--disc', 'curve-spark--ellipse', 'curve-spark--diamond'],
+    'all four curved outlines carry exactly one dot, each with its own geometry'
+  );
+  assert.equal([...decorative.matchAll(/className="curve-spark /g)].length, 4, 'there are four dots, not a trail or a set');
+  for (const shape of sparks) {
+    const open = decorative.indexOf(`curve-spark ${shape}`);
+    const close = decorative.indexOf('</div>', open);
+    assert.ok(open !== -1 && close > open, `${shape} lives inside its outline`);
+  }
+
+  // Purely declarative: no script, no loop, no measurement. The path is
+  // declared once in CSS, so there is nothing that can run per frame.
+  assert.doesNotMatch(decorative, /useState|useEffect|requestAnimationFrame|<canvas|<script/i, 'no JS drives the dots');
+  assert.doesNotMatch(page, /curveSpark/i, 'the dots carry no React state');
+
+  // The square grid is explicitly NOT the target: it keeps its own straight
+  // spark and gains nothing from this effect.
+  const lightGrid = globals.slice(globals.indexOf('.homepage-geometry {'), globals.indexOf('.dark .homepage-geometry {'));
+  const darkGrid = globals.slice(globals.indexOf('.dark .homepage-geometry {'), globals.indexOf('.how-step::after'));
+  for (const block of [lightGrid, darkGrid]) {
+    assert.doesNotMatch(block, /animation|@keyframes|curve-spark/, 'the grid layers stay a static background');
+  }
+  // The dots on the square grid were removed: the travelling light now belongs
+  // to the green outlines only, and nothing rides a grid line any more.
+  assert.equal([...decorative.matchAll(/grid-spark/g)].length, 0, 'no dot rides the square grid any more');
+  assert.doesNotMatch(globals, /grid-spark/, 'the grid spark CSS is gone too, not just its markup');
+  assert.doesNotMatch(globals, /@keyframes grid-spark-travel/, 'its keyframes are gone as well');
+
+  // A real motion path per shape, and the dot is anchored to it.
+  const base = globals.slice(globals.indexOf('.curve-spark {'), globals.indexOf('.curve-spark--circle {'));
+  assert.match(base, /position: absolute/, 'the dot is out of flow, so it can never shift layout');
+  assert.match(base, /pointer-events: none/, 'it can never intercept a hover or a tap');
+  assert.match(base, /animation: curve-spark-travel/, 'it is animated from CSS');
+  for (const shape of sparks) {
+    const block = globals.slice(globals.indexOf(`.${shape} {`), globals.indexOf('}', globals.indexOf(`.${shape} {`)));
+    assert.match(block, /offset-path: path\("M /, `${shape} declares an explicit path`);
+    // A curve, not a straight line: every shape's path is built from arc
+    // segments, and a rounded square is arcs joined by straight runs rather
+    // than a single circle.
+    assert.ok(
+      (block.match(/ A [\d.]+ [\d.]+ /g) || []).length >= 2,
+      `${shape} is traced with arc segments, not a straight line`
+    );
+    assert.match(block, /--curve-period: \d+s/, `${shape} has its own period`);
+    assert.match(block, /--curve-delay: -\d+s/, `${shape} starts mid-glide rather than at rest`);
+  }
+  // Four different periods and four different offsets: if these were shared the
+  // four dots would pulse together and read as one heartbeat instead of four
+  // independent glints.
+  const periods = sparks.map((s) => globals.match(new RegExp(`\\.${s} \\{[\\s\\S]*?--curve-period: (\\d+)s`))![1]);
+  const delays = sparks.map((s) => globals.match(new RegExp(`\\.${s} \\{[\\s\\S]*?--curve-delay: -(\\d+)s`))![1]);
+  assert.equal(new Set(periods).size, 4, 'no two outlines share a period');
+  assert.equal(new Set(delays).size, 4, 'no two outlines share a delay');
+
+  // Only offset-distance and opacity animate. offset-distance is compositor
+  // motion along a declared path: it cannot reflow the page the way animating
+  // top/left or a scroll handler would.
+  const anim = globals.match(/@keyframes curve-spark-travel \{([\s\S]*?)\n\}/)![1];
+  const keyframes = [...anim.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]);
+  for (const frame of keyframes) {
+    for (const prop of frame.split(';').map((d) => d.split(':')[0].trim())) {
+      assert.ok(['offset-distance', 'opacity', ''].includes(prop), `only offset-distance and opacity animate (found ${prop})`);
+    }
+  }
+  assert.match(anim, /offset-distance: 100%/, 'the dot traverses the whole curve');
+  assert.match(anim, /100%\s*\{\s*offset-distance: 100%;\s*opacity: 0;/, 'and it is absent for the rest of the loop');
+
+  // Occasional, not a constant lit line: a long cycle, and a rest window at
+  // the end of it where the dot is parked unseen.
+  assert.ok(periods.every((p) => Number(p) >= 24), 'every cycle is slow enough to be ambience');
+
+  // The glow is a symmetric envelope, not a step on and off. Parsed as
+  // (cycle %, opacity) pairs so the shape is checked, not just the endpoints.
+  const frames = [...anim.matchAll(/(\d+(?:\.\d+)?)%\s*\{([^}]*)\}/g)].map(([, pct, body]) => ({
+    pct: Number(pct),
+    opacity: body.includes('opacity:') ? Number(body.match(/opacity: ([\d.]+)/)![1]) : null,
+    distance: body.includes('offset-distance:') ? body.match(/offset-distance: (\d+)%/)![1] : null,
+  }));
+  const opacityFrames = frames.filter((f) => f.opacity !== null);
+  assert.ok(opacityFrames.length >= 7, `the glow is built from a ramp, not two steps (${opacityFrames.length} frames)`);
+
+  // The peak must fall on the MIDDLE OF THE PATH, so it has to sit halfway
+  // through the traversal window (the part of the cycle spent moving from 0%
+  // to 100% of offset-distance), not simply at the 50% mark of the cycle.
+  const travelStart = 0;
+  const travelEnd = Number(frames.find((f) => f.distance === '100')!.pct);
+  const peakFrame = opacityFrames.reduce((a, b) => (b.opacity! > a.opacity! ? b : a));
+  const travelMid = (travelStart + travelEnd) / 2;
+  assert.equal(peakFrame.pct, travelMid, `the glow peaks at the middle of the path (${peakFrame.pct}% vs ${travelMid}%)`);
+
+  // Rises all the way to the peak and falls by the same amount after it, so
+  // the dot does not blink on and off.
+  const rising = opacityFrames.filter((f) => f.pct <= peakFrame.pct);
+  const falling = opacityFrames.filter((f) => f.pct >= peakFrame.pct);
+  for (let i = 1; i < rising.length; i++) {
+    assert.ok(rising[i].opacity! > rising[i - 1].opacity!, `the glow rises gradually up to the peak (at ${rising[i].pct}%)`);
+  }
+  for (let i = 1; i < falling.length; i++) {
+    // Non-increasing: once the dot has reached zero it stays at zero through
+    // the rest window rather than dipping further.
+    assert.ok(falling[i].opacity! <= falling[i - 1].opacity!, `the glow falls gradually after the peak (at ${falling[i].pct}%)`);
+    if (falling[i - 1].opacity! > 0) {
+      assert.ok(falling[i].opacity! < falling[i - 1].opacity!, `the fall is real while the dot is still lit (at ${falling[i].pct}%)`);
+    }
+  }
+  // Invisible at both ends of the traversal, and symmetric about the peak.
+  assert.equal(rising[0].opacity, 0, 'the dot leaves the far end of the curve unseen');
+  assert.equal(falling[falling.length - 1].opacity, 0, 'and arrives at the near end unseen');
+  for (const f of rising) {
+    const mirror = falling.find((g) => g.pct === travelMid + (travelMid - f.pct));
+    if (mirror) assert.equal(mirror.opacity, f.opacity, `the fade out mirrors the fade in at ${f.pct}%`);
+  }
+
+  // It rests unseen for the rest of the cycle, so the effect is an occasional
+  // glint rather than a line that is permanently lit.
+  assert.ok(travelEnd <= 90, `the dot finishes its crossing and then rests (crossing ends at ${travelEnd}%)`);
+  assert.ok(100 - travelEnd >= 10, `it is absent for a real part of every cycle (rest ${100 - travelEnd}%)`);
+
+  // The peak has to land on the middle of the PATH, which only holds if
+  // offset-distance advances linearly. Under the old ease-in-out the dot was
+  // a quarter of the way along the curve at the cycle's halfway point, so the
+  // envelope above would have peaked in the wrong place.
+  assert.match(base, /curve-spark-travel var\(--curve-period\) linear /, 'offset-distance is linear so the peak lands mid-path');
+
+  // The one hard accessibility requirement: no motion at all when asked.
+  const reduced = globals.slice(globals.indexOf('@media (prefers-reduced-motion: reduce)'));
+  const reducedSpark = reduced.slice(reduced.indexOf('.curve-spark'), reduced.indexOf('.tool-card:hover'));
+  assert.match(reducedSpark, /animation: none/, 'reduced motion switches the animation off');
+  assert.match(reducedSpark, /opacity: 0/, 'and the dot is never placed on screen');
+
+  // Subtle in both themes, and the dots use the same green as the lines they
+  // ride so they read as part of the outline rather than as a separate light.
+  const darkSpark = globals.slice(globals.indexOf('.dark .curve-spark {'), globals.indexOf('/* Subtle engineering dot-grid'));
+  const peak = Math.max(...[...anim.matchAll(/opacity: ([\d.]+);/g)].map((m) => Number(m[1])));
+  assert.ok(peak > 0 && peak <= 0.5, `the dot stays faint at its brightest (${peak})`);
+  assert.match(base, /#15803D/, 'it uses the same light tool-icon green as the outlines');
+  assert.match(darkSpark, /#4ADE80/, 'and the same dark green');
+  assert.match(base, /box-shadow/, 'the glow is a small static box-shadow');
+  assert.match(base, /width: 5px;[\s\S]*height: 5px;/, 'the dot is small');
+  // The outlines themselves must not have picked up a second halo.
+  assert.equal([...decorative.matchAll(/dark:shadow-\[/g)].length, 4, 'each outline still carries exactly one halo');
+});
+
+test('homepage curve sparks - every path traces the border its outline actually draws', () => {
+  const page = readFileSync('app/page.tsx', 'utf8');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  const decorative = page.slice(page.indexOf('function DecorativeBackground'), page.indexOf('export default function HomePage'));
+
+  // The reason this test exists: a motion path that is merely a plausible
+  // curve is not enough. The dot has to sit ON the painted border, and a
+  // uniform border-radius does not always paint the shape it appears to. A
+  // `rounded-full` outline on a 512x176 box clamps to 88px — half the SHORT
+  // side — so the browser draws a stadium (two straight 336px runs joined by
+  // semicircular caps), NOT an ellipse. A path written as a true ellipse
+  // agreed with the drawn line only at the four extremes and sat up to 25px
+  // off it in between, which reads as the dot crossing empty space.
+  //
+  // So the geometry is DERIVED from each outline's own Tailwind classes rather
+  // than restated here. If an outline's size or radius changes, this fails
+  // until its path is updated to match.
+
+  /** Tailwind's numeric spacing scale: n -> n/4 rem, so 80 -> 320px. */
+  const spacing = (token: string) => (Number(token) / 4) * 16;
+  /** `[Nrem]` arbitrary values, e.g. `h-[42rem]` -> 672. */
+  const arbitrary = (token: string) => parseFloat(token) * 16;
+
+  const outlines = [...decorative.matchAll(/<div className="absolute ([^"]*?)">\s*<span className="curve-spark curve-spark--([a-z]+)"/g)].map(
+    (m) => ({ classes: m[1], shape: m[2] })
+  );
+  assert.equal(outlines.length, 4, 'each of the four outlines carries a dot');
+
+  for (const { classes, shape } of outlines) {
+    const dim = (axis: string) => {
+      const bracket = classes.match(new RegExp(`${axis}-\\[([\\d.]+)rem\\]`));
+      if (bracket) return arbitrary(bracket[1]);
+      const plain = classes.match(new RegExp(`${axis}-(\\d+)\\b`));
+      assert.ok(plain, `${shape}: no ${axis} size class found`);
+      return spacing(plain[1]);
+    };
+    const w = dim('w');
+    const h = dim('h');
+
+    // A used border-radius: `rounded-full` clamps to half the short side,
+    // `rounded-[Nrem]` is taken literally. A uniform radius can never exceed
+    // half the short side on both axes.
+    const usedRadius = classes.includes('rounded-full')
+      ? Math.min(w, h) / 2
+      : arbitrary(classes.match(/rounded-\[([\d.]+)rem\]/)![1]);
+    // The border is 2px, so its centreline is half a pixel inside the edge.
+    const BORDER = 2;
+    const r = usedRadius - BORDER / 2;
+
+    const block = globals.slice(globals.indexOf(`.curve-spark--${shape} {`), globals.indexOf('}', globals.indexOf(`.curve-spark--${shape} {`)));
+    const d = block.match(/offset-path: path\("([^"]+)"\)/)![1];
+
+    // The border centreline runs 1px inside the box edge, expressed against
+    // the padding-box origin a positioned child is placed at, so from -1 to
+    // w - 3.
+    const xs = [...d.matchAll(/-?\d+(?:\.\d+)?/g)].map(Number);
+    assert.ok(xs.length > 0, `${shape}: path has coordinates`);
+
+    // Every arc must use the outline's own corner radius, and must be a
+    // circular arc (rx === ry). An elliptical arc (rx !== ry) can only ever
+    // match a square box.
+    const arcs = [...d.matchAll(/A ([\d.]+) ([\d.]+) /g)].map(([, rx, ry]) => [Number(rx), Number(ry)]);
+    assert.ok(arcs.length >= 2, `${shape}: the path is built from arc segments`);
+    for (const [rx, ry] of arcs) {
+      assert.equal(rx, ry, `${shape}: every arc is circular, not elliptical (rx ${rx} vs ry ${ry})`);
+      assert.equal(rx, r, `${shape}: arc radius ${rx} matches the outline's border radius (${r})`);
+    }
+
+    // The path must span exactly the border centreline, and no further: a
+    // point outside [-1, w-3] x [-1, h-3] is not on the drawn line.
+    const coords = [...d.matchAll(/([ML]) (-?[\d.]+) (-?[\d.]+)/g)].map(([, cmd, x, y]) => ({
+      cmd, x: Number(x), y: Number(y),
+    }));
+    for (const { x, y } of coords) {
+      assert.ok(x >= -1 && x <= w - 3, `${shape}: x ${x} is on the border centreline (-1..${w - 3})`);
+      assert.ok(y >= -1 && y <= h - 3, `${shape}: y ${y} is on the border centreline (-1..${h - 3})`);
+    }
+
+    // A rounded square and a stadium both need four arcs (one per quarter);
+    // only a true circle can close with two.
+    const isCircle = w === h && usedRadius === w / 2;
+    assert.equal(
+      arcs.length,
+      isCircle ? 2 : 4,
+      `${shape}: ${isCircle ? 'a circle closes with two arcs' : 'a rounded square / stadium needs four'}`
+    );
+  }
+});
+
 test('homepage order - hero, tools, quick guided check, how, privacy, guides, FAQ', () => {
   const landing = readFileSync('components/LandingClient.tsx', 'utf8');
   const dictionary = readFileSync('lib/i18n/dictionaries/en.ts', 'utf8');
@@ -539,7 +800,8 @@ test('homepage renders on the server - no useSearchParams, no empty 60vh shell',
   assert.doesNotMatch(landingCode, /useSearchParams/, 'LandingClient must not opt the homepage out of prerendering');
   assert.doesNotMatch(page, /min-h-\[60vh\]/, 'no empty placeholder shell around the homepage');
   assert.doesNotMatch(page, /<Suspense/, 'no Suspense boundary deferring the homepage markup');
-  assert.match(page, /<main className="flex-1 relative z-10">[\s\S]*?<LandingClient t=\{t\} guides=\{pickHomeGuides\(\)\} \/>[\s\S]*?<\/main>/);
+  // The id is the skip-to-content target; the rest of the markup is unchanged.
+  assert.match(page, /<main id="main-content" className="flex-1 relative z-10">[\s\S]*?<LandingClient t=\{t\} guides=\{pickHomeGuides\(\)\} \/>[\s\S]*?<\/main>/);
 
   // The URL is read through useSyncExternalStore instead, which gives the
   // server and the first client render the same snapshot, and popstate still

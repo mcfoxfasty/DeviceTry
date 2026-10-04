@@ -4,7 +4,7 @@ export const checkingScreenDeadPixels: GuideArticle = {
   slug: 'checking-screen-dead-pixels',
   title: 'How to Check a Screen for Dead and Stuck Pixels',
   description:
-    'A practical walkthrough for finding dead, stuck, and hot pixels on any display: the right colors to use, fullscreen technique, lighting conditions, and how to tell defects from software artifacts.',
+    'A practical walkthrough for finding dead, stuck, and hot pixels: the colors to use, fullscreen technique, and how to tell defects from software artifacts.',
   category: 'display',
   type: 'how-to',
   relatedToolSlugs: ['screen-test', 'refresh-rate-test'],

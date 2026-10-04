@@ -4,7 +4,7 @@ export const budgetHeadphones: GuideArticle = {
   slug: 'budget-headphones',
   title: 'Buying Guide: Budget Headphones That Punch Above Their Price',
   description:
-    'What headphone specifications actually predict (isolation, comfort, cable system) and which do not — with specification-based picks for desk listening, commuting, and strict budgets.',
+    'What headphone specifications actually predict (isolation, comfort, cable system) and which do not — with picks for desks, commuting, and tight budgets.',
   category: 'audio',
   type: 'buying',
   relatedToolSlugs: ['speakers-test', 'tone-generator'],

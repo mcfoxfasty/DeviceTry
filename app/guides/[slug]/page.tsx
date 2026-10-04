@@ -8,6 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { getGuideBySlug, getPublishedGuides } from '@/lib/guides/registry';
 import { GUIDE_IMAGE_WIDTHS, guideImageFile } from '@/lib/guides/images';
+import { compactTitle, DEFAULT_OG_IMAGE } from '@/lib/seo/metadata';
 import { GuideArticleView } from '@/components/guides/GuideArticleView';
 import { SITE_URL } from '@/lib/site';
 
@@ -47,8 +48,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     : undefined;
 
+  // An article without its own lead artwork still needs a card: the site-wide
+  // 1200x630 one. A page that declares `openGraph` replaces the root layout's
+  // block outright, so omitting `images` here meant the fourteen guides with
+  // no featured photo emitted no og:image at all.
+  const cardImages = [socialImage ?? DEFAULT_OG_IMAGE];
+
   return {
-    title: `${guide.title} | DeviceTry`,
+    // The browser/search title is compacted to stay inside the ~60 characters
+    // a result shows; the article's own full headline still renders as the H1
+    // and is what og:title and twitter:title carry.
+    title: compactTitle(guide.title),
     description: guide.description,
     alternates: { canonical: `/guides/${guide.slug}` },
     openGraph: {
@@ -58,13 +68,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       url: `${SITE_URL}/guides/${guide.slug}`,
       publishedTime: guide.publishedAt.toISOString(),
       modifiedTime: guide.updatedAt.toISOString(),
-      ...(socialImage ? { images: [socialImage] } : {}),
+      images: cardImages,
     },
     twitter: {
-      card: socialImage ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title: guide.title,
       description: guide.description,
-      ...(socialImage ? { images: [socialImage.url] } : {}),
+      images: [socialImage?.url ?? DEFAULT_OG_IMAGE.url],
     },
   };
 }
@@ -90,7 +100,7 @@ export default async function GuidePage({ params }: PageProps) {
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
       <Navbar t={t} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-10">
+      <main id="main-content" className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-10">
         <div className="max-w-3xl mx-auto mb-6">
           <Link
             href="/guides"

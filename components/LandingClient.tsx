@@ -22,7 +22,7 @@ import {
 import { Translations } from '@/lib/i18n/types';
 import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from '@/lib/tools/registry';
 import { CATEGORY_META } from '@/lib/tools/categories';
-import { uiToolSearch } from '@/lib/tools/search';
+import { uiToolSearch, toolsInCategory } from '@/lib/tools/search';
 import { toolIconSrc } from '@/lib/tools/iconAssets';
 
 /** Lightweight guide pick resolved server-side (keeps article content out of the client bundle). */
@@ -69,13 +69,33 @@ const MOBILE_DEFAULT_SET = new Set([...POPULAR_SLUGS, ...MOBILE_EXTRA_SLUGS]);
  * hands the server and the first client render the same snapshot, so hydration
  * still matches, and popstate keeps Back/Forward restoring the previous filter.
  * ========================================================================== */
+/**
+ * The search string this component most recently wrote itself.
+ *
+ * router.replace() updates the address bar in a later task and never emits
+ * popstate, so between the click and the completed navigation the snapshot
+ * below was still serving the PREVIOUS query string. The adopt-external-URL
+ * path then read that stale value and undid the filter the user had just
+ * asked for: tapping a quick-search chip while a category was active rewrote
+ * the URL to the chip's term but re-applied the old category, so the grid
+ * dead-ended on "0 testers found" even though the address bar no longer
+ * mentioned a category. applyFilter records what it wrote; the snapshot
+ * serves that value until the address bar catches up, and a real Back/Forward
+ * navigation clears it.
+ */
+let appliedSearch: string | null = null;
+
 function subscribeToUrlChange(onStoreChange: () => void) {
-  window.addEventListener('popstate', onStoreChange);
-  return () => window.removeEventListener('popstate', onStoreChange);
+  const onPopState = () => {
+    appliedSearch = null;
+    onStoreChange();
+  };
+  window.addEventListener('popstate', onPopState);
+  return () => window.removeEventListener('popstate', onPopState);
 }
 
 function getUrlSearch() {
-  return window.location.search;
+  return appliedSearch ?? window.location.search;
 }
 
 /** Server render and the hydration pass both see "no query in the URL". */
@@ -177,6 +197,17 @@ const faqs = [
 ];
 
 const VALID_CATEGORIES = new Set<string>(CATEGORY_META.map((c) => c.key));
+
+/**
+ * How many registry tools sit in each category, derived once from the registry
+ * so a pill can never advertise a count the grid disagrees with. The "All"
+ * pill already showed the total; the four category pills showed a bare label,
+ * so a visitor had no way to tell whether a category was worth opening before
+ * clicking it and nothing on screen said how small "Display & Screen" was.
+ */
+const CATEGORY_COUNTS = new Map<string, number>(
+  CATEGORY_META.map((c) => [c.key, TOOLS_REGISTRY.filter((tool) => tool.category === c.key).length])
+);
 
 /** "How it works" — three factual steps, no fabricated claims. */
 const HOW_IT_WORKS = [
@@ -339,7 +370,11 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
       if (query.trim()) params.set('q', query.trim());
       if (category !== 'all') params.set('category', category);
       const qs = params.toString();
-      router.replace(qs ? `/?${qs}` : '/', { scroll: false });
+      const href = qs ? `/?${qs}` : '/';
+      // Serve the search string we just wrote until the address bar catches
+      // up (see appliedSearch), so a stale snapshot cannot undo this filter.
+      appliedSearch = qs ? `?${qs}` : '';
+      router.replace(href, { scroll: false });
     },
     [router]
   );
@@ -356,29 +391,37 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
   };
 
   // Lenient search: word-order independent, filler words tolerated, typos
-  // forgiven. Filtered by category first, then scored + ranked.
+  // forgiven.
+  //
+  // ONE ranked list per query, computed once and shared by the grid and the
+  // suggestion panel. The two used to run different queries — the grid added
+  // the category filter, the suggestion panel did not — so a suggestion could
+  // name a tool the grid was not showing (and a search that matched nothing in
+  // the active category still offered suggestions for it).
+  const rankedMatches = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    // Single shared UI adapter: the grid, this ranking and the tools drawer
+    // always rank identically. Category filtering narrows the adapter's
+    // full-registry result rather than searching a subset.
+    return uiToolSearch(searchQuery, TOOLS_REGISTRY.length);
+  }, [searchQuery]);
+
   const filteredTools = useMemo(() => {
-    const inCategory =
-      selectedCategory === 'all'
-        ? ORDERED_TOOLS
-        : ORDERED_TOOLS.filter((tool) => tool.category === selectedCategory);
+    const inCategory = toolsInCategory(ORDERED_TOOLS, selectedCategory);
 
     if (!searchQuery.trim()) return inCategory;
 
-    // Single shared UI adapter: the grid filter and the suggestion panel (and
-    // the tools drawer) always rank identically. Category filtering narrows
-    // the adapter's full-registry result rather than searching a subset.
-    const adapterResult = new Set(
-      uiToolSearch(searchQuery, TOOLS_REGISTRY.length)
-    );
+    const adapterResult = new Set(rankedMatches);
     return inCategory.filter((tool) => adapterResult.has(tool));
-  }, [selectedCategory, searchQuery]);
+  }, [rankedMatches, searchQuery, selectedCategory]);
 
-  // Top 5 suggestions for the autocomplete panel.
+  // Top 5 suggestions for the autocomplete panel — drawn from the same result
+  // set the grid shows, so a suggestion can never point at a tool that the
+  // visible results contradict.
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    return uiToolSearch(searchQuery, 5);
-  }, [searchQuery]);
+    return toolsInCategory(rankedMatches, selectedCategory).slice(0, 5);
+  }, [rankedMatches, searchQuery, selectedCategory]);
 
   const toolCount = TOOLS_REGISTRY.length;
   const isFiltering = Boolean(searchQuery.trim()) || selectedCategory !== 'all';
@@ -397,10 +440,19 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
     inputRef.current?.focus();
   };
 
-  /** Quick-search chip: focus input, apply term, show suggestions. */
+  /**
+   * Quick-search chip: focus input, apply term, show suggestions.
+   *
+   * A chip is an explicit NEW search, so any category left over from browsing
+   * is dropped. Keeping it is what produced the dead end: with, say, Games
+   * selected, tapping the "Microphone" chip searched for a microphone INSIDE
+   * the Games category and the grid showed zero results. Typing in the input
+   * still refines within the active category (handleQueryChange) — only the
+   * chips, which say what they are, reset it.
+   */
   const applyQuickSearch = (term: string) => {
     setInputValue(term);
-    applyFilter(term, selectedCategory);
+    applyFilter(term, 'all');
     setSuggestionsOpen(true);
     setActiveIndex(-1);
     inputRef.current?.focus();
@@ -812,6 +864,8 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 }`}
               >
                 {c.label}
+                {/* Registry-derived, so the number can never drift from the grid. */}
+                <span className="ml-1.5 opacity-70">{CATEGORY_COUNTS.get(c.key)}</span>
               </button>
             ) : null
           )}

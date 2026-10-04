@@ -1,4 +1,4 @@
-import { TOOLS_REGISTRY, ToolDefinition } from './registry';
+import { TOOLS_REGISTRY, ToolDefinition, ToolCategory } from './registry';
 
 /**
  * Landing-page tool search: strong matches first, fuzzy fallback second.
@@ -303,4 +303,22 @@ export function searchTools(query: string, tools: ToolDefinition[] = TOOLS_REGIS
  */
 export function uiToolSearch(query: string, limit: number): ToolDefinition[] {
   return searchTools(query, TOOLS_REGISTRY).slice(0, limit).map((hit) => hit.tool);
+}
+
+/**
+ * Narrow an ordered tool list to one category. `all` returns the list
+ * unchanged, so callers can apply the same code path whether or not a category
+ * is active.
+ *
+ * This is the ONE definition of "the active category" on the homepage: the
+ * results grid and the suggestion panel both narrow through it, which is what
+ * keeps them from disagreeing (a suggestion for a tool the grid is filtering
+ * out is a dead end — selecting it lands on a tool the page had just said was
+ * not in these results).
+ */
+export function toolsInCategory(
+  tools: ToolDefinition[],
+  category: ToolCategory | 'all'
+): ToolDefinition[] {
+  return category === 'all' ? tools : tools.filter((tool) => tool.category === category);
 }

@@ -5,6 +5,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ShieldCheck, Lock, HardDrive, EyeOff, Globe } from 'lucide-react';
 import { SITE_URL } from '@/lib/site';
+import { siteOpenGraph } from '@/lib/seo/metadata';
 
 /**
  * Fixed, human-controlled revision date. Do not compute from build time —
@@ -20,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: '/privacy' },
-    openGraph: { title, description, type: 'website', url: `${SITE_URL}/privacy`, siteName: 'DeviceTry' },
+    openGraph: siteOpenGraph({ title, description, type: 'website', url: `${SITE_URL}/privacy` }),
   };
 }
 
@@ -31,7 +32,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4]">
       <Navbar t={t} />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main id="main-content" className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="bg-white dark:bg-[#131B27] rounded-2xl border border-[#DFE5EB] dark:border-[#223043] p-8 sm:p-10 shadow-sm space-y-8 text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8]">
           <div className="border-b border-[#DFE5EB] dark:border-[#223043] pb-6">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E6F4F2] dark:bg-[#133230] text-[#0F766E] dark:text-[#14B8A6] mb-3">
