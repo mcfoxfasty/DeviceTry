@@ -64,6 +64,25 @@ test('og:image - the guides keep their own artwork and fall back to the site car
   assert.match(page, /images: \[socialImage\?\.url \?\? DEFAULT_OG_IMAGE\.url\]/);
 });
 
+test('og:image - an article that names its own card ships the file', () => {
+  // `socialImage` exists for an imported article that arrives with a finished
+  // 1200x630 card rather than a guide figure. Nothing else would notice a typo
+  // in that path: the page still renders, still emits an og:image, and only the
+  // platform fetching it sees the 404.
+  let declared = 0;
+  for (const guide of GUIDE_ARTICLES) {
+    if (!guide.socialImage) continue;
+    declared += 1;
+    const where = guide.socialImage.url.replace(/^\//, '');
+    assert.ok(existsSync(join('public', where)), `${guide.slug}: social card must exist at public/${where}`);
+    assert.ok(guide.socialImage.url.startsWith('/'), `${guide.slug}: socialImage.url must be a /public path`);
+    assert.equal(guide.socialImage.width, 1200, `${guide.slug}: a social card is 1200 wide`);
+    assert.equal(guide.socialImage.height, 630, `${guide.slug}: a social card is 630 tall`);
+    assert.ok(guide.socialImage.alt, `${guide.slug}: the card needs alt text for assistive tech`);
+  }
+  assert.ok(declared > 0, 'an article declares its own social card');
+});
+
 test('titles - every route title fits the ~60 characters a result shows', () => {
   const offenders: string[] = [];
 

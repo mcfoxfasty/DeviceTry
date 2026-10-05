@@ -185,6 +185,23 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
         </nav>
       )}
 
+      {/* An article supplied as authored markup. Rendered here — after the
+          header, before the FAQs — so the H1, the intro, the editorial dates
+          and the generated FAQ JSON-LD all still come from the typed fields
+          and cannot drift from the page. See GuideArticle.rawBody for the
+          trust boundary. */}
+      {guide.rawBody && (
+        <>
+          {guide.rawStyle && (
+            <style dangerouslySetInnerHTML={{ __html: guide.rawStyle }} />
+          )}
+          <div
+            className="dt-guide"
+            dangerouslySetInnerHTML={{ __html: guide.rawBody }}
+          />
+        </>
+      )}
+
       <div className="space-y-10">
         {guide.sections.map((section, si) => (
           <section key={si}>
@@ -330,9 +347,17 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
         ))}
       </div>
 
-      {/* FAQs */}
-      {guide.faqs.length > 0 && (
-        <section className="mt-12">
+      {/* FAQs. The `id` is stable across every guide so an article whose own
+          table of contents links to "#faq" lands here rather than nowhere.
+
+          Skipped when the article arrives as authored markup: an imported
+          article carries its own FAQ section, complete with the links from each
+          answer back into the body, and rendering this block on top of it would
+          print every question and answer twice. `faqs` is still declared for
+          such an article — that is what the FAQPage JSON-LD is generated from,
+          and those questions are genuinely on the page, inside rawBody. */}
+      {guide.faqs.length > 0 && !guide.rawBody && (
+        <section id="faq" className="mt-12">
           <h2 className="text-lg font-bold text-[#142033] dark:text-[#E9EEF4] mb-4">Frequently asked questions</h2>
           <div className="space-y-3">
             {guide.faqs.map((faq, i) => (

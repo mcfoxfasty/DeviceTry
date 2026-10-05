@@ -495,3 +495,58 @@ body {
     display: block !important;
   }
 }
+
+/* ------------------------------------------------------------------
+ * Links inside an article supplied as authored markup.
+ *
+ * A typed guide renders its links through `Prose`, which applies
+ * PROSE_LINK_CLASS to every anchor. An article that arrives as `rawBody`
+ * has no such hook: its <a> elements are plain markup, so they inherit
+ * the browser default and read as ordinary body text — a reader scanning
+ * a sentence cannot tell which words are links without hovering them.
+ *
+ * WHY THIS LIVES HERE AND NOT IN THE ARTICLE. The rule is about how the
+ * template renders this class of article, not about one article's content,
+ * so it belongs beside the other `.dark`-aware component styles in
+ * globals.css rather than in a per-article <style> block.
+ *
+ * WHY IT WINS. Tailwind's preflight declares `a { color: inherit;
+ * text-decoration: inherit }` inside `@layer base`. A cascade layer loses
+ * to any unlayered rule regardless of specificity, and this file's
+ * component styles are already unlayered, so `.dt-guide a` (0,1,1) beats
+ * it without `!important` and without a specificity bump.
+ *
+ * WHY `.dark` AND NOT `prefers-color-scheme`. lib/theme.tsx writes the
+ * reader's explicit choice onto <html> as a class. A media query would
+ * paint a reader green-on-light links while they had deliberately chosen
+ * the light theme on a dark-mode machine — the class is the site's own
+ * record of what is on screen, so it is what the colour must follow.
+ * ------------------------------------------------------------------ */
+
+.dt-guide a {
+  color: #1fa95b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Underlined rather than colour-only, so the link is visible to a reader
+ * who cannot separate these two greens — and thickens on hover so the
+ * affordance is stronger than the resting state without a colour shift
+ * that would also recolour the text. */
+.dt-guide a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.dt-guide a:visited {
+  color: #178a49;
+}
+
+/* Distinguishable from the unvisited green without dropping below the
+ * body text's contrast on the dark background. */
+.dark .dt-guide a {
+  color: #3ddc84;
+}
+
+.dark .dt-guide a:visited {
+  color: #2fb86d;
+}

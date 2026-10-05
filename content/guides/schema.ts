@@ -162,8 +162,51 @@ export interface GuideFaq {
 export interface GuideArticle {
   slug: string;
   title: string;
+  /**
+   * The browser/search title, when it must differ from `title`.
+   *
+   * `compactTitle()` derives the `<title>` from the H1 and appends the brand
+   * suffix, which is right for a headline written for this site but wrong for
+   * an article imported with its own SEO pack — where the H1 and the `<title>`
+   * were written separately (e.g. "…in 2026" and "…(2026)"). Setting this
+   * emits it verbatim, so it must already fit inside 60 characters; the
+   * article's own `title` still renders as the H1 and as nothing else.
+   *
+   * Omit it and every guide behaves exactly as before.
+   */
+  seoTitle?: string;
   /** Meta description and listing blurb (unique per article). */
   description: string;
+  /**
+   * The article's own JSON-LD `description`, when it differs from the meta one.
+   *
+   * An imported SEO pack usually ships two strings: the one the SERP shows,
+   * and a shorter one for the structured-data block, because the two are read
+   * by different consumers and are free to say the same thing differently.
+   * This is the second one. Omit it and the JSON-LD reuses `description`.
+   */
+  seoDescription?: string;
+  /**
+   * The article's own social card, for an article that ships one.
+   *
+   * `featuredImage` builds the card from a guide figure: a base path, three
+   * pre-rasterised widths, and a light/dark pair. An imported article arrives
+   * with a finished 1200x630 JPEG or PNG instead, which that scheme cannot
+   * express — and rendering a guide figure as the card when a real one exists
+   * would show a shared link the wrong picture.
+   *
+   * `url` is a path inside /public and must resolve. Omit it and the article
+   * keeps deriving its card from `featuredImage`, or falls back to the site-wide
+   * card when it has neither.
+   */
+  socialImage?: {
+    url: string;
+    /** Intrinsic size, emitted as og:image:width / og:image:height. */
+    width: number;
+    height: number;
+    /** Card alt text. Defaults to the article's own headline. */
+    alt?: string;
+  };
   category: GuideCategory;
   type: GuideType;
   /** Tool slugs this guide relates to (validated against the final registry). */
@@ -183,6 +226,37 @@ export interface GuideArticle {
   showToc?: boolean;
   /** Lead figure, rendered directly under the article header. */
   featuredImage?: GuideImage;
+  /**
+   * A complete article body supplied as authored HTML, in place of `sections`.
+   *
+   * This exists for one case: an article imported with its markup intact —
+   * its own `<details>` contents list, its own `<h3>` sub-headings, inline
+   * `<code>`, and links to vendor documentation that is not Microsoft's. The
+   * typed fields cannot express those, and rewriting the prose to fit them
+   * would change the words an author chose.
+   *
+   * TRUST BOUNDARY. This string is rendered with `dangerouslySetInnerHTML`, so
+   * it must be repository-authored content and nothing else — never user
+   * input, never a CMS field. It is also why `tests/rawGuideBody.test.ts`
+   * fails the build on a `<script>`, `<iframe>`, or `on*=` handler anywhere in
+   * it: the escape hatch must not become a way to smuggle active content past
+   * the Content-Security-Policy that guards every typed article.
+   *
+   * Rendered after the header and before the FAQs, so `intro`, the editorial
+   * dates, the H1, and the generated FAQPage JSON-LD still come from this
+   * file's typed fields and cannot drift from the page. An article carrying
+   * one keeps its own FAQ section in the markup, so the template's duplicate
+   * FAQ block stands down — see GuideArticleView.
+   */
+  rawBody?: string;
+  /**
+   * CSS scoped to this article, emitted once as a `<style>` above `rawBody`.
+   *
+   * Keep every selector anchored to the article's own class. A bare `html {…}`
+   * here would change scrolling or typography for every other page on the
+   * site, which is a far larger change than adding an article.
+   */
+  rawStyle?: string;
   sections: GuideSection[];
   faqs: GuideFaq[];
   /**
