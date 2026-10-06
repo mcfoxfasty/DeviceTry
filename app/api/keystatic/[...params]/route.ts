@@ -1,6 +1,14 @@
 import { makeRouteHandler } from '@keystatic/next/route-handler';
 import { resolvePublicOrigin } from '@/lib/keystatic/origin';
 import { resolveKeystaticCredentials } from '@/lib/keystatic/serverEnv';
+import {
+  captureTokenExchange,
+  describeCallbackError,
+  explainFailure,
+  isCallbackPath,
+  withCloseFallback,
+  withFailureDetail,
+} from '@/lib/keystatic/oauthDiagnostics';
 import { SITE_URL } from '@/lib/site';
 import keystaticConfig from '../../../../keystatic.config';
 
@@ -57,6 +65,17 @@ import keystaticConfig from '../../../../keystatic.config';
  * `withPublicOrigin` below puts the reachable host back on the request; the rules
  * and the order of trust live in lib/keystatic/origin.ts.
  *
+ * WHY THE CALLBACK IS INSTRUMENTED, AND WHY IT IS SAFE ON A PHONE.
+ * Keystatic's callback folds every kind of refusal into "Authorization failed",
+ * and GitHub answers a rejected token exchange with HTTP 200 plus an error body,
+ * so the reason is invisible both to the reader and to the server log. `serve`
+ * below records what GitHub actually replied, redacts it, logs it and puts it in
+ * the failure response — see lib/keystatic/oauthDiagnostics.ts, which is where the
+ * redaction rules and the mobile close-page fallback live and are tested. The
+ * sign-in itself is a full-page top-level redirect in GitHub mode: Keystatic
+ * renders an anchor to /api/keystatic/github/login with `target="_top"`, and
+ * nothing in the flow waits on `window.opener` or a postMessage handshake.
+ *
  * The four values GitHub mode requires are KEYSTATIC_GITHUB_CLIENT_ID,
  * KEYSTATIC_GITHUB_CLIENT_SECRET, KEYSTATIC_SECRET, and — read at build time, so
  * it must be present in the environment that builds the site —
@@ -103,13 +122,52 @@ function notConfigured(error: unknown): Response {
   });
 }
 
+/**
+ * Serve one request, instrumenting the OAuth callback and leaving every other
+ * route exactly as it was.
+ *
+ * `run` is a thunk rather than a promise so the capture is installed before
+ * Keystatic's token exchange begins: the exchange happens after several awaits,
+ * and a promise handed in here would already be running.
+ */
+async function serve(request: Request, run: () => Promise<Response>): Promise<Response> {
+  const url = new URL(request.url);
+  if (!isCallbackPath(url.pathname)) return run();
+
+  // GitHub declining without a token exchange (redirect_uri_mismatch and
+  // friends) is already the clearest possible explanation, so it is logged as
+  // soon as the request arrives rather than after a handler that never runs.
+  const declined = describeCallbackError(url.searchParams);
+  if (declined) console.error(`[keystatic] GitHub declined the sign-in: ${declined}`);
+
+  const { result, exchanges } = await captureTokenExchange(run);
+
+  for (const exchange of exchanges) {
+    const line = `[keystatic] GitHub token exchange: ${exchange}`;
+    if (result.status >= 400) console.error(line);
+    else console.log(line);
+  }
+  if (result.status >= 400) {
+    console.error(
+      `[keystatic] OAuth callback answered ${result.status}` +
+        `${result.statusText ? ` ${result.statusText}` : ''} for ${url.pathname}`
+    );
+  }
+
+  const explained = await withFailureDetail(
+    result,
+    explainFailure(result.status, exchanges, declined)
+  );
+  return withCloseFallback(explained);
+}
+
 export function GET(request: Request): Promise<Response> {
   try {
     const handler = makeRouteHandler({
       config: keystaticConfig,
       ...resolveKeystaticCredentials(),
     });
-    return handler.GET(withPublicOrigin(request));
+    return serve(request, () => handler.GET(withPublicOrigin(request)));
   } catch (error) {
     return Promise.resolve(notConfigured(error));
   }
@@ -121,7 +179,7 @@ export function POST(request: Request): Promise<Response> {
       config: keystaticConfig,
       ...resolveKeystaticCredentials(),
     });
-    return handler.POST(withPublicOrigin(request));
+    return serve(request, () => handler.POST(withPublicOrigin(request)));
   } catch (error) {
     return Promise.resolve(notConfigured(error));
   }

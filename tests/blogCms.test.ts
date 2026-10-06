@@ -23,6 +23,18 @@ import { MAX_DESCRIPTION_LENGTH } from '../lib/seo/metadata';
 import { SITE_URL } from '../lib/site';
 import { isUnreachableHost, resolvePublicOrigin } from '../lib/keystatic/origin';
 import {
+  captureTokenExchange,
+  describeCallbackError,
+  explainFailure,
+  isCallbackPath,
+  isTokenEndpoint,
+  redactSecrets,
+  resumeAfterClose,
+  summarizeTokenExchange,
+  withCloseFallback,
+  withFailureDetail,
+} from '../lib/keystatic/oauthDiagnostics';
+import {
   KEYSTATIC_CREDENTIALS,
   pickCredentials,
   resolveKeystaticCredentials,
@@ -478,4 +490,191 @@ test('CMS credentials - the handler is built per request, never held at module s
     2,
     'both handlers still answer the readable 503 when credentials are missing',
   );
+});
+
+// ------------------------------------------------------- CMS sign-in failures
+// A refused sign-in used to be two words — "Authorization failed" — whatever the
+// cause, because GitHub answers a rejected token exchange with HTTP 200 and an
+// error BODY that Keystatic folds into that one sentence. On a phone the reader
+// has no console, so the reason has to reach both the server log and the page.
+
+const REDACT = '[redacted]';
+
+test('CMS sign-in diagnostics - credentials cannot reach a log', () => {
+  const json = redactSecrets('{"access_token":"ghu_secretvalue","error":"bad_verification_code"}');
+  assert.ok(!json.includes('ghu_secretvalue'), 'the token is gone');
+  assert.ok(json.includes(`"access_token":"${REDACT}"`), 'and said to be gone');
+  assert.match(json, /bad_verification_code/, 'the reason itself survives redaction');
+
+  const form = redactSecrets('access_token=ghu_leak&refresh_token=ghr_leak&error=incorrect_client_credentials');
+  assert.ok(!form.includes('ghu_leak') && !form.includes('ghr_leak'));
+
+  const code = redactSecrets('{"code":"abc123"}');
+  assert.ok(!code.includes('abc123'), 'an authorization code is a credential too');
+});
+
+test('CMS sign-in diagnostics - GitHub declining before any exchange is reported in full', () => {
+  const described = describeCallbackError(
+    new URLSearchParams({
+      error: 'redirect_uri_mismatch',
+      error_description: 'The redirect_uri is not associated with this application.',
+      error_uri: 'https://docs.github.com/apps',
+    }),
+  );
+  assert.match(described ?? '', /redirect_uri_mismatch/);
+  assert.match(described ?? '', /not associated with this application/);
+  assert.match(described ?? '', /authorization code: absent/, 'which separates a refusal from a failed exchange');
+
+  assert.equal(describeCallbackError(new URLSearchParams()), null, 'a healthy callback adds nothing');
+  assert.match(
+    describeCallbackError(new URLSearchParams({ error: 'access_denied' })) ?? '',
+    /authorization code: absent/,
+  );
+});
+
+test('CMS sign-in diagnostics - the token exchange reply is summarised, redacted and bounded', () => {
+  const summary = summarizeTokenExchange(
+    200,
+    'OK',
+    JSON.stringify({ error: 'bad_verification_code', access_token: 'ghu_leak' }),
+  );
+  assert.match(summary, /^200 OK — /, 'the status is part of the answer');
+  assert.match(summary, /bad_verification_code/, 'the reason GitHub gave is the point');
+  assert.ok(!summary.includes('ghu_leak'), 'and never the token that came with it');
+
+  assert.ok(
+    summarizeTokenExchange(200, '', 'x'.repeat(5000)).length < 800,
+    'an unexpected body cannot flood the log',
+  );
+  assert.match(summarizeTokenExchange(502, 'Bad Gateway', ''), /502 Bad Gateway — \(empty body\)/);
+
+  assert.equal(isTokenEndpoint('https://github.com/login/oauth/access_token?client_id=x'), true);
+  assert.equal(isTokenEndpoint('https://api.github.com/user'), false);
+  assert.equal(isCallbackPath('/api/keystatic/github/oauth/callback'), true);
+  assert.equal(isCallbackPath('/api/keystatic/github/login'), false, 'only the callback is instrumented');
+});
+
+test('CMS sign-in diagnostics - the capture records GitHub\u2019s reply and always restores fetch', async () => {
+  const realFetch = globalThis.fetch;
+  const fake = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (isTokenEndpoint(url)) {
+      return new Response(JSON.stringify({ error: 'bad_verification_code' }), { status: 200 });
+    }
+    return new Response('elsewhere', { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    globalThis.fetch = fake;
+    const { result, exchanges } = await captureTokenExchange(async () => {
+      await fetch('https://github.com/login/oauth/access_token?client_id=x');
+      await fetch('https://api.github.com/user');
+      return 'served';
+    });
+    assert.equal(result, 'served', 'the handler still runs normally');
+    assert.equal(exchanges.length, 1, 'only the endpoint that decides the sign-in is recorded');
+    assert.match(exchanges[0], /bad_verification_code/);
+    assert.equal(globalThis.fetch, fake, 'fetch is restored on the way out');
+
+    globalThis.fetch = fake;
+    await assert.rejects(
+      captureTokenExchange(async () => {
+        throw new Error('handler blew up');
+      }),
+    );
+    assert.equal(globalThis.fetch, fake, 'and restored even when the handler throws');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('CMS sign-in diagnostics - a failure explains itself in the response the device shows', async () => {
+  const exchanges = [summarizeTokenExchange(200, 'OK', '{"error":"bad_verification_code"}')];
+  const detail = explainFailure(401, exchanges, null);
+  assert.match(detail ?? '', /HTTP 401/);
+  assert.match(detail ?? '', /bad_verification_code/);
+  assert.match(detail ?? '', /already used/, 'the likely cause is named, not just quoted');
+
+  assert.equal(explainFailure(307, [], null), null, 'a redirect has nothing to explain');
+  assert.equal(explainFailure(200, [], null), null, 'a successful callback stays silent');
+  assert.match(
+    explainFailure(400, [], 'redirect_uri_mismatch') ?? '',
+    /before any token exchange: redirect_uri_mismatch/,
+    'a refusal with no exchange still explains itself',
+  );
+
+  const failed = new Response('Authorization failed', {
+    status: 401,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
+  const explained = await withFailureDetail(failed, detail);
+  assert.equal(explained.status, 401, 'the status Keystatic chose is preserved');
+  assert.equal(explained.headers.get('content-type'), 'text/plain; charset=utf-8');
+  const body = await explained.text();
+  assert.match(body, /Authorization failed/, 'the original message is still there');
+  assert.match(body, /bad_verification_code/, 'with the reason attached');
+
+  const ok = new Response('ok', { status: 200, headers: { 'content-type': 'text/plain' } });
+  assert.equal(await (await withFailureDetail(ok, detail)).text(), 'ok', 'a success is never annotated');
+});
+
+// ---------------------------------------------------------- CMS mobile sign-in
+// Keystatic's GitHub flow is already a full-page redirect: the auth gate renders
+// an anchor to /api/keystatic/github/login with target="_top", the server answers
+// 307 to GitHub, and the return trip sets cookies and redirects to the dashboard.
+// `window.open` appears ZERO times in the whole admin bundle, and the install
+// handshake is a `storage` event rather than window.opener messaging — so there is
+// no popup flow to replace and no config option that could choose one. What can
+// still fail on a phone is the one window scripts are not allowed to close, and a
+// frame that is not allowed to take over the top-level navigation.
+
+test('CMS mobile sign-in - a window scripts cannot close still finishes', async () => {
+  const closePage =
+    "<script>localStorage.setItem('ks-refetch-installations', 'true');window.close();</script>";
+  const rewritten = resumeAfterClose(closePage);
+  assert.match(rewritten, /location\.replace\('\/keystatic'\)/, 'the reader is not left on a blank page');
+  assert.ok(
+    rewritten.includes("localStorage.setItem('ks-refetch-installations', 'true')"),
+    'the handshake the other tab listens for survives',
+  );
+  assert.match(rewritten, /try\{window\.close\(\)\}/, 'closing is still attempted first');
+
+  assert.equal(resumeAfterClose('<html>admin</html>'), '<html>admin</html>', 'other HTML is untouched');
+
+  const html = new Response(closePage, { status: 200, headers: { 'content-type': 'text/html' } });
+  assert.match(await (await withCloseFallback(html)).text(), /location\.replace/);
+  const plain = new Response('plain', { status: 200, headers: { 'content-type': 'text/plain' } });
+  assert.equal(await (await withCloseFallback(plain)).text(), 'plain');
+});
+
+/** Source with its comments removed, so a guard tests code rather than prose. */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+test('CMS mobile sign-in - the admin never waits on a popup handshake, and covers the framed case', () => {
+  // Comments are stripped first: this file deliberately explains why GitHub mode
+  // needs no opener messaging, and that explanation must not read as a violation.
+  const admin = code(readFileSync(join('components', 'keystatic', 'KeystaticAdmin.tsx'), 'utf8'));
+  assert.doesNotMatch(
+    admin,
+    /window\.opener|postMessage/,
+    'GitHub mode is a full-page redirect; nothing may depend on opener messaging',
+  );
+  assert.match(admin, /window\.self === window\.top/, 'the fallback applies only inside a frame');
+  assert.match(
+    admin,
+    /SIGN_IN_HREF = '\/api\/keystatic\/github\/login'/,
+    'it continues Keystatic\u2019s own sign-in endpoint rather than inventing one',
+  );
+  assert.match(admin, /window\.location\.assign\(href\)/, 'and keeps a last resort in the current frame');
+});
+
+test('CMS sign-in diagnostics - the callback route reports what GitHub sent', () => {
+  const route = readFileSync(join('app', 'api', 'keystatic', '[...params]', 'route.ts'), 'utf8');
+  assert.match(route, /captureTokenExchange/, 'the token exchange reply is recorded');
+  assert.match(route, /console\.error\(/, 'a refusal reaches the server log');
+  assert.match(route, /withFailureDetail/, 'and the failure response the browser shows');
+  assert.match(route, /withCloseFallback/, 'the close page keeps a way forward on a phone');
+  assert.match(route, /isCallbackPath\(url\.pathname\)/, 'only the callback is instrumented');
 });

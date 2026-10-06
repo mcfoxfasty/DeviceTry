@@ -77,3 +77,46 @@ canonical URL override for an article first published elsewhere.
 is missing its cover image, its cover alt text, its date or its author. Those are
 the checks that keep a CMS from quietly degrading a page's accessibility and
 search metadata over time.
+
+## Signing in, on a phone and in an embedded browser
+
+**The sign-in is a full-page redirect, not a popup.** GitHub mode renders an
+anchor to `/api/keystatic/github/login` with `target="_top"`; the server answers
+`307` to `github.com/login/oauth/authorize`; the return trip lands on
+`/api/keystatic/github/oauth/callback`, which sets the session cookies and
+redirects to the dashboard. Nothing in the flow waits on `window.opener` or a
+`postMessage` handshake — the one cross-window signal is a `storage` event
+(`ks-refetch-installations`) fired by the install-completion page — so there is no
+popup fallback to configure and no `keystatic.config.ts` option that could choose
+one. `components/keystatic/KeystaticAdmin.tsx` adds a single fallback for the case
+that does break: when the admin is inside a cross-origin frame, `target="_top"`
+can be blocked, so the sign-in continues in a new tab and the admin reloads when
+that tab is dismissed. On an ordinary top-level page the fallback is inert.
+
+## When a sign-in fails: reading the reason
+
+Keystatic answers every refusal with two words — `Authorization failed` — and
+GitHub reports a rejected **token exchange** with HTTP 200 and an error body, so
+the reason is invisible by default. The callback is therefore instrumented
+(`lib/keystatic/oauthDiagnostics.ts`):
+
+1. GitHub declining *before* any exchange (`redirect_uri_mismatch`,
+   `access_denied`, …) is logged together with its `error_description`.
+2. The reply from `github.com/login/oauth/access_token` is recorded, **redacted**
+   and logged — access tokens, refresh tokens, client secrets and authorization
+   codes are replaced with `[redacted]` before anything is written, in the log or
+   in the response.
+3. That explanation is appended to the failing response, so the device that hit
+   the failure shows the reason instead of two words. The status Keystatic chose
+   is preserved.
+
+Where to read it: the Cloudflare Worker log (`wrangler tail`, or the Workers log
+stream), the `next start` output in the workspace preview, and the response body
+in the browser tab the callback landed in. All three carry the same lines, tagged
+`[keystatic]`.
+
+The common `200`-with-error-body reasons are `bad_verification_code` (the
+authorization code was already used — a browser that opened the callback twice
+does this) and `incorrect_client_credentials` (the App does not match the
+credentials bound to the deployment).
+
