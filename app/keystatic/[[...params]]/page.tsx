@@ -1,14 +1,23 @@
 import type { Metadata } from 'next';
-import { makePage } from '@keystatic/next/ui/app';
-import keystaticConfig from '../../../keystatic.config';
+
+import KeystaticAdmin from '@/components/keystatic/KeystaticAdmin';
 
 /**
  * The CMS itself, served at /keystatic.
  *
- * `makePage` renders Keystatic's admin shell, which is a client-side application:
- * it authenticates against GitHub through the API route in
- * app/api/keystatic/[...params]/route.ts and then reads and writes this
- * repository. Everything it needs is in keystatic.config.ts.
+ * WHY THIS PAGE IS A SERVER COMPONENT THAT RENDERS A CLIENT COMPONENT.
+ * The dashboard itself is client-only: `@keystatic/core/ui` ships a server build
+ * whose component body is `return null`, because the admin signs in with GitHub
+ * and draws its editor entirely in the browser. Rendering it from
+ * components/keystatic/KeystaticAdmin.tsx — which carries 'use client' — is what
+ * puts that code in the client graph. Until this split existed, the whole route
+ * was server-rendered, the stub returned nothing, and /keystatic painted a blank
+ * screen with no error anywhere.
+ *
+ * The split exists because `metadata` (below) can only be exported from a server
+ * component, while `'use client'` and an `export const metadata` are mutually
+ * exclusive in one file. Keeping this file server keeps the dashboard noindexed
+ * without hiding it behind a client boundary that cannot declare metadata.
  *
  * NOT FOR SEARCH ENGINES. An admin dashboard has nothing to offer a crawler, and
  * its login screen would compete with real pages in results. `robots` is set here
@@ -20,4 +29,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default makePage(keystaticConfig);
+export default function KeystaticPage(): React.JSX.Element {
+  return <KeystaticAdmin />;
+}

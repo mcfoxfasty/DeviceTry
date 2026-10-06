@@ -345,3 +345,34 @@ test('CMS sign-in - with no reachable origin anywhere the request is left untouc
   assert.equal(origin({}, BIND_REQUEST, 'http://0.0.0.0:3000'), null);
   assert.equal(origin({}, BIND_REQUEST, ''), null);
 });
+
+// ------------------------------------------------------------ admin mounting
+// The failure this guards is silent by design: `@keystatic/core/ui` ships a
+// server build whose component body is `return null`, because the dashboard is a
+// browser application. Reachable only from a server component, the whole route
+// server-renders nothing, the client chunk builds to an empty 163-byte shell,
+// and /keystatic serves a healthy 200 containing nothing but a skip link. No
+// console error, no failed request, no CSP violation — so nothing would ever
+// report it.
+
+test('CMS admin - the dashboard sits behind a client boundary, or it renders nothing at all', () => {
+  const admin = readFileSync(join('components', 'keystatic', 'KeystaticAdmin.tsx'), 'utf8');
+  assert.match(
+    admin,
+    /^['"]use client['"]/,
+    "Keystatic's server build returns null; without 'use client' the admin can never mount",
+  );
+  assert.match(admin, /makePage\(keystaticConfig\)/, 'the admin still comes from makePage');
+});
+
+test('CMS admin - the page stays a server component so the dashboard keeps its noindex', () => {
+  const page = readFileSync(join('app', 'keystatic', '[[...params]]', 'page.tsx'), 'utf8');
+  assert.doesNotMatch(
+    page,
+    /^['"]use client['"]/m,
+    "a 'use client' module cannot export metadata, so the page must stay server",
+  );
+  assert.match(page, /export const metadata/);
+  assert.match(page, /robots:\s*\{\s*index:\s*false/);
+  assert.match(page, /<KeystaticAdmin/, 'the page renders the client admin');
+});
