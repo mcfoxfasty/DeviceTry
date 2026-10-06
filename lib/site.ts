@@ -93,4 +93,8 @@ export const STATIC_PAGES: Array<{ path: string; priority: number; changeFrequen
   // menu and the footer, and deliberately not part of the catalog listing.
   { path: '/advanced-diagnostics', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/guides', priority: 0.8, changeFrequency: 'weekly' },
+  // The CMS blog index. Individual articles are appended to the sitemap from
+  // the content collection itself (app/sitemap.ts), since they are files rather
+  // than routes known at compile time.
+  { path: '/blog', priority: 0.7, changeFrequency: 'weekly' },
 ];

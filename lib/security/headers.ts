@@ -59,18 +59,29 @@
  * the served policy produces no violations at all (see the verification note on
  * the directive list). Nothing on this site evaluates a string as code.
  *
- * WHY X-Frame-Options IS 'SAMEORIGIN' (added 2026-10-06), AND ITS ONE COST:
- * A DENY value was shipped once (2026-10-04) and removed the same day: DENY is
- * unconditional, so a browser refuses to render the page in ANY frame, including
- * the managed preview panel, which embeds this site in an <iframe>. The symptom
- * was a blank white preview pane on a healthy server — `/` returned 200 with a
- * complete 174 KB document and every asset resolved, but the frame was never
- * painted. SAMEORIGIN instead permits same-origin framing and is the header the
- * scanners look for; `frame-ancestors 'self'` in the policy below states the same
- * rule in its modern form. Note the residual cost: because that panel is a
- * cross-origin ancestor, it is blocked by these two directives too — a preview
- * opened in its own tab is unaffected, and the public site is what the header is
- * for.
+ * FRAMING: WHY THERE IS NO X-Frame-Options, AND WHAT frame-ancestors ALLOWS
+ * (2026-10-06):
+ * Framing is expressed ONLY in CSP `frame-ancestors`; the X-Frame-Options header
+ * is deliberately NOT sent. XFO cannot say "this site plus one known embedder":
+ * SAMEORIGIN — like the DENY value that was tried and reverted on 2026-10-04 —
+ * is decided per ancestor origin, so ANY cross-origin parent is refused. The
+ * managed preview panel embeds this site in an <iframe> from another origin, so
+ * SAMEORIGIN blanked it on a healthy server (`/` still answered 200 with a
+ * complete 174 KB document, but nothing was painted). That failure was
+ * reproduced deliberately: a parent page on another origin framing this site is
+ * refused with "an ancestor violates the following Content Security Policy
+ * directive: \"frame-ancestors 'self'\"" and the iframe lands on
+ * `chrome-error://chromewebdata/`. frame-ancestors is both the modern form of
+ * this rule and the only one that can allowlist a specific embedder, so it
+ * carries the rule and names the panel's own origin as well as 'self'.
+ *
+ * The tradeoff is explicit rather than accidental: a scanner that insists on the
+ * X-Frame-Options header itself will report that row as missing, even though the
+ * same rule is still enforced in CSP. Sending XFO again from here is not the fix
+ * — this config is what the sandbox preview uses too, so it would re-blank the
+ * panel. If a scan ever regresses on that row, hostname-gate XFO at the Worker
+ * boundary for the production hostname(s) only, the way HSTS is already gated in
+ * lib/security/worker-headers.ts.
  *
  * HSTS is added only at the Worker boundary, for the production hostname(s) —
  * see STAGING/PRODUCTION handling in lib/security/worker-headers.ts. The staging
@@ -91,16 +102,21 @@
  * `iceServers: []`, so no STUN/TURN host is contacted.
  *
  * VERIFICATION: `bun run lint`, `bunx tsc --noEmit`, the test suite, and a
- * production build all pass, and the built headers were confirmed on the wire and
+ * production build all pass. The built headers were confirmed on the wire and
  * driven in a real browser (page rendered, React hydrated, the catalog's search
- * filter narrowed 25 cards to 10, zero CSP violations, no failed requests).
+ * filter narrowed 25 cards to 10, zero CSP violations, no failed requests), and
+ * framing was exercised both ways: an allowlisted parent origin renders the page
+ * in an iframe, and a third-party parent is still refused.
  */
 
 export const SECURITY_POLICY_DIRECTIVES: readonly string[] = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
-  "frame-ancestors 'self'",
+  // 'self' plus the managed preview panel's own origin — see the framing note
+  // above for why the embedder has to be named here instead of in
+  // X-Frame-Options.
+  "frame-ancestors 'self' https://freebuff.com https://*.freebuff.com",
   // No remote images are loaded by the app (the picsum remote pattern in
   // next.config is unused), so this stays narrow except for the https: needed
   // by the Internet Speed Test's measurement page assets.
@@ -161,7 +177,9 @@ export const PERMISSIONS_POLICY = [
 export function securityHeaders(): Array<{ key: string; value: string }> {
   return [
     { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
-    { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+    // No X-Frame-Options: see the framing note above. frame-ancestors carries the
+    // rule because it is the only directive that can allowlist the managed
+    // preview panel's origin.
     { key: 'X-Content-Type-Options', value: 'nosniff' },
     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
