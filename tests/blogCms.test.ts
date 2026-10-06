@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import keystaticConfig from '../keystatic.config';
 import {
   POST_CATEGORIES,
   POST_EDITOR_OPTIONS,
@@ -23,7 +24,18 @@ import { MAX_DESCRIPTION_LENGTH } from '../lib/seo/metadata';
 import { SITE_URL } from '../lib/site';
 import { isUnreachableHost, resolvePublicOrigin } from '../lib/keystatic/origin';
 import {
+  accessTokenFromResponse,
   captureTokenExchange,
+  cookieFromRequest,
+  cookiesFromResponse,
+  explainRefreshFailure,
+  isGithubApiRequest,
+  isRefreshPath,
+  refreshCookieStatus,
+  repoSlug,
+  summarizeGithubReply,
+  verificationRequests,
+  verifyAccessToken,
   describeCallbackError,
   explainFailure,
   isCallbackPath,
@@ -676,5 +688,170 @@ test('CMS sign-in diagnostics - the callback route reports what GitHub sent', ()
   assert.match(route, /console\.error\(/, 'a refusal reaches the server log');
   assert.match(route, /withFailureDetail/, 'and the failure response the browser shows');
   assert.match(route, /withCloseFallback/, 'the close page keeps a way forward on a phone');
-  assert.match(route, /isCallbackPath\(url\.pathname\)/, 'only the callback is instrumented');
+  assert.match(route, /isCallbackPath\(url\.pathname\)/, 'the callback is instrumented');
+  assert.match(route, /isRefreshPath\(url\.pathname\)/, 'and so is the session probe, whose 401 was unexplained');
+});
+
+// ------------------------------------------- the check AFTER the token exchange
+// A 200 from the token endpoint is not authorisation: the dashboard then queries
+// api.github.com with that token, and GitHub's refusal is what sends the reader
+// back to the login screen. That request is made from the browser, so the server
+// can neither see it nor log it — hence the probe below (server) and the capture
+// in the admin (client).
+
+test('CMS verification - the repository slug matches the GitHub repository exactly', () => {
+  // GitHub's API is case-insensitive for owner and name, but the slug is used in
+  // API paths and in links, and a case mismatch is the first thing to suspect when
+  // a repository lookup is refused. Confirmed against the API: this is the name
+  // GitHub itself reports.
+  const storage = keystaticConfig.storage;
+  assert.equal(storage.kind, 'github');
+  if (storage.kind !== 'github') return;
+  assert.equal(repoSlug(storage.repo), 'mcfoxfasty/DeviceTry');
+  if (typeof storage.repo === 'object') {
+    assert.equal(`${storage.repo.owner}/${storage.repo.name}`, 'mcfoxfasty/DeviceTry');
+  } else {
+    assert.equal(storage.repo, 'mcfoxfasty/DeviceTry', 'written as a slug exactly as GitHub reports it');
+  }
+});
+
+test('CMS verification - the probe asks the two questions that decide access', () => {
+  assert.deepEqual(verificationRequests('mcfoxfasty/DeviceTry'), [
+    'https://api.github.com/user',
+    'https://api.github.com/repos/mcfoxfasty/DeviceTry',
+  ]);
+  assert.deepEqual(verificationRequests('  mcfoxfasty/DeviceTry  '), verificationRequests('mcfoxfasty/DeviceTry'));
+  assert.equal(isGithubApiRequest('https://api.github.com/repos/x/y'), true);
+  assert.equal(isGithubApiRequest('https://api.github.com'), true);
+  assert.equal(isGithubApiRequest('https://github.com/login/oauth/access_token'), false, 'the token endpoint is not the API');
+  assert.equal(isRefreshPath('/api/keystatic/github/refresh-token'), true);
+  assert.equal(isRefreshPath('/api/keystatic/github/login'), false);
+});
+
+test('CMS verification - the reply is reduced to the fields that explain access', () => {
+  const denied = summarizeGithubReply('{"message":"Bad credentials","documentation_url":"https://docs.github.com"}');
+  assert.match(denied, /Bad credentials/, 'the reason is kept');
+  assert.match(denied, /documentation_url/);
+
+  const repo = summarizeGithubReply(
+    JSON.stringify({
+      id: 1,
+      full_name: 'mcfoxfasty/DeviceTry',
+      private: false,
+      permissions: { admin: false, push: true, pull: true },
+      node_id: 'x'.repeat(400),
+      description: 'noise',
+    }),
+  );
+  assert.match(repo, /"full_name":"mcfoxfasty\/DeviceTry"/);
+  assert.match(repo, /"push":true/, 'push is what authorises a commit from the dashboard');
+  assert.ok(!repo.includes('node_id'), 'a full repository object would bury the answer');
+
+  assert.equal(summarizeGithubReply('   '), '(empty body)');
+  assert.ok(!summarizeGithubReply('access_token=ghu_leak').includes('ghu_leak'), 'redaction applies here too');
+});
+
+test('CMS verification - the probe reports what GitHub answered, and never the token', async () => {
+  const seen: Array<{ url: string; authorization: string | undefined }> = [];
+  const fake = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    seen.push({ url: String(url), authorization: headers.get('authorization') ?? undefined });
+    if (String(url).endsWith('/user')) {
+      return new Response(JSON.stringify({ login: 'mcfoxfasty', id: 42 }), { status: 200, statusText: 'OK' });
+    }
+    return new Response(JSON.stringify({ message: 'Bad credentials' }), {
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+  }) as typeof fetch;
+
+  const lines = await verifyAccessToken('ghu_secret_token', 'mcfoxfasty/DeviceTry', fake);
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /200 OK https:\/\/api\.github\.com\/user — /);
+  assert.match(lines[0], /"login":"mcfoxfasty"/, 'a working token says who it belongs to');
+  assert.match(lines[1], /401 Unauthorized/);
+  assert.match(lines[1], /Bad credentials/, 'and a refused one says exactly why');
+  assert.ok(!lines.join(' ').includes('ghu_secret_token'), 'the token is never in the log evidence');
+  assert.equal(seen[0].authorization, 'Bearer ghu_secret_token', 'the token is sent as a bearer credential');
+
+  const dead = (async () => {
+    throw new Error('network unreachable');
+  }) as unknown as typeof fetch;
+  const failed = await verifyAccessToken('ghu_secret_token', 'mcfoxfasty/DeviceTry', dead);
+  assert.match(failed[0], /no reply from https:\/\/api\.github\.com\/user — network unreachable/);
+});
+
+test('CMS verification - the session cookie is read from the response that sets it', () => {
+  const headers = new Headers();
+  headers.append('set-cookie', 'keystatic-gh-access-token=ghu_abc; Path=/; SameSite=Lax');
+  headers.append('set-cookie', 'keystatic-gh-refresh-token=enc; Path=/; HttpOnly');
+  const response = new Response(null, { status: 307, headers });
+
+  assert.equal(accessTokenFromResponse(response), 'ghu_abc');
+  assert.equal(cookiesFromResponse(headers).get('keystatic-gh-refresh-token'), 'enc');
+  assert.equal(accessTokenFromResponse(new Response(null, { status: 307 })), null, 'no cookie means no session');
+
+  assert.equal(cookieFromRequest('a=1; keystatic-gh-refresh-token=enc; b=2', 'keystatic-gh-refresh-token'), 'enc');
+  assert.equal(cookieFromRequest('a=1', 'keystatic-gh-refresh-token'), null);
+  assert.equal(cookieFromRequest(null, 'keystatic-gh-refresh-token'), null);
+});
+
+/** Keystatic's own scheme: HKDF-SHA256, then AES-GCM, then base64url. */
+async function encryptLikeKeystatic(value: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), 'HKDF', false, ['deriveKey']);
+  const derived = await crypto.subtle.deriveKey(
+    { name: 'HKDF', salt, hash: 'SHA-256', info: new Uint8Array(0) },
+    key,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  );
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, derived, encoder.encode(value));
+  const full = new Uint8Array(16 + 12 + encrypted.byteLength);
+  full.set(salt);
+  full.set(iv, 16);
+  full.set(new Uint8Array(encrypted), 28);
+  return Buffer.from(full).toString('base64url');
+}
+
+test('CMS verification - a 401 from the session probe says which of the four causes it was', async () => {
+  const secret = 's'.repeat(48);
+  const cookie = await encryptLikeKeystatic('ghr_refresh_token', secret);
+
+  assert.equal(await refreshCookieStatus(cookie, secret), 'ok', 'a cookie from this secret is readable');
+  assert.equal(
+    await refreshCookieStatus(cookie, 'd'.repeat(48)),
+    'undecryptable',
+    'a rotated secret is the case that cannot be told apart from "no session" otherwise',
+  );
+  assert.equal(await refreshCookieStatus(cookie, undefined), 'no-secret');
+  assert.equal(await refreshCookieStatus(cookie, 'too-short'), 'unreadable-secret');
+  assert.equal(await refreshCookieStatus(null, secret), 'absent');
+  assert.equal(await refreshCookieStatus('not-base64!!', secret), 'undecryptable');
+  assert.equal(await refreshCookieStatus('AAAA', secret), 'undecryptable', 'no ciphertext cannot decrypt');
+
+  const absent = explainRefreshFailure(401, 'absent', []) ?? '';
+  assert.match(absent, /no keystatic-gh-refresh-token cookie/);
+  assert.match(absent, /GitHub was not asked anything/);
+  const rotated = explainRefreshFailure(401, 'undecryptable', []) ?? '';
+  assert.match(rotated, /different secret/);
+  assert.match(rotated, /Sign in again in this browser/);
+  assert.match(explainRefreshFailure(401, 'unreadable-secret', []) ?? '', /shorter than the 32 characters/);
+  assert.equal(explainRefreshFailure(200, 'ok', []), null, 'a probe that succeeded has nothing to explain');
+  const withExchange = explainRefreshFailure(401, 'ok', ['400 Bad Request — {"error":"bad_refresh_token"}']) ?? '';
+  assert.match(withExchange, /GitHub answered the refresh exchange/);
+  assert.match(withExchange, /bad_refresh_token/);
+});
+
+test('CMS verification - the dashboard records GitHub API refusals, which the server never sees', () => {
+  const admin = code(readFileSync(join('components', 'keystatic', 'KeystaticAdmin.tsx'), 'utf8'));
+  assert.match(admin, /useGithubApiCapture/, 'the capture is mounted with the admin');
+  assert.match(admin, /isGithubApiRequest\(url\)/, 'it watches GitHub API calls specifically');
+  assert.match(admin, /console\.error\(/, 'a refusal is reported, not swallowed');
+  assert.match(admin, /redactSecrets\(/, 'and redacted before it is written');
+  assert.match(admin, /window\.fetch = original/, 'the wrapped fetch is restored');
+  assert.match(admin, /response\.clone\(\)/, 'reading the body must not consume it');
 });

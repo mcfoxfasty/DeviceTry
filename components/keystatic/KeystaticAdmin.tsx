@@ -3,6 +3,7 @@
 import { makePage } from '@keystatic/next/ui/app';
 import { useEffect } from 'react';
 import keystaticConfig from '../../keystatic.config';
+import { isGithubApiRequest, redactSecrets } from '../../lib/keystatic/oauthDiagnostics';
 
 /**
  * The Keystatic admin, mounted as a client component, plus the one sign-in
@@ -52,6 +53,14 @@ import keystaticConfig from '../../keystatic.config';
  * top-level navigation, and iOS in-app browsers will not keep a same-tab
  * navigation alive across the trip to GitHub. `useEmbeddedSignIn` handles only
  * that case — it is inert on an ordinary top-level page.
+ *
+ * WHICH GITHUB API FAILURES ARE INVISIBLE WITHOUT THE CAPTURE BELOW.
+ * Keystatic's dashboard is the only place the token it was issued is actually
+ * used: it queries api.github.com from the browser, and a refusal there (401 Bad
+ * credentials, 403 Resource not accessible by integration, or GraphQL `errors`
+ * inside a 200) puts the reader back on the login screen with nothing said. That
+ * request never passes through this site's server, so `useGithubApiCapture`
+ * records it in the console instead — redacted, and only when it fails.
  *
  * `keystatic.config.ts` is imported here as well as by the server (the reader in
  * lib/blog/content.ts). That duplication is normal: the schema is what the editor
@@ -116,7 +125,53 @@ function useEmbeddedSignIn() {
   }, []);
 }
 
+/**
+ * Log what GitHub's API says, because that is where a session is really decided.
+ *
+ * The token exchange succeeding does not authorise anything: the dashboard then
+ * queries `api.github.com` with the token it was given, and GitHub's refusal —
+ * `401 Bad credentials`, `403 Resource not accessible by integration`, or a
+ * GraphQL `errors` array inside an otherwise 200 reply — is what sends the reader
+ * back to the login screen. That request is made from the BROWSER, so the server
+ * cannot see the answer; this records it in the browser's own console, where the
+ * dashboard's errors are otherwise invisible.
+ *
+ * Only failures are recorded (a non-2xx, or a body carrying GraphQL errors), the
+ * body is redacted with the same rules the server uses, and the wrapped fetch is
+ * restored when the admin unmounts. Reading the body clones the response first,
+ * so nothing Keystatic does is affected.
+ */
+function useGithubApiCapture() {
+  useEffect(() => {
+    const original = window.fetch;
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await original(input, init);
+      try {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (isGithubApiRequest(url)) {
+          const body = await response.clone().text();
+          if (response.status >= 400 || body.includes('"errors"')) {
+            const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+            console.error(
+              `[keystatic] GitHub API ${status} for ${url.split('?')[0]} — ${redactSecrets(body.slice(0, 800))}`
+            );
+          }
+        }
+      } catch {
+        // Recording must never break the dashboard it is recording.
+      }
+      return response;
+    };
+
+    return () => {
+      window.fetch = original;
+    };
+  }, []);
+}
+
 export default function KeystaticAdmin() {
   useEmbeddedSignIn();
+  useGithubApiCapture();
   return <Admin />;
 }

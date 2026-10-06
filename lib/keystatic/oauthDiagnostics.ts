@@ -217,6 +217,244 @@ export function resumeAfterClose(html: string): string {
   return html.replace(CLOSE_CALL, resume);
 }
 
+// ---------------------------------------------------------------- verification
+// A successful token exchange is NOT the end of the story: Keystatic then uses
+// that token against GitHub's API, and when GitHub refuses the token the admin
+// ends up back at "Log in with GitHub" with nothing said about why. These
+// helpers answer the two questions that decides: does the token this deployment
+// just minted actually work, and what does GitHub say about it.
+
+/** GitHub's REST API, the host Keystatic's dashboard also queries directly. */
+export const GITHUB_API = 'https://api.github.com';
+
+/** Keystatic's session probe — the 401 the admin makes on every page load. */
+export const REFRESH_PATH = '/api/keystatic/github/refresh-token';
+
+/** How long a refresh-token cookie can be, in the format Keystatic writes. */
+const REFRESH_SALT_LENGTH = 16;
+const REFRESH_IV_LENGTH = 12;
+
+/** An absolute URL from anything fetch() accepts. */
+export function requestUrl(input: unknown): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  if (input && typeof input === 'object' && 'url' in input) return String((input as { url: unknown }).url);
+  return '';
+}
+
+/** True for a request to GitHub's API, wherever it is made from. */
+export function isGithubApiRequest(url: string): boolean {
+  return url.startsWith(GITHUB_API) || url.includes('://api.github.com/');
+}
+
+/** True for Keystatic's session probe. */
+export function isRefreshPath(pathname: string): boolean {
+  return pathname === REFRESH_PATH || pathname.endsWith('/github/refresh-token');
+}
+
+/** `owner/name` from either shape Keystatic accepts for `storage.repo`. */
+export function repoSlug(repo: string | { owner: string; name: string }): string {
+  return typeof repo === 'string' ? repo : `${repo.owner}/${repo.name}`;
+}
+
+/**
+ * The requests that answer "is this token actually usable, and can it see the
+ * repository this CMS writes to?".
+ *
+ * `/user` proves the token itself is accepted by GitHub. `/repos/{owner}/{name}`
+ * is the one that matters for the CMS: its reply carries the `permissions` block
+ * — `push: true` is what authorises a commit from the dashboard. GitHub's API
+ * treats owner and repository names case-insensitively, so a casing difference
+ * does not fail here, but the exact slug is still what gets logged.
+ */
+export function verificationRequests(repo: string): string[] {
+  const slug = repo.trim();
+  return [`${GITHUB_API}/user`, `${GITHUB_API}/repos/${slug}`];
+}
+
+/**
+ * The interesting part of a GitHub REST body, redacted and bounded.
+ *
+ * A full repository object is thousands of characters and buries the answer, so
+ * the fields that decide access are picked out and the rest dropped. An error
+ * reply (`message`, `documentation_url`) is kept whole — that is the reason.
+ */
+export function summarizeGithubReply(body: string): string {
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return '(empty body)';
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const picked: Record<string, unknown> = {};
+    for (const key of ['message', 'documentation_url', 'login', 'id', 'full_name', 'private', 'permissions']) {
+      if (parsed[key] !== undefined) picked[key] = parsed[key];
+    }
+    if (Object.keys(picked).length > 0) return redactSecrets(JSON.stringify(picked));
+  } catch {
+    // Not JSON: fall through to the raw text, which is itself the answer.
+  }
+  return redactSecrets(trimmed.slice(0, 600));
+}
+
+/** One `request → reply` line, never containing the token that was sent. */
+export function summarizeApiCall(url: string, status: number, statusText: string, body: string): string {
+  return `${status}${statusText ? ` ${statusText}` : ''} ${url} — ${summarizeGithubReply(body)}`;
+}
+
+/**
+ * Ask GitHub what the freshly minted access token can do.
+ *
+ * Called right after a callback that succeeded, on the server, where the token is
+ * in hand and the answer can be logged even though the browser only ever sees a
+ * redirect. `request` is injectable so the whole thing can be exercised without
+ * touching the network.
+ */
+export async function verifyAccessToken(
+  accessToken: string,
+  repo: string,
+  request: typeof fetch = fetch
+): Promise<string[]> {
+  const lines: string[] = [];
+  for (const url of verificationRequests(repo)) {
+    try {
+      const response = await request(url, {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          accept: 'application/vnd.github+json',
+          'user-agent': 'devicetry-cms',
+        },
+      });
+      const body = await response.text().catch(() => '');
+      lines.push(summarizeApiCall(url, response.status, response.statusText, body));
+    } catch (error) {
+      // No reply at all — a network or Worker egress failure, which is a
+      // different problem from GitHub refusing the token.
+      lines.push(`no reply from ${url} — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return lines;
+}
+
+/** The cookies a response is setting, as a name → value map. */
+export function cookiesFromResponse(headers: Headers): Map<string, string> {
+  const jar = new Map<string, string>();
+  // `getSetCookie` is the standard accessor and exists on Node 18.14+ and in
+  // Workers; the single-header fallback covers a runtime that only exposes the
+  // combined form.
+  const list =
+    typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : [headers.get('set-cookie') ?? ''].filter(Boolean);
+  for (const entry of list) {
+    const pair = entry.split(';')[0] ?? '';
+    const equals = pair.indexOf('=');
+    if (equals === -1) continue;
+    jar.set(pair.slice(0, equals).trim(), pair.slice(equals + 1).trim());
+  }
+  return jar;
+}
+
+/** The access token a callback response is handing the browser, or `null`. */
+export function accessTokenFromResponse(response: Response): string | null {
+  return cookiesFromResponse(response.headers).get('keystatic-gh-access-token') ?? null;
+}
+
+/** The value of one cookie in a request's `Cookie` header, or `null`. */
+export function cookieFromRequest(header: string | null, name: string): string | null {
+  for (const entry of (header ?? '').split(';')) {
+    const equals = entry.indexOf('=');
+    if (equals === -1) continue;
+    if (entry.slice(0, equals).trim() === name) return entry.slice(equals + 1).trim();
+  }
+  return null;
+}
+
+/** Decode Keystatic's base64url, as its own reader does. */
+function base64UrlBytes(value: string): Uint8Array {
+  const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(binary, (char) => char.codePointAt(0) ?? 0);
+}
+
+/**
+ * Whether this deployment can decrypt the refresh-token cookie it was given.
+ *
+ * Keystatic encrypts that cookie with `KEYSTATIC_SECRET` (HKDF-SHA256, then
+ * AES-GCM) and reports a failure to decrypt as a bare 401 — indistinguishable
+ * from having no cookie at all. Repeating the derivation here separates the two
+ * cases, which are fixed in completely different ways: one by signing in again in
+ * this browser, the other by making the environment's secret consistent.
+ */
+export async function refreshCookieStatus(
+  cookie: string | null,
+  secret: string | undefined
+): Promise<'absent' | 'no-secret' | 'unreadable-secret' | 'ok' | 'undecryptable'> {
+  if (!cookie) return 'absent';
+  if (!secret) return 'no-secret';
+  // Keystatic's own guard: a secret shorter than 32 characters cannot even
+  // derive the key, so every cookie it wrote is unreadable here.
+  if (secret.trim().length < 32) return 'unreadable-secret';
+
+  try {
+    const decoded = base64UrlBytes(cookie);
+    const salt = decoded.slice(0, REFRESH_SALT_LENGTH);
+    const iv = decoded.slice(REFRESH_SALT_LENGTH, REFRESH_SALT_LENGTH + REFRESH_IV_LENGTH);
+    const value = decoded.slice(REFRESH_SALT_LENGTH + REFRESH_IV_LENGTH);
+    if (value.length === 0) return 'undecryptable';
+
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'HKDF', false, [
+      'deriveKey',
+    ]);
+    const derived = await crypto.subtle.deriveKey(
+      { name: 'HKDF', salt, hash: 'SHA-256', info: new Uint8Array(0) },
+      key,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, derived, value);
+    return 'ok';
+  } catch {
+    return 'undecryptable';
+  }
+}
+
+/** Why a 401 from Keystatic's session probe happened, in one sentence. */
+export function explainRefreshFailure(
+  status: number,
+  cookie: 'absent' | 'no-secret' | 'unreadable-secret' | 'ok' | 'undecryptable',
+  exchanges: string[]
+): string | null {
+  if (status < 400) return null;
+
+  const lines = [`Keystatic's session probe answered HTTP ${status}.`, ''];
+
+  if (cookie === 'absent') {
+    lines.push(
+      'This request carried no keystatic-gh-refresh-token cookie, so there was no session to verify: the' +
+        ' browser asking is not the one that completed the sign-in, or the cookie was never stored (a' +
+        ' Secure cookie is dropped by a browser that reached the site over plain http on a host that is' +
+        ' not localhost). GitHub was not asked anything.'
+    );
+  } else if (cookie === 'no-secret') {
+    lines.push('A refresh cookie is present but this deployment resolved no KEYSTATIC_SECRET, so it cannot be read.');
+  } else if (cookie === 'unreadable-secret') {
+    lines.push(
+      'A refresh cookie is present but KEYSTATIC_SECRET is shorter than the 32 characters Keystatic needs to' +
+        ' derive its key, so no cookie it wrote can be read here.'
+    );
+  } else if (cookie === 'undecryptable') {
+    lines.push(
+      'A refresh cookie is present but cannot be decrypted with the KEYSTATIC_SECRET this deployment holds:' +
+        ' the cookie was issued while a different secret was in use (a rotated secret, or two environments' +
+        ' with different values). Sign in again in this browser to get a cookie matching the current secret.'
+    );
+  }
+
+  if (exchanges.length > 0) {
+    lines.push('', 'GitHub answered the refresh exchange:');
+    for (const exchange of exchanges) lines.push(`  ${exchange}`);
+  }
+
+  return lines.join('\n');
+}
+
 /** Apply {@link resumeAfterClose} to an HTML response, leaving anything else alone. */
 export async function withCloseFallback(response: Response): Promise<Response> {
   const type = response.headers.get('content-type') ?? '';

@@ -120,3 +120,31 @@ authorization code was already used — a browser that opened the callback twice
 does this) and `incorrect_client_credentials` (the App does not match the
 credentials bound to the deployment).
 
+## After the exchange: the token has to work too
+
+A `200` from the token endpoint means GitHub issued a token, not that the token
+can do anything. Keystatic's dashboard then queries `api.github.com` from the
+browser with that token, and a refusal there (`401 Bad credentials`, `403
+Resource not accessible by integration`, or a GraphQL `errors` array inside an
+otherwise `200` reply) returns the reader to the login screen with nothing said.
+Two captures cover it:
+
+- **Server.** Straight after a callback that succeeded, the token it just issued
+  is used against `GET /user` and `GET /repos/mcfoxfasty/DeviceTry`, and both
+  replies are logged with the fields that decide access — including
+  `permissions.push`, which is what authorises a commit from the dashboard. If the
+  callback redirects without setting the access-token cookie, that is logged too,
+  because then the browser has no session to use.
+- **Browser.** `components/keystatic/KeystaticAdmin.tsx` records GitHub API
+  refusals in the console, redacted, since that request never passes through this
+  site's server.
+
+**The 401 on `/api/keystatic/github/refresh-token`.** That is Keystatic's session
+probe, and it returns `401` in four unrelated situations. The probe now examines
+the refresh-token cookie and says which one applies: no cookie on the request (the
+browser asking is not the one that signed in, or a `Secure` cookie was dropped by
+a plain-http host that is not localhost); no secret resolved; a secret shorter
+than the 32 characters Keystatic needs to derive its key; or a cookie that cannot
+be decrypted with the current `KEYSTATIC_SECRET` (a rotated secret, or two
+environments with different values — sign in again in that browser).
+

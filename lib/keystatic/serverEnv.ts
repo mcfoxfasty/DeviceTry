@@ -110,3 +110,19 @@ export function workerBindings(): EnvSource {
 export function resolveKeystaticCredentials(): KeystaticCredentials {
   return pickCredentials(process.env, workerBindings());
 }
+
+/**
+ * `KEYSTATIC_SECRET` alone, for the one caller that needs it without the rest.
+ *
+ * The secret is what Keystatic encrypts its refresh-token cookie with, so a
+ * cookie from a deployment holding a different secret cannot be decrypted on the
+ * way back in — a failure Keystatic reports as a bare 401. The diagnostics in
+ * lib/keystatic/oauthDiagnostics.ts use this to tell that case apart from "this
+ * browser never had a session", which a bare 401 cannot distinguish.
+ *
+ * Resolved per call, exactly like `resolveKeystaticCredentials`, so nothing about
+ * a Worker's bindings is pinned outside a request.
+ */
+export function keystaticSecret(): string | undefined {
+  return resolveKeystaticCredentials().secret;
+}

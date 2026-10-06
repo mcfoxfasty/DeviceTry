@@ -1,11 +1,18 @@
 import { makeRouteHandler } from '@keystatic/next/route-handler';
 import { resolvePublicOrigin } from '@/lib/keystatic/origin';
-import { resolveKeystaticCredentials } from '@/lib/keystatic/serverEnv';
+import { keystaticSecret, resolveKeystaticCredentials } from '@/lib/keystatic/serverEnv';
 import {
+  accessTokenFromResponse,
   captureTokenExchange,
+  cookieFromRequest,
   describeCallbackError,
   explainFailure,
+  explainRefreshFailure,
   isCallbackPath,
+  isRefreshPath,
+  refreshCookieStatus,
+  repoSlug,
+  verifyAccessToken,
   withCloseFallback,
   withFailureDetail,
 } from '@/lib/keystatic/oauthDiagnostics';
@@ -65,14 +72,17 @@ import keystaticConfig from '../../../../keystatic.config';
  * `withPublicOrigin` below puts the reachable host back on the request; the rules
  * and the order of trust live in lib/keystatic/origin.ts.
  *
- * WHY THE CALLBACK IS INSTRUMENTED, AND WHY IT IS SAFE ON A PHONE.
- * Keystatic's callback folds every kind of refusal into "Authorization failed",
- * and GitHub answers a rejected token exchange with HTTP 200 plus an error body,
- * so the reason is invisible both to the reader and to the server log. `serve`
- * below records what GitHub actually replied, redacts it, logs it and puts it in
- * the failure response — see lib/keystatic/oauthDiagnostics.ts, which is where the
- * redaction rules and the mobile close-page fallback live and are tested. The
- * sign-in itself is a full-page top-level redirect in GitHub mode: Keystatic
+ * WHY THE CALLBACK AND THE SESSION PROBE ARE INSTRUMENTED.
+ * Keystatic's callback folds every refusal into "Authorization failed", GitHub
+ * answers a rejected token exchange with HTTP 200 plus an error body, and a 401
+ * from the session probe conflates four unrelated causes. So `serve` below
+ * records what GitHub actually replied (redacted), examines the refresh cookie to
+ * say which of the four situations applies, and — after a callback that succeeds
+ * — asks GitHub what the freshly minted token can actually reach, including the
+ * repository's `permissions` block. lib/keystatic/oauthDiagnostics.ts holds the
+ * redaction rules, the cookie check and the close-page fallback, all tested.
+ *
+ * The sign-in itself is a full-page top-level redirect in GitHub mode: Keystatic
  * renders an anchor to /api/keystatic/github/login with `target="_top"`, and
  * nothing in the flow waits on `window.opener` or a postMessage handshake.
  *
@@ -123,8 +133,20 @@ function notConfigured(error: unknown): Response {
 }
 
 /**
- * Serve one request, instrumenting the OAuth callback and leaving every other
- * route exactly as it was.
+ * The repository this CMS writes to, as `owner/name`.
+ *
+ * `storage` is a union of three shapes and only GitHub mode carries a repository,
+ * so this narrowing is what makes the slug available at all. Anything else is a
+ * misconfiguration keystatic.config.ts does not allow; the empty string would only
+ * ever reach a log line.
+ */
+function configuredRepo(): string {
+  return keystaticConfig.storage.kind === 'github' ? repoSlug(keystaticConfig.storage.repo) : '';
+}
+
+/**
+ * Serve one request, instrumenting the OAuth callback and Keystatic's session
+ * probe, and leaving every other route exactly as it was.
  *
  * `run` is a thunk rather than a promise so the capture is installed before
  * Keystatic's token exchange begins: the exchange happens after several awaits,
@@ -132,12 +154,14 @@ function notConfigured(error: unknown): Response {
  */
 async function serve(request: Request, run: () => Promise<Response>): Promise<Response> {
   const url = new URL(request.url);
-  if (!isCallbackPath(url.pathname)) return run();
+  const callback = isCallbackPath(url.pathname);
+  const refresh = isRefreshPath(url.pathname);
+  if (!callback && !refresh) return run();
 
   // GitHub declining without a token exchange (redirect_uri_mismatch and
   // friends) is already the clearest possible explanation, so it is logged as
   // soon as the request arrives rather than after a handler that never runs.
-  const declined = describeCallbackError(url.searchParams);
+  const declined = callback ? describeCallbackError(url.searchParams) : null;
   if (declined) console.error(`[keystatic] GitHub declined the sign-in: ${declined}`);
 
   const { result, exchanges } = await captureTokenExchange(run);
@@ -147,11 +171,35 @@ async function serve(request: Request, run: () => Promise<Response>): Promise<Re
     if (result.status >= 400) console.error(line);
     else console.log(line);
   }
-  if (result.status >= 400) {
-    console.error(
-      `[keystatic] OAuth callback answered ${result.status}` +
-        `${result.statusText ? ` ${result.statusText}` : ''} for ${url.pathname}`
+
+  if (callback) {
+    if (result.status >= 300 && result.status < 400) {
+      // A 200 from the token endpoint only means GitHub issued a token. Whether
+      // that token is usable is a separate question, asked here.
+      const accessToken = accessTokenFromResponse(result);
+      if (accessToken) {
+        const lines = await verifyAccessToken(accessToken, configuredRepo());
+        console.log('[keystatic] access token issued; what GitHub says it can reach:');
+        for (const line of lines) console.log(`[keystatic]   ${line}`);
+      } else {
+        console.error(
+          '[keystatic] the callback redirected without setting an access-token cookie,' +
+            ' so the browser has no session to use'
+        );
+      }
+    } else if (result.status >= 400) {
+      console.error(
+        `[keystatic] OAuth callback answered ${result.status}` +
+          `${result.statusText ? ` ${result.statusText}` : ''} for ${url.pathname}`
+      );
+    }
+  } else if (refresh && result.status >= 400) {
+    const status = await refreshCookieStatus(
+      cookieFromRequest(request.headers.get('cookie'), 'keystatic-gh-refresh-token'),
+      keystaticSecret()
     );
+    const explanation = explainRefreshFailure(result.status, status, exchanges);
+    for (const line of (explanation ?? '').split('\n')) console.error(`[keystatic] ${line}`);
   }
 
   const explained = await withFailureDetail(
