@@ -440,13 +440,42 @@ test('CMS credentials - the local preview resolves all three without a Worker', 
 
 test('CMS credentials - the API route supplies them explicitly, not from ambient env', () => {
   const route = readFileSync(join('app', 'api', 'keystatic', '[...params]', 'route.ts'), 'utf8');
-  assert.match(
-    route,
-    /config: keystaticConfig, \.\.\.resolveKeystaticCredentials\(\)/,
-    'the handler is built from the resolved credentials, not from whatever the process happens to hold',
+  const built =
+    route.match(/makeRouteHandler\(\{\s*config:\s*keystaticConfig,\s*\.\.\.resolveKeystaticCredentials\(\),?\s*\}\)/g) ?? [];
+  assert.equal(
+    built.length,
+    2,
+    'every handler is built from the resolved credentials, not from whatever the process happens to hold',
   );
 
   const resolver = readFileSync(join('lib', 'keystatic', 'serverEnv.ts'), 'utf8');
   assert.match(resolver, /getCloudflareContext/, 'Worker bindings come from the OpenNext adapter');
   assert.match(resolver, /process\.env/, 'the local preview path is still the ambient environment');
+});
+
+test('CMS credentials - the handler is built per request, never held at module scope', () => {
+  const route = readFileSync(join('app', 'api', 'keystatic', '[...params]', 'route.ts'), 'utf8');
+
+  // The Cloudflare context is an AsyncLocalStorage store that exists only while
+  // a request is in flight, so anything resolved at import time sees nothing —
+  // and a module-scope cache would then pin an unconfigured handler for the
+  // life of the isolate instead of recovering on the next request.
+  assert.doesNotMatch(route, /\bcached\b/, 'no handler or credential state survives the request');
+
+  // Once inside each request handler: GET and POST both resolve, then construct.
+  assert.equal(
+    (route.match(/resolveKeystaticCredentials\(\)/g) ?? []).length,
+    2,
+    'both GET and POST resolve credentials inside the request',
+  );
+  assert.equal((route.match(/makeRouteHandler\(/g) ?? []).length, 2, 'each handler builds its own');
+
+  // Guard the regression that per-request construction invites: without the
+  // catch, a missing configuration becomes an unhandled throw instead of the
+  // readable 503 that names which variables are absent.
+  assert.equal(
+    (route.match(/notConfigured\(error\)/g) ?? []).length,
+    2,
+    'both handlers still answer the readable 503 when credentials are missing',
+  );
 });

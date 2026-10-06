@@ -12,29 +12,35 @@ import keystaticConfig from '../../../../keystatic.config';
  * OAuth code for a token, then commits to GitHub — so it is also the one part
  * that cannot be prerendered.
  *
- * WHY THE HANDLER IS CREATED INSIDE THE REQUEST INSTEAD OF AT MODULE SCOPE.
- * GitHub mode validates its credentials the moment it is constructed, and a
- * build imports every route module to collect page data. Building the handler at
- * module scope therefore made a production build fail outright on a machine
- * without the CMS's secrets — the whole site could not be built because an
- * optional admin dashboard was unconfigured. Deferring construction to the first
- * request keeps the promise that matters: the public site builds and runs with no
- * CMS credentials at all, and only /keystatic reports that it needs them.
+ * WHY THE HANDLER IS BUILT INSIDE EACH REQUEST.
+ * Two independent reasons, and the second is the one that decided this shape.
  *
- * WHY THE CREDENTIALS ARE RESOLVED RATHER THAN READ.
- * Keystatic defaults to reading them out of the ambient process environment,
- * which is correct for the local preview and NOT correct on the Cloudflare
- * Worker: there the bindings live on the request context and the process
- * environment is empty, so every key came back missing and this route answered a
- * 503 despite the values being set in the Cloudflare dashboard.
- * `resolveKeystaticCredentials` (lib/keystatic/serverEnv.ts) consults both
- * sources in order and passes the result through `APIRouteConfig`, which is the
- * place Keystatic already accepts them explicitly.
+ * 1. Construction validates. GitHub mode throws the moment `makeRouteHandler`
+ *    sees missing credentials, and a build imports every route module to collect
+ *    page data — so building the handler at module scope made a production build
+ *    fail outright on a machine without the CMS's secrets, and the whole site
+ *    could not be built because an optional admin dashboard was unconfigured.
  *
- * The handler is still only cached after a successful construction: if the
- * credentials are missing, `makeRouteHandler` throws, `cached` stays null, and
- * the next request simply tries again instead of being pinned for the life of
- * the process to a handler built from nothing.
+ * 2. The credentials do not exist outside a request. On the Cloudflare Worker
+ *    the bindings reach the app through the OpenNext adapter, which installs
+ *    them as an AsyncLocalStorage store read by a getter on the global scope:
+ *
+ *      Object.defineProperty(globalThis, Symbol.for('__cloudflare-context__'),
+ *        { get: () => cloudflareContextALS.getStore() })
+ *
+ *    That store is only populated inside `runWithCloudflareRequestContext`,
+ *    i.e. between the worker's fetch entrypoint and the response. Read at import
+ *    time it is `undefined`, and the accessor throws. The adapter additionally
+ *    copies the Worker's string bindings into the process environment on the
+ *    first request, which again means "during a request", never before.
+ *
+ * So resolution and construction both happen per request, here in GET/POST.
+ * Nothing about the handler or the credentials is held at module scope, which
+ * also means a deployment whose bindings arrive late self-heals on the next
+ * request instead of being pinned for the life of the isolate.
+ *
+ * Resolving per request is cheap: `makeRouteHandler` builds closures over the
+ * config object that keystatic.config.ts already constructs once at import.
  *
  * WHY A MISSING CONFIGURATION ANSWERS 503 WITH TEXT.
  * Deferring the throw moved it from the build to the first click on "Sign in with
@@ -59,8 +65,6 @@ import keystaticConfig from '../../../../keystatic.config';
  * rest.
  */
 
-type RouteHandler = ReturnType<typeof makeRouteHandler>;
-
 /** What to tell a person whose CMS has no GitHub App behind it yet. */
 const NOT_CONFIGURED = [
   'The DeviceTry CMS is not connected to GitHub yet.',
@@ -74,15 +78,6 @@ const NOT_CONFIGURED = [
   'See docs/cms.md for the setup walkthrough. The public site does not depend on',
   'any of this.',
 ].join('\n');
-
-let cached: RouteHandler | null = null;
-
-function keystaticApi(): RouteHandler {
-  if (!cached) {
-    cached = makeRouteHandler({ config: keystaticConfig, ...resolveKeystaticCredentials() });
-  }
-  return cached;
-}
 
 /**
  * Hand Keystatic a request whose origin is one a browser can actually be sent to.
@@ -110,7 +105,11 @@ function notConfigured(error: unknown): Response {
 
 export function GET(request: Request): Promise<Response> {
   try {
-    return keystaticApi().GET(withPublicOrigin(request));
+    const handler = makeRouteHandler({
+      config: keystaticConfig,
+      ...resolveKeystaticCredentials(),
+    });
+    return handler.GET(withPublicOrigin(request));
   } catch (error) {
     return Promise.resolve(notConfigured(error));
   }
@@ -118,7 +117,11 @@ export function GET(request: Request): Promise<Response> {
 
 export function POST(request: Request): Promise<Response> {
   try {
-    return keystaticApi().POST(withPublicOrigin(request));
+    const handler = makeRouteHandler({
+      config: keystaticConfig,
+      ...resolveKeystaticCredentials(),
+    });
+    return handler.POST(withPublicOrigin(request));
   } catch (error) {
     return Promise.resolve(notConfigured(error));
   }
