@@ -1,5 +1,6 @@
 import { makeRouteHandler } from '@keystatic/next/route-handler';
 import { resolvePublicOrigin } from '@/lib/keystatic/origin';
+import { resolveKeystaticCredentials } from '@/lib/keystatic/serverEnv';
 import { SITE_URL } from '@/lib/site';
 import keystaticConfig from '../../../../keystatic.config';
 
@@ -19,6 +20,21 @@ import keystaticConfig from '../../../../keystatic.config';
  * optional admin dashboard was unconfigured. Deferring construction to the first
  * request keeps the promise that matters: the public site builds and runs with no
  * CMS credentials at all, and only /keystatic reports that it needs them.
+ *
+ * WHY THE CREDENTIALS ARE RESOLVED RATHER THAN READ.
+ * Keystatic defaults to reading them out of the ambient process environment,
+ * which is correct for the local preview and NOT correct on the Cloudflare
+ * Worker: there the bindings live on the request context and the process
+ * environment is empty, so every key came back missing and this route answered a
+ * 503 despite the values being set in the Cloudflare dashboard.
+ * `resolveKeystaticCredentials` (lib/keystatic/serverEnv.ts) consults both
+ * sources in order and passes the result through `APIRouteConfig`, which is the
+ * place Keystatic already accepts them explicitly.
+ *
+ * The handler is still only cached after a successful construction: if the
+ * credentials are missing, `makeRouteHandler` throws, `cached` stays null, and
+ * the next request simply tries again instead of being pinned for the life of
+ * the process to a handler built from nothing.
  *
  * WHY A MISSING CONFIGURATION ANSWERS 503 WITH TEXT.
  * Deferring the throw moved it from the build to the first click on "Sign in with
@@ -62,7 +78,9 @@ const NOT_CONFIGURED = [
 let cached: RouteHandler | null = null;
 
 function keystaticApi(): RouteHandler {
-  if (!cached) cached = makeRouteHandler({ config: keystaticConfig });
+  if (!cached) {
+    cached = makeRouteHandler({ config: keystaticConfig, ...resolveKeystaticCredentials() });
+  }
   return cached;
 }
 

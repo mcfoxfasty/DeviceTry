@@ -22,6 +22,12 @@ import {
 import { MAX_DESCRIPTION_LENGTH } from '../lib/seo/metadata';
 import { SITE_URL } from '../lib/site';
 import { isUnreachableHost, resolvePublicOrigin } from '../lib/keystatic/origin';
+import {
+  KEYSTATIC_CREDENTIALS,
+  pickCredentials,
+  resolveKeystaticCredentials,
+  workerBindings,
+} from '../lib/keystatic/serverEnv';
 import type { BlogPost } from '../lib/blog/content';
 
 /**
@@ -375,4 +381,72 @@ test('CMS admin - the page stays a server component so the dashboard keeps its n
   assert.match(page, /export const metadata/);
   assert.match(page, /robots:\s*\{\s*index:\s*false/);
   assert.match(page, /<KeystaticAdmin/, 'the page renders the client admin');
+});
+
+// --------------------------------------------------- CMS credentials (Workers)
+// Keystatic defaults to reading its three secrets out of the ambient process
+// environment, which is true locally and false on the Cloudflare Worker, where
+// the bindings live on the request context. That mismatch was a 503 naming all
+// three keys as missing while they were set in the Cloudflare dashboard.
+
+test('CMS credentials - the ambient environment wins and Worker bindings fill the gaps', () => {
+  const picked = pickCredentials(
+    { KEYSTATIC_GITHUB_CLIENT_ID: 'from-process', KEYSTATIC_SECRET: 'process-secret' },
+    { KEYSTATIC_GITHUB_CLIENT_ID: 'from-worker', KEYSTATIC_GITHUB_CLIENT_SECRET: 'worker-secret' },
+  );
+  assert.deepEqual(picked, {
+    clientId: 'from-process',
+    clientSecret: 'worker-secret',
+    secret: 'process-secret',
+  });
+});
+
+test('CMS credentials - a binding that is not a usable string counts as missing', () => {
+  // A Worker binding may also be a KV namespace or a Durable Object, and a
+  // blank secret is a misconfiguration. Either must read as absent so the route
+  // answers its readable 503 instead of starting an OAuth flow half-configured.
+  assert.deepEqual(pickCredentials({}, { KEYSTATIC_GITHUB_CLIENT_ID: { kv: true } as never }), {});
+  assert.deepEqual(pickCredentials({}, { KEYSTATIC_SECRET: '   ' }), {});
+  assert.deepEqual(pickCredentials(undefined, undefined), {});
+});
+
+test('CMS credentials - Worker bindings come from the Cloudflare context, or report absent', () => {
+  const scope = globalThis as Record<symbol, unknown>;
+  const contextKey = Symbol.for('__cloudflare-context__');
+  const before = scope[contextKey];
+  try {
+    scope[contextKey] = {
+      env: { KEYSTATIC_GITHUB_CLIENT_ID: 'worker-client', KEYSTATIC_SECRET: 'worker-secret' },
+    };
+    assert.equal(workerBindings()?.KEYSTATIC_GITHUB_CLIENT_ID, 'worker-client');
+    assert.equal(workerBindings()?.KEYSTATIC_SECRET, 'worker-secret');
+
+    // No context at all is the normal state under `next start`, not a failure:
+    // the resolver falls back to the ambient environment and nothing escapes.
+    delete scope[contextKey];
+    assert.equal(workerBindings(), undefined);
+  } finally {
+    if (before === undefined) delete scope[contextKey];
+    else scope[contextKey] = before;
+  }
+});
+
+test('CMS credentials - the local preview resolves all three without a Worker', () => {
+  const resolved = resolveKeystaticCredentials();
+  assert.ok(resolved.clientId, `${KEYSTATIC_CREDENTIALS.clientId} is available to the preview`);
+  assert.ok(resolved.clientSecret, `${KEYSTATIC_CREDENTIALS.clientSecret} is available to the preview`);
+  assert.ok(resolved.secret, `${KEYSTATIC_CREDENTIALS.secret} is available to the preview`);
+});
+
+test('CMS credentials - the API route supplies them explicitly, not from ambient env', () => {
+  const route = readFileSync(join('app', 'api', 'keystatic', '[...params]', 'route.ts'), 'utf8');
+  assert.match(
+    route,
+    /config: keystaticConfig, \.\.\.resolveKeystaticCredentials\(\)/,
+    'the handler is built from the resolved credentials, not from whatever the process happens to hold',
+  );
+
+  const resolver = readFileSync(join('lib', 'keystatic', 'serverEnv.ts'), 'utf8');
+  assert.match(resolver, /getCloudflareContext/, 'Worker bindings come from the OpenNext adapter');
+  assert.match(resolver, /process\.env/, 'the local preview path is still the ambient environment');
 });
