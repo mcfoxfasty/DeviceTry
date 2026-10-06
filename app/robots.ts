@@ -6,9 +6,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      // The CMS admin and its API have nothing to offer a crawler, and the login
-      // screen would otherwise compete with real pages in results.
-      disallow: ['/api/', '/keystatic'],
+      // The admin dashboard and its API have nothing to offer a crawler, and the
+      // login screen would otherwise compete with real pages in results.
+      disallow: ['/api/', '/admin'],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

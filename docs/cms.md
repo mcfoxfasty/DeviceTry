@@ -1,150 +1,137 @@
 # The DeviceTry CMS
 
-Articles are written in an admin dashboard at **`/keystatic`**, backed by
-[Keystatic](https://keystatic.com) in **GitHub mode**. Publishing an article is a
-commit to this repository: the Markdown file and every uploaded image are written
-through the GitHub API, so text, assets and the code that renders them are
-reviewed and versioned together.
+Articles are written in an admin dashboard at **`/admin`**. Publishing an article
+is a commit to this repository: the Markdown file and every uploaded image are
+written with the GitHub REST API, so an article's text, its assets and the code
+that renders them are reviewed and versioned together.
 
 ## What lives where
 
 | Path | What it is |
 | --- | --- |
-| `keystatic.config.ts` | The schema: every field an article has, and the editor's capabilities. The single source of truth. |
+| `app/admin/page.tsx` | The dashboard. Server-guarded: without a session cookie the editor's markup is never sent. |
+| `app/admin/login/page.tsx` | The sign-in form: a plain `<form method="post">`, no client JavaScript. |
+| `app/api/admin/login/route.ts` | Password check, session cookie. |
+| `app/api/admin/logout/route.ts` | Clears the cookie. |
+| `app/api/admin/publish/route.ts` | Receives the article and its images, authenticates, validates, commits. |
+| `components/admin/ArticleEditor.tsx` | The editor and the SEO sidebar. |
+| `lib/admin/session.ts` | The cookie: how it is derived, and why it needs no session store. |
+| `lib/admin/authoring.ts` | Draft validation and the exact file format `/blog` reads. |
+| `lib/admin/markdown-editing.ts` | The toolbar's operations, as pure functions. |
+| `lib/admin/github.ts` | The contents API client: `PUT /repos/{owner}/{repo}/contents/{path}`. |
+| `keystatic.config.ts` | The article schema — every field, the categories, the image paths and the editor's capabilities. Still the single source of truth. |
 | `content/posts/<slug>.md` | One article per file: YAML front matter, then the Markdown body. |
-| `public/images/posts/` | Cover images and inline images uploaded through the CMS. |
+| `public/images/posts/` | Cover images and inline images uploaded through the dashboard. |
 | `lib/blog/content.ts` | The read side: turns the collection into typed posts for the site. |
 | `lib/blog/seo.ts` | Canonical, Open Graph, Twitter and Article JSON-LD, as pure functions. |
 | `app/blog/` | The public blog index and the article page. |
-| `app/keystatic/…`, `app/api/keystatic/…` | The admin UI and its server side. |
-| `tests/blogCms.test.ts` | Guards for the schema, the SEO, and the alt-text rule. |
+| `tests/blogCms.test.ts` | Guards for the schema and the SEO. |
+| `tests/adminDashboard.test.ts` | Guards for the dashboard: auth, alt text, the file format, the publish order. |
 
 ## Required environment variables
 
-GitHub mode needs a **GitHub App** with read/write access to this repository.
-The first visit to `/keystatic` walks through creating it and prints four values:
+| Variable | What it is |
+| --- | --- |
+| `ADMIN_PASSWORD` | The dashboard password. Falls back to the documented default `MySecretPass2026!` when unset — the login page says so while that is true. Set it. |
+| `GITHUB_TOKEN` | A token with **Contents: read and write** on `mcfoxfasty/DeviceTry`. Publishing is impossible without it, and `/api/admin/publish` says so by name rather than failing silently. |
+| `NEXT_PUBLIC_SITE_URL` | Required separately at deploy time (see `lib/site.ts`); canonical and Open Graph URLs are built from it. |
 
+Set them in the deployment environment and in the workspace's `.env.local` if you
+want to publish from the preview. Never commit them. For the Cloudflare Worker the
+same values are bound as secrets:
+
+```sh
+npx wrangler secret put ADMIN_PASSWORD
+npx wrangler secret put GITHUB_TOKEN
 ```
-KEYSTATIC_GITHUB_CLIENT_ID
-KEYSTATIC_GITHUB_CLIENT_SECRET
-KEYSTATIC_SECRET
-NEXT_PUBLIC_KEYSTATIC_GITHUB_APP_SLUG
-```
 
-Set them in the deployment environment (Settings → Environment) and in the
-sandbox's `.env.local` if you want to use the CMS from the workspace preview.
-Never commit them. When the App's callback URL needs adding or changing, see the
-"Add redirect_uri" section of Keystatic's GitHub-mode documentation.
+Changing `ADMIN_PASSWORD` invalidates every signed-in session immediately: the
+cookie is an HMAC of a fixed label keyed by the password, so a new password simply
+stops matching old cookies. That is the whole revocation mechanism.
 
-`NEXT_PUBLIC_SITE_URL` is required separately at deploy time (see
-`lib/site.ts`); canonical and Open Graph URLs are built from it.
+## What replaced Keystatic's admin
 
-## The deployment constraint that matters
+The dashboard used to be Keystatic's OAuth admin at `/keystatic`. It needed a
+GitHub App, four secrets, an OAuth round trip through `github.com`, and a callback
+URL registered per origin — and it could still leave the browser on the login
+screen after a *successful* token exchange. `/admin` needs one password and one
+token, has no third party in the sign-in path, and has no redirect that a host can
+get wrong. The old routes (`app/keystatic/…`, `app/api/keystatic/…`,
+`components/keystatic/…`, `lib/keystatic/…`) are deleted, and a test asserts they
+stay deleted.
 
-Keystatic's admin is the one part of this site that is genuinely dynamic — it
-exchanges an OAuth code for a token and then commits to GitHub — so **the host
-must be able to run its API routes under Node.js**. Everything else stays static.
-`app/api/keystatic/[...params]/route.ts` is that server side; if it cannot run on
-a given host, the public site is unaffected but `/keystatic` will not authenticate.
+Keystatic itself remains, in a smaller role: `@keystatic/core`'s reader parses
+`content/posts/*` for the site's pages, and `keystatic.config.ts` is the schema both
+the reader and the dashboard publisher are written against. `@keystatic/next` — the
+package that served the removed admin — is no longer imported anywhere. The old
+`KEYSTATIC_GITHUB_*` and `KEYSTATIC_SECRET` environment variables are unused and can
+be deleted.
+
+## Signing in
+
+One password field, one cookie. The cookie is `HttpOnly` (no script can read it),
+`SameSite=Lax` (a cross-site form post cannot use it), `Secure` in production, and
+expires after 12 hours. The password is compared in constant time, and a wrong
+attempt reveals nothing beyond "that was not it".
+
+The sign-in form is a native form post with no client JavaScript, which is what
+makes it reliable on a phone: iOS Safari and in-app browsers submit it without a
+hydration step, without a popup and without a redirect to a third party, and a
+password manager can fill it in.
+
+## The editor
+
+The body is a Markdown textarea with a toolbar, not a `contenteditable` widget. The
+toolbar offers H2/H3/H4, bold, italic, strikethrough, inline code, bulleted and
+numbered lists, blockquotes, links, tables, fenced code blocks and dividers, and
+every button's operation is a pure function with a test. What the author writes is
+exactly what is committed — there is no serializer between the two.
+
+The SEO sidebar carries the article title (which drives the slug until the author
+takes the slug over), the URL slug, the SEO meta title, the SEO meta description,
+the cover image, the cover alt text, the publish date, the author, the category
+(from the site's existing taxonomy), free-form tags, and an optional canonical URL
+override.
+
+Drafts are saved to `localStorage` on every change and restored on load, so a phone
+that discards a background tab does not cost the author an article. Uploaded images
+are deliberately not saved there.
+
+## Rules the dashboard enforces
+
+**Alt text is required, and "required" means something.** An image cannot be
+inserted without alt text, the cover image cannot be published without it, and the
+publish endpoint re-checks both on the server — a form is a convenience, the
+endpoint is the guarantee. Alt text shorter than 8 characters, or with no letters
+in it, is refused: `a.png` and `...` would pass a non-empty check and describe
+nothing.
+
+The draft rules the schema requires — title length, a lowercase dashed slug, a
+non-empty body, a cover image, a `YYYY-MM-DD` date, an author, a known category, at
+most 12 tags, an absolute canonical override — are enforced in the editor and again
+in `/api/admin/publish`. `bun run test` additionally fails if a published article
+ships an image without alt text or is missing its cover, date or author.
 
 ## Publishing, and why an article needs a build
 
+The endpoint commits the article's images first and then
+`content/posts/{slug}.md`, on `main`. Images go first because the Markdown links
+them at their final public paths: if the article landed first, a build between the
+two commits would publish an article whose images 404. An edit reads the file's
+current `sha` before writing, which is what the contents API requires to overwrite
+instead of answering `409`.
+
 The site is statically prerendered, including `/blog/<slug>`. Publishing commits
 the article, and the next build turns it into a page. `app/blog/[slug]/page.tsx`
-sets `dynamicParams = false` so a slug that no build has seen returns 404 rather
-than being rendered on demand — on an edge runtime, an MDX compiler at request
-time is not something to rely on. Wire a deploy to the repository's push event if
-you want publishing to feel immediate.
+sets `dynamicParams = false`, so a slug that no build has seen returns 404 rather than
+being rendered on demand — on an edge runtime, an MDX compiler at request time is
+not something to rely on. Wire a deploy to the repository's push event if you want
+publishing to feel immediate.
 
-## The article schema
+## When publishing fails
 
-Main content: an article title (which is also the default URL slug) and a rich
-body — H2/H3/H4, bold, italic, strikethrough, inline code, lists, blockquotes,
-code blocks, tables, dividers, and internal or external links.
-
-Inline images are uploaded into the repository and **require alt text**; the
-caption is optional and renders as a visible `<figcaption>`. A cover image and a
-separate required cover alt text are what Open Graph, Twitter and the article
-lead use.
-
-SEO and social: a custom SEO meta title, a meta description, publish date, author,
-a category from the site's existing taxonomy, free-form tags, and an optional
-canonical URL override for an article first published elsewhere.
-
-## Rules the build enforces
-
-`bun run test` fails if any published article ships an image without alt text, or
-is missing its cover image, its cover alt text, its date or its author. Those are
-the checks that keep a CMS from quietly degrading a page's accessibility and
-search metadata over time.
-
-## Signing in, on a phone and in an embedded browser
-
-**The sign-in is a full-page redirect, not a popup.** GitHub mode renders an
-anchor to `/api/keystatic/github/login` with `target="_top"`; the server answers
-`307` to `github.com/login/oauth/authorize`; the return trip lands on
-`/api/keystatic/github/oauth/callback`, which sets the session cookies and
-redirects to the dashboard. Nothing in the flow waits on `window.opener` or a
-`postMessage` handshake — the one cross-window signal is a `storage` event
-(`ks-refetch-installations`) fired by the install-completion page — so there is no
-popup fallback to configure and no `keystatic.config.ts` option that could choose
-one. `components/keystatic/KeystaticAdmin.tsx` adds a single fallback for the case
-that does break: when the admin is inside a cross-origin frame, `target="_top"`
-can be blocked, so the sign-in continues in a new tab and the admin reloads when
-that tab is dismissed. On an ordinary top-level page the fallback is inert.
-
-## When a sign-in fails: reading the reason
-
-Keystatic answers every refusal with two words — `Authorization failed` — and
-GitHub reports a rejected **token exchange** with HTTP 200 and an error body, so
-the reason is invisible by default. The callback is therefore instrumented
-(`lib/keystatic/oauthDiagnostics.ts`):
-
-1. GitHub declining *before* any exchange (`redirect_uri_mismatch`,
-   `access_denied`, …) is logged together with its `error_description`.
-2. The reply from `github.com/login/oauth/access_token` is recorded, **redacted**
-   and logged — access tokens, refresh tokens, client secrets and authorization
-   codes are replaced with `[redacted]` before anything is written, in the log or
-   in the response.
-3. That explanation is appended to the failing response, so the device that hit
-   the failure shows the reason instead of two words. The status Keystatic chose
-   is preserved.
-
-Where to read it: the Cloudflare Worker log (`wrangler tail`, or the Workers log
-stream), the `next start` output in the workspace preview, and the response body
-in the browser tab the callback landed in. All three carry the same lines, tagged
-`[keystatic]`.
-
-The common `200`-with-error-body reasons are `bad_verification_code` (the
-authorization code was already used — a browser that opened the callback twice
-does this) and `incorrect_client_credentials` (the App does not match the
-credentials bound to the deployment).
-
-## After the exchange: the token has to work too
-
-A `200` from the token endpoint means GitHub issued a token, not that the token
-can do anything. Keystatic's dashboard then queries `api.github.com` from the
-browser with that token, and a refusal there (`401 Bad credentials`, `403
-Resource not accessible by integration`, or a GraphQL `errors` array inside an
-otherwise `200` reply) returns the reader to the login screen with nothing said.
-Two captures cover it:
-
-- **Server.** Straight after a callback that succeeded, the token it just issued
-  is used against `GET /user` and `GET /repos/mcfoxfasty/DeviceTry`, and both
-  replies are logged with the fields that decide access — including
-  `permissions.push`, which is what authorises a commit from the dashboard. If the
-  callback redirects without setting the access-token cookie, that is logged too,
-  because then the browser has no session to use.
-- **Browser.** `components/keystatic/KeystaticAdmin.tsx` records GitHub API
-  refusals in the console, redacted, since that request never passes through this
-  site's server.
-
-**The 401 on `/api/keystatic/github/refresh-token`.** That is Keystatic's session
-probe, and it returns `401` in four unrelated situations. The probe now examines
-the refresh-token cookie and says which one applies: no cookie on the request (the
-browser asking is not the one that signed in, or a `Secure` cookie was dropped by
-a plain-http host that is not localhost); no secret resolved; a secret shorter
-than the 32 characters Keystatic needs to derive its key; or a cookie that cannot
-be decrypted with the current `KEYSTATIC_SECRET` (a rotated secret, or two
-environments with different values — sign in again in that browser).
-
+`/api/admin/publish` answers with GitHub's own words: a `401` names the token, a
+`403` points at the missing **Contents: write** permission or the rate limit, a
+`404` at the repository or branch, and a `409` tells you to publish again so the new
+version of the file is read. The dashboard shows that sentence verbatim, because
+"401 Bad credentials" is actionable and "publish failed" is not.

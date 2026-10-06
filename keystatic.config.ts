@@ -1,8 +1,18 @@
 import { config, collection, fields } from '@keystatic/core';
 
 /**
- * The DeviceTry CMS: a Keystatic admin dashboard whose content lives IN this
- * repository.
+ * The DeviceTry CMS schema: the shape of a content/posts article, whose content
+ * lives IN this repository.
+ *
+ * TWO READERS, ONE SCHEMA. `lib/blog/content.ts` parses the collection with
+ * `@keystatic/core`'s reader, and `lib/admin/*` composes and commits files
+ * against the same field names, categories and image paths. Keeping one file as
+ * the source of truth is what stops the dashboard from producing articles the
+ * site cannot read.
+ *
+ * The admin UI at /admin is DeviceTry's own (see docs/cms.md); it replaced
+ * Keystatic's OAuth dashboard, which is why only the reader and this schema
+ * remain from the package.
  *
  * WHY GITHUB MODE, AND WHAT THAT MEANS FOR THIS SITE.
  * `storage.kind: 'github'` makes publishing a *commit*: the Markdown file and
@@ -15,11 +25,10 @@ import { config, collection, fields } from '@keystatic/core';
  *
  * WHY THE POSTS ARE PLAIN MARKDOWN AND NOT MARKDOC.
  * `fields.mdx` writes the body as Markdown with MDX-capable syntax, and it is the
- * field whose editor this schema actually configures: headings, lists,
- * blockquotes, code blocks, tables, links and images are all editor options on
- * it. The stock `table: true` option is the reason this collection could drop a
- * separate "table" component, and the custom `image.schema` below is the reason
- * alt text can be REQUIRED rather than merely encouraged.
+ * field whose editor options this schema configures — headings, lists,
+ * blockquotes, code blocks, tables, links and images. The dashboard's own toolbar
+ * offers the same set, and POST_EDITOR_OPTIONS below is the promise that the two
+ * agree, including that alt text is REQUIRED rather than merely encouraged.
  *
  * THE READS THAT CONSUME THIS FILE.
  * lib/blog/content.ts wraps `createReader` for the site's pages, and
