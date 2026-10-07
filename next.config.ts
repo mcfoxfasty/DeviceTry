@@ -83,6 +83,19 @@ const nextConfig: NextConfig = {
     // Documented deviation from the earlier cpus: 2 setting in
     // docs/phase9-migration.md — lint, types, and tests remain fully enforced.
     cpus: 1,
+    // RENDER-BLOCKING CSS (2026-10-07): the site ships a single stylesheet and
+    // the App Router links it from <head> as an ordinary stylesheet, so first
+    // paint waits for a second round trip after the HTML — the mobile run
+    // flagged ~450 ms of render-blocking time for it. `inlineCss` moves that
+    // stylesheet into each document as a <style> block, and the page then
+    // paints as soon as its HTML is parsed.
+    //
+    // The trade is explicit: the CSS is no longer a separately cached file, so
+    // every document carries it (~19 KB gzipped) instead of sharing one cached
+    // asset. Nothing else has to change for it — the CSP in
+    // lib/security/headers.ts already allows inline styles, because the inline
+    // bootstrap scripts the App Router emits require 'unsafe-inline' anyway.
+    inlineCss: true,
   },
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.

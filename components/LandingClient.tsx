@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
-import Image from 'next/image';
+import Image, { type ImageLoaderProps } from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -270,6 +270,34 @@ const PRIVACY_POINTS = [
  * was removed from the asset itself (never with a theme colour), so the four
  * cards now share a single outer edge that CSS rounds and clips.
  */
+/**
+ * Responsive delivery for the four guided-inspection cards.
+ *
+ * The supplied artwork is 2560x1440 and a card renders in a box a few hundred
+ * CSS pixels wide, so serving the master file cost ~650 KB — two thirds of the
+ * whole mobile page — for four images that are not even in the first viewport.
+ * Each card therefore has a 585w and a 1170w re-encode beside it
+ * (`<name>-585.webp`, `<name>-1170.webp`, WebP quality 78, written with sharp
+ * from the same master, which stays in place as the source of the declared
+ * 2560x1440 box). WebP rather than AVIF matches the responsive sets the guides
+ * already ship (public/guides/*-{480,768,1152}.webp), so one decoder covers the
+ * site.
+ *
+ * The loader is what makes `sizes` real. These cards used to render with
+ * `unoptimized`, which means Next emits no srcset at all — the browser then has
+ * a single 2560w candidate and downloads it whatever the viewport is, on a
+ * phone as readily as on a desktop. Mapping every width Next asks for onto the
+ * nearest variant that exists turns the same `sizes` prop into a two-entry
+ * srcset, and it keeps the work on the client: the Cloudflare adapter has no
+ * image optimizer, so nothing here needs one.
+ */
+const CARD_IMAGE_WIDTHS = [585, 1170] as const;
+
+function cardImageLoader({ src, width }: ImageLoaderProps): string {
+  const target = width <= CARD_IMAGE_WIDTHS[0] ? CARD_IMAGE_WIDTHS[0] : CARD_IMAGE_WIDTHS[1];
+  return src.replace(/\.webp$/, `-${target}.webp`);
+}
+
 const GUIDED_INSPECTION_OPTIONS = [
   {
     title: 'Pre-Call / Meeting Readiness (3 Mins)',
@@ -635,6 +663,16 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
       <Link
         key={tool.id}
         href={`/test/${tool.slug}`}
+        /* No route prefetch for the catalog cards.
+           The App Router prefetches every <Link> that enters the viewport, and
+           on a phone the first three popular cards are in it: measured on the
+           deployed site, opening the homepage also fetched three /test/* RSC
+           payloads (57 KB) and the tester route's chunk (78 KB of JavaScript),
+           none of which the landing page can use. That download finished at
+           4.5-4.9s and cost a 60 ms main-thread task — the single largest
+           avoidable item in the mobile TBT budget. Clicking a card still opens
+           the tester from the same prerendered HTML, one round trip later. */
+        prefetch={false}
         className="glass tool-card group relative flex flex-col p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/50 dark:hover:border-[#14B8A6]/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all"
         style={idx < 10 ? { animationDelay: `${Math.min(idx * 0.04, 0.3)}s` } : undefined}
       >
@@ -1021,7 +1059,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
             onScroll={syncInspectionCarousel}
             className="relative mt-2 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6D28D9] dark:focus-visible:outline-[#C4B5FD]"
           >
-            {GUIDED_INSPECTION_OPTIONS.map((option) => (
+            {GUIDED_INSPECTION_OPTIONS.map((option, index) => (
               <Link
                 key={option.title}
                 href={`/inspection?suite=${option.suite}`}
@@ -1046,9 +1084,30 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                   alt={option.alt}
                   width={option.imageWidth}
                   height={option.imageHeight}
+                  loader={cardImageLoader}
                   sizes="(min-width: 1024px) 32vw, (min-width: 640px) 48vw, 88vw"
+                  /* The FIRST card is the one this section answers with, so it
+                     is fetched first: `priority` drops loading="lazy" and
+                     emits a matching <link rel="preload" as="image"> carrying
+                     the same srcset and sizes, so the preload is the file the
+                     <img> would have chosen rather than a second download.
+
+                     fetchPriority is passed separately because Next 15 only
+                     forwards what the caller gives it: `priority` alone no
+                     longer adds the hint, and on a slow connection the hint is
+                     the part that matters. Next copies it into both the <img>
+                     and the preload link.
+
+                     Preloading an image a phone does not show in its first
+                     screen used to be a real cost. At 15 KB for the 585w
+                     variant it is cheaper than the round trip it saves, and it
+                     keeps the card painted — and the section's layout stable —
+                     whenever the card does enter view. The other three stay
+                     lazy: they sit further along the carousel and further down
+                     the page. */
+                  priority={index === 0}
+                  fetchPriority={index === 0 ? 'high' : undefined}
                   draggable={false}
-                  unoptimized
                   className="h-full w-full object-contain"
                 />
               </Link>

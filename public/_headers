@@ -1,0 +1,33 @@
+# Cloudflare Workers static-asset headers.
+#
+# Read by Cloudflare, not by the app: Workers parses this file out of the
+# deployed asset directory and applies the rules to static asset responses
+# instead of the default `Cache-Control: public, max-age=0, must-revalidate`
+# (see https://developers.cloudflare.com/workers/static-assets/headers/). The
+# file itself is never served.
+#
+# What each rule covers, and why a year is honest for it:
+#
+#   /_next/static/*  Build output. Every filename in it carries a content hash
+#                    (`5865-9731a8f27c0b510b.js`), so the URL changes whenever
+#                    the bytes do — that is exactly the case `immutable` exists
+#                    for, and it is what Next itself sends when it serves these
+#                    files. Without it, a returning visitor revalidates every
+#                    chunk on every navigation.
+#
+#   /inspection/*    The guided-inspection card artwork: the master files plus
+#                    the 585w and 1170w WebP re-encodes the homepage serves. A
+#                    card's pixels are fixed by the file it names, so a change
+#                    to the artwork is a change to the filename. Nothing in this
+#                    directory is generated per request.
+#
+# Security headers are deliberately NOT repeated here. They are set for every
+# response the app serves, in lib/security/headers.ts, because that is where a
+# rule holds for HTML and assets alike; splitting them across two files is how
+# one of them silently stops being sent.
+
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/inspection/*
+  Cache-Control: public, max-age=31536000, immutable

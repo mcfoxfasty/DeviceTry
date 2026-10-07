@@ -338,6 +338,41 @@ test('homepage inspection cards - the supplied artwork IS the card', async () =>
     assert.deepEqual([w, h], actualSizes[0], 'all four cards share one identical size');
   }
 
+  // Each card is SERVED from a re-encode beside the master, so a phone fetches
+  // a few hundred pixels instead of 2560: the four masters alone are ~650 KB,
+  // which was two thirds of the whole mobile page for four images that are not
+  // even in the first viewport.
+  for (const src of images) {
+    const master = join(repoRoot, 'public', decodeURIComponent(src));
+    for (const width of [585, 1170]) {
+      const variant = join(repoRoot, 'public', decodeURIComponent(src).replace(/\.webp$/, `-${width}.webp`));
+      assert.ok(existsSync(variant), `card artwork ships a ${width}w re-encode: ${src}`);
+      assert.ok(
+        statSync(variant).size < statSync(master).size / 2,
+        `the ${width}w re-encode is materially smaller than the 2560w master: ${src}`
+      );
+    }
+  }
+
+  // A `sizes` prop only yields candidates if something can honour it, and here
+  // that something is a loader: with `unoptimized` (what this used to pass)
+  // Next emits no srcset at all, so the single 2560w file was downloaded whole
+  // whatever the viewport was — on a phone as readily as on a desktop.
+  const cardImageTag = landing.slice(
+    landing.indexOf('src={option.image}'),
+    landing.indexOf('/>', landing.indexOf('src={option.image}'))
+  );
+  assert.match(cardImageTag, /loader=\{cardImageLoader\}/, 'the card image is loaded through the responsive loader');
+  assert.doesNotMatch(cardImageTag, /unoptimized/, 'and it does not opt out of responsive candidates');
+  assert.match(landing, /const CARD_IMAGE_WIDTHS = \[585, 1170\] as const/);
+  assert.match(landing, /sizes="\(min-width: 1024px\) 32vw, \(min-width: 640px\) 48vw, 88vw"/);
+
+  // The first card answers for the section: eager, fetchpriority high, and
+  // preloaded with the same srcset and sizes, so the preload is the file the
+  // <img> would have chosen rather than a second download. The other three
+  // stay lazy — they sit further along the carousel and further down the page.
+  assert.match(landing, /priority=\{index === 0\}/, 'only the first card is prioritised');
+
   // The card is the artwork: contained (never cropped or stretched) inside one
   // shared 16:9 box so every card in the row lines up on the same line.
   assert.match(landing, /<Image\s+src=\{option\.image\}/);
@@ -535,7 +570,10 @@ test('homepage curve sparks - one dot per curved outline, riding that outline, o
   const base = globals.slice(globals.indexOf('.curve-spark {'), globals.indexOf('.curve-spark--circle {'));
   assert.match(base, /position: absolute/, 'the dot is out of flow, so it can never shift layout');
   assert.match(base, /pointer-events: none/, 'it can never intercept a hover or a tap');
-  assert.match(base, /animation: curve-spark-travel/, 'it is animated from CSS');
+  // The motion is declared per shape now, beside the path it follows: the
+  // keyframes are written in that shape's own coordinates, so a dot cannot be
+  // animated along another outline's curve.
+  assert.doesNotMatch(base, /animation: curve-spark-travel/, 'the motion is declared per shape, not once for all four');
   for (const shape of sparks) {
     const block = globals.slice(globals.indexOf(`.${shape} {`), globals.indexOf('}', globals.indexOf(`.${shape} {`)));
     assert.match(block, /offset-path: path\("M /, `${shape} declares an explicit path`);
@@ -557,18 +595,52 @@ test('homepage curve sparks - one dot per curved outline, riding that outline, o
   assert.equal(new Set(periods).size, 4, 'no two outlines share a period');
   assert.equal(new Set(delays).size, 4, 'no two outlines share a delay');
 
-  // Only offset-distance and opacity animate. offset-distance is compositor
-  // motion along a declared path: it cannot reflow the page the way animating
-  // top/left or a scroll handler would.
-  const anim = globals.match(/@keyframes curve-spark-travel \{([\s\S]*?)\n\}/)![1];
+  // Only TRANSFORM and opacity animate, and that is a measured requirement
+  // rather than a style preference: this browser reports `offset-distance` in
+  // an Animation trace's `unsupportedProperties` for these four dots, i.e. the
+  // traversal was NOT composited and every frame of it was main-thread style
+  // work. A translate() over the same path IS composited (verified in the same
+  // browser: zero unsupported properties, with `offset-path` still in place).
+  //
+  // Each shape therefore carries its own keyframes, sampled from its own path
+  // at the ten stops the envelope needs. `offset-path` remains the single
+  // declaration of the geometry, and it is also what keeps the 5px dot centred
+  // ON the line rather than hung off it; only the animated property changed.
+  const anim = globals.match(/@keyframes curve-spark-travel-circle \{([\s\S]*?)\n\}/)![1];
+  for (const shape of sparks) {
+    const name = shape.replace('curve-spark--', '');
+    const block = globals.match(new RegExp(`@keyframes curve-spark-travel-${name} \\{([\\s\\S]*?)\\n\\}`));
+    assert.ok(block, `${name} has its own keyframes, written in its own path's coordinates`);
+    assert.match(block![1], /transform: translate\(/, `${name} travels by transform`);
+    assert.doesNotMatch(block![1], /offset-distance/, `${name} no longer animates the non-composited property`);
+  }
   const keyframes = [...anim.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]);
   for (const frame of keyframes) {
     for (const prop of frame.split(';').map((d) => d.split(':')[0].trim())) {
-      assert.ok(['offset-distance', 'opacity', ''].includes(prop), `only offset-distance and opacity animate (found ${prop})`);
+      assert.ok(['transform', 'opacity', ''].includes(prop), `only transform and opacity animate (found ${prop})`);
     }
   }
-  assert.match(anim, /offset-distance: 100%/, 'the dot traverses the whole curve');
-  assert.match(anim, /100%\s*\{\s*offset-distance: 100%;\s*opacity: 0;/, 'and it is absent for the rest of the loop');
+  // Ten stops, and every curve here is a closed loop: the translate values are
+  // deltas from the path's own start point, so the dot is at that start point
+  // at 0%, at the end of the crossing (78%) and for the whole rest window.
+  const stops = [...anim.matchAll(/(\d+)%\s*\{\s*transform: translate\(([^)]*)\)/g)].map(([, pct, t]) => ({
+    pct: Number(pct),
+    t,
+  }));
+  // The samples are every 2% of the cycle across the 78% crossing. That
+  // density is load-bearing: a translate travels in straight lines BETWEEN
+  // keyframes, so sampling only at the glow envelope's stops is what let the
+  // dot stray up to 44px off the line (measured against the real path). The
+  // geometric bound that follows from this spacing is checked in the test
+  // below, against each outline's own radius.
+  assert.ok(stops.length >= 40, `the path is sampled densely enough to stay on it (${stops.length} stops)`);
+  const crossing = stops.filter((s) => s.pct <= 78);
+  const gaps = crossing.slice(1).map((s, i) => s.pct - crossing[i].pct);
+  assert.ok(Math.max(...gaps) <= 2, `no gap between samples exceeds 2% of the cycle (${Math.max(...gaps)}%)`);
+  for (const pct of [0, 78, 100]) {
+    assert.equal(stops.find((s) => s.pct === pct)!.t, '0px, 0px', `the dot is back at the start of its path at ${pct}%`);
+  }
+  assert.ok(stops.some((s) => s.t !== '0px, 0px'), 'and it genuinely leaves it');
 
   // Occasional, not a constant lit line: a long cycle, and a rest window at
   // the end of it where the dot is parked unseen.
@@ -579,16 +651,18 @@ test('homepage curve sparks - one dot per curved outline, riding that outline, o
   const frames = [...anim.matchAll(/(\d+(?:\.\d+)?)%\s*\{([^}]*)\}/g)].map(([, pct, body]) => ({
     pct: Number(pct),
     opacity: body.includes('opacity:') ? Number(body.match(/opacity: ([\d.]+)/)![1]) : null,
-    distance: body.includes('offset-distance:') ? body.match(/offset-distance: (\d+)%/)![1] : null,
+    rest: /transform: translate\(0px, 0px\)/.test(body),
   }));
   const opacityFrames = frames.filter((f) => f.opacity !== null);
   assert.ok(opacityFrames.length >= 7, `the glow is built from a ramp, not two steps (${opacityFrames.length} frames)`);
 
   // The peak must fall on the MIDDLE OF THE PATH, so it has to sit halfway
-  // through the traversal window (the part of the cycle spent moving from 0%
-  // to 100% of offset-distance), not simply at the 50% mark of the cycle.
+  // through the traversal window (the part of the cycle spent moving along the
+  // path), not simply at the 50% mark of the cycle. The window is read back
+  // out of the keyframes: the crossing ends at the first stop past 0% where the
+  // dot is back at its path's start point.
   const travelStart = 0;
-  const travelEnd = Number(frames.find((f) => f.distance === '100')!.pct);
+  const travelEnd = frames.find((f) => f.rest && f.pct > travelStart)!.pct;
   const peakFrame = opacityFrames.reduce((a, b) => (b.opacity! > a.opacity! ? b : a));
   const travelMid = (travelStart + travelEnd) / 2;
   assert.equal(peakFrame.pct, travelMid, `the glow peaks at the middle of the path (${peakFrame.pct}% vs ${travelMid}%)`);
@@ -621,11 +695,19 @@ test('homepage curve sparks - one dot per curved outline, riding that outline, o
   assert.ok(travelEnd <= 90, `the dot finishes its crossing and then rests (crossing ends at ${travelEnd}%)`);
   assert.ok(100 - travelEnd >= 10, `it is absent for a real part of every cycle (rest ${100 - travelEnd}%)`);
 
-  // The peak has to land on the middle of the PATH, which only holds if
-  // offset-distance advances linearly. Under the old ease-in-out the dot was
-  // a quarter of the way along the curve at the cycle's halfway point, so the
+  // The peak has to land on the middle of the PATH, which only holds if the dot
+  // moves at a constant speed along it — the samples are evenly spaced in path
+  // LENGTH and the timing is linear. Under the old ease-in-out the dot was a
+  // quarter of the way along the curve at the cycle's halfway point, so the
   // envelope above would have peaked in the wrong place.
-  assert.match(base, /curve-spark-travel var\(--curve-period\) linear /, 'offset-distance is linear so the peak lands mid-path');
+  for (const shape of sparks) {
+    const block = globals.slice(globals.indexOf(`.${shape} {`), globals.indexOf('}', globals.indexOf(`.${shape} {`)));
+    assert.match(
+      block,
+      /animation: curve-spark-travel-[a-z]+ var\(--curve-period\) linear var\(--curve-delay\) infinite/,
+      `${shape} is animated from CSS, at a constant speed along its own path`
+    );
+  }
 
   // The one hard accessibility requirement: no motion at all when asked.
   const reduced = globals.slice(globals.indexOf('@media (prefers-reduced-motion: reduce)'));
@@ -722,6 +804,42 @@ test('homepage curve sparks - every path traces the border its outline actually 
     for (const { x, y } of coords) {
       assert.ok(x >= -1 && x <= w - 3, `${shape}: x ${x} is on the border centreline (-1..${w - 3})`);
       assert.ok(y >= -1 && y <= h - 3, `${shape}: y ${y} is on the border centreline (-1..${h - 3})`);
+    }
+
+    // The travelling dot has to stay ON that border too. Each shape's
+    // keyframes translate the dot from the start of its own path, so every
+    // sample, offset by the path's declared start point, must land inside the
+    // border box the path traces — a sample outside it would be a dot crossing
+    // empty space, exactly what this whole file exists to prevent.
+    const [startX, startY] = d.match(/M (-?[\d.]+) (-?[\d.]+)/)!.slice(1).map(Number);
+    const keyframeBlock = globals.match(
+      new RegExp(`@keyframes curve-spark-travel-${shape.replace('curve-spark--', '')} \\{([\\s\\S]*?)\\n\\}`)
+    )![1];
+    const samples = [
+      ...keyframeBlock.matchAll(/(\d+)%\s*\{\s*transform: translate\((-?[\d.]+)px, (-?[\d.]+)px\)/g),
+    ].map(([, pct, x, y]) => [Number(pct), startX + Number(x), startY + Number(y)]);
+    assert.ok(samples.length >= 40, `${shape}: the crossing is densely sampled (${samples.length} stops)`);
+    for (const [, x, y] of samples) {
+      assert.ok(x >= -1.6 && x <= w - 2.4, `${shape}: the dot stays on the drawn border (x ${x} in -1..${w - 3})`);
+      assert.ok(y >= -1.6 && y <= h - 2.4, `${shape}: the dot stays on the drawn border (y ${y} in -1..${h - 3})`);
+    }
+
+    // And so does the ground BETWEEN the samples. A translate interpolates in
+    // a straight line, so each pair of consecutive stops is a chord whose
+    // greatest distance from the arc is the sagitta, L*L/(8r). Every chord here
+    // has to bow less than the dot's own 2.5px radius, or the middle of that
+    // chord would show as the dot leaving the line it rides.
+    const crossingSamples = samples.filter(([pct]) => pct <= 78);
+    for (let i = 1; i < crossingSamples.length; i++) {
+      const chord = Math.hypot(
+        crossingSamples[i][1] - crossingSamples[i - 1][1],
+        crossingSamples[i][2] - crossingSamples[i - 1][2]
+      );
+      const sagitta = (chord * chord) / (8 * r);
+      assert.ok(
+        sagitta <= 2.5,
+        `${shape}: a ${chord.toFixed(1)}px chord bows ${sagitta.toFixed(2)}px off its radius-${r} curve (between ${crossingSamples[i - 1][0]}% and ${crossingSamples[i][0]}%)`
+      );
     }
 
     // A rounded square and a stadium both need four arcs (one per quarter);
