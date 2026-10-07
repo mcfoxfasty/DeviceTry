@@ -1,12 +1,13 @@
 ---
-title: 'Keyboard Keys Not Registering? Tell a Hardware Fault from a Software One'
+title: Keyboard Keys Not Registering? Tell a Hardware Fault from a Software One
 seoTitle: 'Keyboard Keys Not Registering: Hardware or Software?'
-seoDescription: 'A key that never registers, a key that registers twice, and a key that only fails in one app are three different faults. Here is the five-minute test that separates them.'
+seoDescription: A key that never registers, a key that registers twice, and a key that only fails in one app are three different faults. Here is the five-minute test that separates them.
 coverImage: /uploads/keyboard-hardware-or-software.png
 coverImageAlt: 'The DeviceTry cover card, showing the DeviceTry wordmark above the line "Free browser-based device tests".'
 publishedAt: 2026-10-06
 author: DeviceTry team
 category: input-gaming
+status: published
 tags:
   - keyboard
   - troubleshooting
