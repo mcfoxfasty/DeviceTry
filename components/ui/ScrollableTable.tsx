@@ -19,21 +19,23 @@ import React, { type ReactNode } from 'react';
  *    desktop presentation is unchanged;
  *  - a right-edge fade that marks the content as continuing.
  *
- * `maxHeight` adds a vertical scroll region for long result tables; pass it
- * only where the table can genuinely exceed the viewport height.
+ * THE TABLE ALWAYS GROWS VERTICALLY. There is deliberately no height cap and
+ * no vertical overflow rule here: a result table that is taller than the screen
+ * must be scrollable by the page itself, not trapped in a second inner scroll
+ * region — and the old vertical clip paired with a hard cap hid rows with no
+ * way to reach them at all.
+ * Do not reintroduce a height cap or a vertical clip on these tables;
+ * tests/responsiveLayout.test.ts fails if either comes back.
  */
 export function ScrollableTable({
   children,
   label,
-  maxHeight,
   className = '',
   minWidthClass = 'min-w-[560px]',
 }: {
   children: ReactNode;
   /** Describes the table for assistive tech, e.g. "Codec support results". */
   label: string;
-  /** Optional vertical cap, e.g. "max-h-[420px]". */
-  maxHeight?: string;
   className?: string;
   /** Minimum table width before the container starts scrolling. */
   minWidthClass?: string;
@@ -44,9 +46,7 @@ export function ScrollableTable({
         role="region"
         aria-label={label}
         tabIndex={0}
-        className={`overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-xl border border-[#DFE5EB] dark:border-[#223043] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] dark:focus-visible:ring-[#14B8A6] ${
-          maxHeight ? `${maxHeight} overflow-y-auto` : ''
-        }`}
+        className="overflow-x-auto overscroll-x-contain rounded-xl border border-[#DFE5EB] dark:border-[#223043] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] dark:focus-visible:ring-[#14B8A6]"
       >
         <div className={minWidthClass}>{children}</div>
       </div>

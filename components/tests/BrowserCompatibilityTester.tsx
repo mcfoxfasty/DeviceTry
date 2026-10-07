@@ -226,9 +226,9 @@ export function BrowserCompatibilityTester({ onResultUpdate, onResultClear, rese
         </button>
       </div>
 
-      <ScrollableTable label="Browser API capability results" maxHeight="max-h-[460px]" className="mt-4" minWidthClass="min-w-[720px]">
+      <ScrollableTable label="Browser API capability results" className="mt-4" minWidthClass="min-w-[720px]">
         <table className="w-full text-left text-xs">
-          <thead className="bg-[#F6F7F9] dark:bg-[#192332] sticky top-0">
+          <thead className="bg-[#F6F7F9] dark:bg-[#192332]">
             <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
               <th scope="col" className="py-2.5 px-4 font-semibold">Web API</th>
               <th scope="col" className="py-2.5 px-4 font-semibold w-24">Category</th>

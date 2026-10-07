@@ -48,6 +48,32 @@ test('the scroll wrapper is keyboard reachable and labelled', () => {
   assert.ok(wrapper.includes('sm:hidden'), 'the affordance must disappear on desktop where it is noise');
 });
 
+test('result tables grow vertically to fit every row', () => {
+  // The Advanced Diagnostics tables used to carry a max-height cap paired
+  // with an unconditional `overflow-y-hidden`, so rows past the cap were
+  // hidden outright — with no scrollbar to reach them through. A table may
+  // scroll horizontally, never vertically: the page is the vertical scroller.
+  const wrapper = read('components/ui/ScrollableTable.tsx');
+  assert.ok(!wrapper.includes('overflow-y-hidden'), 'the wrapper must never clip its table vertically');
+  assert.ok(!wrapper.includes('maxheight'), 'no result table may opt back into a height cap');
+
+  const tables = [
+    'components/tests/BrowserCompatibilityTester.tsx',
+    'components/tests/BrowserSystemInfoTester.tsx',
+    'components/tests/CodecSupportTester.tsx',
+    'components/tests/JavascriptBenchmarkTester.tsx',
+    'components/tests/PermissionDiagnosticsTester.tsx',
+    'components/tests/PrivacyStorageInspectorTester.tsx',
+    'components/guides/GuideArticleView.tsx',
+    'components/inspection/GuidedInspectionFlow.tsx',
+  ];
+  for (const file of tables) {
+    const src = read(file);
+    assert.ok(!src.includes('maxheight='), `${file} must not pass a maxHeight cap to its table`);
+    assert.ok(!src.includes('max-h-['), `${file} must not cap its table height with a raw max-h class`);
+  }
+});
+
 test('toolbar rows wrap instead of pushing the page sideways', () => {
   // Keyboard tester: the layout selector + Reset exceeded the viewport by 127px.
   const keyboard = read('components/tests/KeyboardTester.tsx');

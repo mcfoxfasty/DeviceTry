@@ -136,9 +136,9 @@ export function CodecSupportTester({ onResultUpdate, onResultClear, resetSignal 
             <p className="mt-1">{summary}</p>
           </div>
 
-          <ScrollableTable label="Codec capability results" maxHeight="max-h-[420px]" className="mt-4" minWidthClass="min-w-[640px]">
+          <ScrollableTable label="Codec capability results" className="mt-4" minWidthClass="min-w-[640px]">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#F6F7F9] dark:bg-[#192332] sticky top-0">
+              <thead className="bg-[#F6F7F9] dark:bg-[#192332]">
                 <tr className="text-[#5F6B7A] dark:text-[#9AA6B8]">
                   <th scope="col" className="py-2.5 px-4 font-semibold">Format</th>
                   <th scope="col" className="py-2.5 px-4 font-semibold w-24">Kind</th>
