@@ -44,6 +44,12 @@ import {
 } from '../lib/admin/github';
 import { escapeHtml, renderInline, renderPreview } from '../lib/admin/preview';
 import {
+  decodeBase64Content,
+  listArticles,
+  parseFrontMatter,
+  readArticle,
+} from '../lib/admin/articles';
+import {
   ALLOWED_HEADING_LEVELS,
   codeBlockTemplate,
   imageMarkdown,
@@ -712,11 +718,156 @@ test('admin existence - a referenced image must be uploaded or already committed
   );
 });
 
+// ------------------------------------------------- the collection, via the API
+
+test('admin collection - front matter is read the way the dashboard writes it', () => {
+  const file = composePostFile(
+    draft({
+      title: "A title with a colon: and the author's apostrophe",
+      seoTitle: 'A quoted meta title',
+      seoDescription: '',
+      status: 'draft',
+      tags: ['keyboard', 'a tag'],
+      canonicalUrl: 'https://example.com/original',
+      content: 'Intro.\n\n## A subheading\n\nThe closing words.',
+    })
+  );
+  const { data, body } = parseFrontMatter(file);
+
+  assert.equal(data.title, "A title with a colon: and the author's apostrophe", 'quotes are unescaped');
+  assert.equal(data.seoTitle, 'A quoted meta title');
+  assert.equal(data.seoDescription, null, 'an empty field is null, as composed');
+  assert.equal(data.status, 'draft');
+  assert.deepEqual(data.tags, ['keyboard', 'a tag'], 'tags come back as a list');
+  assert.equal(data.canonicalUrl, 'https://example.com/original');
+  assert.match(body, /^Intro\./, 'the body starts at its first line, not at a blank one');
+  assert.match(body, /The closing words\./);
+});
+
+test('admin collection - the article already in the repository parses entirely', () => {
+  const file = readFileSync(
+    join('content', 'posts', 'keyboard-keys-not-registering-hardware-or-software.md'),
+    'utf8'
+  );
+  const { data, body } = parseFrontMatter(file);
+
+  assert.match(String(data.title), /Keyboard Keys Not Registering/);
+  assert.equal(data.publishedAt, '2026-10-06');
+  assert.equal(data.category, 'input-gaming');
+  assert.equal(data.canonicalUrl, null);
+  assert.deepEqual(data.tags, ['keyboard', 'troubleshooting']);
+  assert.match(body, /## The five-minute test/);
+  assert.match(body, /\| What the tester shows \|/, 'a table in the body is body, not front matter');
+});
+
+test('admin collection - a file with no front matter is still readable', () => {
+  const { data, body } = parseFrontMatter('Just prose, no delimiters.\n');
+  assert.deepEqual(data, {});
+  assert.equal(body, 'Just prose, no delimiters.\n');
+});
+
+test('admin collection - base64 content survives characters ASCII would corrupt', () => {
+  const original = 'An em dash — a curly quote ’ and an accent é';
+  const encoded = Buffer.from(original, 'utf8').toString('base64');
+  assert.equal(decodeBase64Content(encoded), original);
+  assert.equal(decodeBase64Content(encoded.replace(/(.{20})/, '$1\n')), original, 'whitespace in the payload is ignored');
+});
+
+test('admin collection - the listing asks the repository and sorts newest first', async () => {
+  const files: Record<string, string> = {
+    'content/posts/newer.md': composePostFile(
+      draft({ slug: 'newer', publishedAt: '2026-10-07', status: 'draft', title: 'Newer draft' })
+    ),
+    'content/posts/older.md': composePostFile(
+      draft({ slug: 'older', publishedAt: '2026-09-01', status: 'published', title: 'Older article' })
+    ),
+  };
+  const calls: string[] = [];
+  const fake = (async (url: RequestInfo | URL) => {
+    const target = String(url);
+    calls.push(target);
+    if (target.includes('/contents/content/posts?')) {
+      return new Response(
+        JSON.stringify(
+          Object.keys(files).map((path) => ({ path, type: 'file', name: path.split('/').pop() }))
+        ),
+        { status: 200 }
+      );
+    }
+    const path = Object.keys(files).find((candidate) => target.includes(candidate));
+    if (!path) return new Response('{"message":"Not Found"}', { status: 404 });
+    return new Response(
+      JSON.stringify({ content: Buffer.from(files[path], 'utf8').toString('base64'), encoding: 'base64' }),
+      { status: 200 }
+    );
+  }) as typeof fetch;
+
+  const articles = await listArticles({ token: 'ghp_test_token', request: fake });
+  assert.equal(calls.length, 3, 'one listing plus one request per article');
+  assert.deepEqual(
+    articles.map((article) => [article.slug, article.status]),
+    [
+      ['newer', 'draft'],
+      ['older', 'published'],
+    ],
+    'newest first, and each article carries its own status'
+  );
+  assert.equal(articles[0].title, 'Newer draft');
+});
+
+test('admin collection - one article is read with its body, and a missing one is null', async () => {
+  const file = composePostFile(draft({ slug: 'loaded', content: 'Body text here.' }));
+  const fake = (async () =>
+    new Response(
+      JSON.stringify({ content: Buffer.from(file, 'utf8').toString('base64'), encoding: 'base64' }),
+      { status: 200 }
+    )) as typeof fetch;
+
+  const article = await readArticle('loaded', { token: 'ghp_test_token', request: fake });
+  assert.ok(article);
+  assert.equal(article.slug, 'loaded');
+  assert.equal(article.status, 'published');
+  assert.equal(article.coverImageAlt, 'The DeviceTry cover card with the wordmark');
+  assert.deepEqual(article.tags, ['keyboard']);
+  assert.match(article.content, /Body text here\./);
+
+  const missing = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as typeof fetch;
+  assert.equal(await readArticle('gone', { token: 'ghp_test_token', request: missing }), null);
+});
+
+test('admin collection - a refusal from GitHub is explained, not shown as an empty list', async () => {
+  const refusing = (async () => new Response('{"message":"Bad credentials"}', { status: 401 })) as typeof fetch;
+  await assert.rejects(listArticles({ token: 'bad', request: refusing }), (error: Error) => {
+    assert.match(error.message, /401/);
+    assert.match(error.message, /Bad credentials/);
+    return true;
+  });
+});
+
+test('admin collection - the admin reads the repository, not the build-time files', () => {
+  const list = readFileSync(join('app', 'admin', 'page.tsx'), 'utf8');
+  assert.match(list, /listArticles\(\{ token \}\)/, 'the management view asks GitHub');
+  assert.doesNotMatch(list, /listPosts\(/, 'and not the reader the Worker cannot resolve');
+  assert.match(list, /publishToken\(\)/);
+
+  const edit = readFileSync(join('app', 'admin', 'edit', '[slug]', 'page.tsx'), 'utf8');
+  assert.match(edit, /readArticle\(slug, \{ token \}\)/);
+  assert.doesNotMatch(edit, /getPost\(/, 'the edit page does not read the collection from disk');
+
+  const config = readFileSync('next.config.ts', 'utf8');
+  assert.doesNotMatch(
+    config,
+    /outputFileTracingIncludes/,
+    'nothing traces content/posts into the worker any more — that was the empty-list bug'
+  );
+});
+
 test('admin lifecycle - the routes exist, are guarded, and wire the whole flow', () => {
   const list = readFileSync(join('app', 'admin', 'page.tsx'), 'utf8');
   assert.match(list, /isAuthenticated\(await cookies\(\)\)/, 'the management view is behind the session');
   assert.match(list, /redirect\('\/admin\/login'\)/);
-  assert.match(list, /listPosts\(\)/, 'it reads the same collection the site builds from');
+  // The collection read itself is asserted in 'the admin reads the repository,
+  // not the build-time files' above; here the concern is the guard and the link.
   assert.match(list, /\/admin\/new/, 'it links to the new-article editor');
 
   const fresh = readFileSync(join('app', 'admin', 'new', 'page.tsx'), 'utf8');
@@ -725,7 +876,7 @@ test('admin lifecycle - the routes exist, are guarded, and wire the whole flow',
 
   const edit = readFileSync(join('app', 'admin', 'edit', '[slug]', 'page.tsx'), 'utf8');
   assert.match(edit, /isAuthenticated\(await cookies\(\)\)/);
-  assert.match(edit, /getPost\(slug\)/, 'an edit loads the saved article');
+  assert.match(edit, /readArticle\(slug, \{ token \}\)/, 'an edit loads the saved article, through the API');
   assert.match(edit, /existingSlug/, 'so saving updates the same file rather than duplicating it');
   assert.match(edit, /notFound\(\)/, 'an unknown slug is not an editor with empty fields');
 

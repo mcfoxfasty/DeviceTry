@@ -66,16 +66,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // The admin pages deliberately read the article collection from the GitHub API
+  // rather than from disk — see lib/admin/articles.ts for why, and the live
+  // deployment that proved it (the bundle carried content/posts, but the reader's
+  // working directory did not, so the list came out empty). No tracing entry for
+  // content/posts is needed, and none is configured.
   output: 'standalone',
-  // The admin management view and the edit page read content/posts at request
-  // time (the same collection the site builds from). Without this, the files the
-  // build traces for those routes would not include the articles, and the list
-  // would be empty on the Worker even though it is correct under `next start`.
-  outputFileTracingIncludes: {
-    '/admin': ['./content/posts/**/*.md'],
-    '/admin/new': ['./content/posts/**/*.md'],
-    '/admin/edit/[slug]': ['./content/posts/**/*.md'],
-  },
   transpilePackages: ['motion'],
   experimental: {
     // 2 GiB cgroup: static-generation workers inherit the NODE_OPTIONS heap

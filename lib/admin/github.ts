@@ -68,7 +68,13 @@ export class GithubError extends Error {
   }
 }
 
-function headers(token: string, json = false): Record<string, string> {
+/**
+ * The headers every GitHub request from this dashboard carries.
+ *
+ * Exported because the admin's read side (lib/admin/articles.ts) asks the same API
+ * for the collection, and two definitions of an auth header is one too many.
+ */
+export function githubHeaders(token: string, json = false): Record<string, string> {
   return {
     authorization: `Bearer ${token}`,
     accept: 'application/vnd.github+json',
@@ -78,6 +84,9 @@ function headers(token: string, json = false): Record<string, string> {
     ...(json ? { 'content-type': 'application/json' } : {}),
   };
 }
+
+/** Alias kept for the call sites inside this module. */
+const headers = githubHeaders;
 
 /** The `message` GitHub sent, or a fallback built from the status. */
 export function githubErrorMessage(status: number, body: string): string {

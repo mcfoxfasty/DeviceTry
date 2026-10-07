@@ -18,6 +18,7 @@ that renders them are reviewed and versioned together.
 | `app/api/admin/publish/route.ts` | `POST` saves an article and its images; `DELETE?slug=…` removes one. Both authenticate, validate, then commit. |
 | `components/admin/ArticleEditor.tsx` | The editor, the Preview tab and the SEO sidebar. |
 | `components/admin/ArticlesTable.tsx` | The management table, and the delete confirmation. |
+| `lib/admin/articles.ts` | The dashboard's read side: the collection, front matter and bodies, read from the repository through the GitHub API. |
 | `lib/admin/preview.ts` | Markdown → HTML for the Preview tab, with every text run escaped. |
 | `lib/admin/session.ts` | The cookie: how it is derived, and why it needs no session store. |
 | `lib/admin/authoring.ts` | Draft validation and the exact file format `/blog` reads. |
@@ -85,10 +86,20 @@ password manager can fill it in.## The article lifecycle
 
 **`/admin` lists every article** in the collection — title, slug, publish date,
 category and status — with a **+ New Article** button and an **Edit** and
-**Delete** action per row. It is read at request time from `content/posts` through
-the same reader the public pages use, so it shows the repository's truth rather
-than a cached copy. A published row links to its public URL; a draft has none to
-link to.
+**Delete** action per row. A published row links to its public URL; a draft has
+none to link to.
+
+The list is read from the repository **through the GitHub API**, not from the
+checked-out files — `lib/admin/articles.ts`. That is not a preference: the site's
+content reader resolves `content/posts/*` from the process's working directory,
+which is right during a build and wrong in the deployed Worker, whose working
+directory does not contain the repository. The first deploy of this dashboard
+proved it — the article file was in the bundle and the management view still said
+"No articles yet" (2026-10-07). Reading through the API also makes the list never
+a build behind: an article committed a minute ago is listed, and a deleted one is
+gone, without waiting for a deploy. The cost is one request for the file listing
+and one per article, in parallel, which needs `GITHUB_TOKEN` — without it the page
+says so by name instead of rendering an empty list.
 
 **Edit** (`/admin/edit/<slug>`) loads the saved file — front matter, body and
 images — into the editor. Saving commits an update to **the same path**: the
