@@ -1,7 +1,7 @@
 import { config, collection, fields } from '@keystatic/core';
 
 /**
- * The DeviceTry CMS schema: the shape of a content/posts article, whose content
+ * The DeviceTry CMS schema: the shape of a public/guides article, whose content
  * lives IN this repository.
  *
  * TWO READERS, ONE SCHEMA. `lib/blog/content.ts` parses the collection with
@@ -38,15 +38,15 @@ import { config, collection, fields } from '@keystatic/core';
  */
 
 /**
- * Uploaded article images land here in the repository and are served from there.
+ * Uploaded article images land in `public/uploads` and are served from there.
  *
  * `directory` is the on-disk folder Keystatic commits new files into;
  * `publicPath` is the URL prefix those files are served under. They must describe
  * the same place, or a freshly uploaded image would be committed to one path and
  * requested from another.
  */
-export const POST_IMAGE_DIRECTORY = 'public/images/posts';
-export const POST_IMAGE_PUBLIC_PATH = '/images/posts/';
+export const POST_IMAGE_DIRECTORY = 'public/uploads';
+export const POST_IMAGE_PUBLIC_PATH = '/uploads/';
 
 /**
  * The article categories, kept deliberately equal to the site's existing guide
@@ -162,14 +162,16 @@ const keystaticConfig = config({
   },
   collections: {
     /**
-     * One Markdown file per article at content/posts/<slug>.md, with the body
+     * One Markdown file per article at public/guides/<slug>.md, with the body
      * below YAML front matter (`format.contentField`) rather than in a second
-     * file, so an article is one diff and one review.
+     * file, so an article is one diff and one review. (The .webp guide artwork
+     * beside it is ignored: the reader only lists files ending in the content
+     * field's extension.)
      */
     posts: collection({
       label: 'Articles',
       slugField: 'title',
-      path: 'content/posts/*',
+      path: 'public/guides/*',
       format: { contentField: 'content' },
       entryLayout: 'content',
       columns: ['title', 'publishedAt'],

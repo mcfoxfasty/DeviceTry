@@ -179,19 +179,19 @@ test('admin editor - a table and a code block land as their own blocks', () => {
 test('admin editor - an inserted image is isolated, captioned and carries its alt text', () => {
   const inserted = insertImage(
     { value: 'Some prose.', selectionStart: 11, selectionEnd: 11 },
-    '/images/posts/switch-abc12345.png',
+    '/uploads/switch-abc12345.png',
     'A worn keyboard switch',
     'Figure 1. The switch'
   );
   assert.equal(
     inserted.value,
-    "Some prose.\n\n![A worn keyboard switch](/images/posts/switch-abc12345.png 'Figure 1. The switch')\n"
+    "Some prose.\n\n![A worn keyboard switch](/uploads/switch-abc12345.png 'Figure 1. The switch')\n"
   );
 
-  const withoutCaption = imageMarkdown('/images/posts/x.png', 'Alt text here');
-  assert.equal(withoutCaption, '![Alt text here](/images/posts/x.png)');
+  const withoutCaption = imageMarkdown('/uploads/x.png', 'Alt text here');
+  assert.equal(withoutCaption, '![Alt text here](/uploads/x.png)');
   assert.deepEqual(imageReferences(inserted.value), [
-    { alt: 'A worn keyboard switch', url: '/images/posts/switch-abc12345.png' },
+    { alt: 'A worn keyboard switch', url: '/uploads/switch-abc12345.png' },
   ]);
 });
 
@@ -210,7 +210,7 @@ const draft = (overrides: Partial<PostDraft> = {}): PostDraft => ({
   slug: 'keyboard-keys-not-registering',
   seoTitle: '',
   seoDescription: '',
-  coverImage: '/images/posts/cover-abc12345.png',
+  coverImage: '/uploads/cover-abc12345.png',
   coverImageAlt: 'The DeviceTry cover card with the wordmark',
   publishedAt: '2026-10-06',
   author: 'DeviceTry team',
@@ -231,11 +231,11 @@ test('admin validation - the publish endpoint refuses a cover image without alt 
 });
 
 test('admin validation - the publish endpoint refuses an inline image without alt text', () => {
-  const errors = validateDraft(draft({ content: 'Text.\n\n![](/images/posts/inline-abc.png)\n' }));
-  assert.match(errors.content ?? '', /Alt text for \/images\/posts\/inline-abc\.png/);
+  const errors = validateDraft(draft({ content: 'Text.\n\n![](/uploads/inline-abc.png)\n' }));
+  assert.match(errors.content ?? '', /Alt text for \/uploads\/inline-abc\.png/);
 
   const ok = validateDraft(
-    draft({ content: 'Text.\n\n![A worn switch, photographed closely](/images/posts/inline-abc.png)\n' })
+    draft({ content: 'Text.\n\n![A worn switch, photographed closely](/uploads/inline-abc.png)\n' })
   );
   assert.equal(ok.content, undefined);
 });
@@ -268,12 +268,12 @@ test('admin validation - an image has to be a real, allowed, sanely sized upload
 
 test('admin images - a path in the body that was not uploaded is reported, not silently published', () => {
   const uploads: UploadedImage[] = [{ filename: 'inline-abc12345.png', contentType: 'image/png', base64: 'AAAA' }];
-  const content = '![A described image](/images/posts/inline-abc12345.png)\n\n![Another](/images/posts/missing-9.png)\n';
+  const content = '![A described image](/uploads/inline-abc12345.png)\n\n![Another](/uploads/missing-9.png)\n';
 
   const { provided, missing } = referencedUploads(content, uploads);
   assert.equal(provided.length, 1);
   assert.equal(provided[0].filename, 'inline-abc12345.png');
-  assert.deepEqual(missing, ['/images/posts/missing-9.png']);
+  assert.deepEqual(missing, ['/uploads/missing-9.png']);
 
   const external = referencedUploads('![Alt text here](https://example.com/x.png)', uploads);
   assert.deepEqual(external.missing, [], 'an external image is not an upload');
@@ -317,7 +317,7 @@ test('admin composition - the file matches the shape of the articles already pub
   assert.match(file, /canonicalUrl: null/, 'an absent override is null, as in the published articles');
 
   const existing = readFileSync(
-    join('content', 'posts', 'keyboard-keys-not-registering-hardware-or-software.md'),
+    join('public', 'guides', 'keyboard-keys-not-registering-hardware-or-software.md'),
     'utf8'
   );
   const existingKeys = existing
@@ -342,7 +342,7 @@ test('admin composition - what the dashboard writes, the blog reader reads back'
   // composer that produced plausible YAML the schema could not parse would fail
   // here rather than on the live site.
   const slug = 'zz-admin-round-trip-check';
-  const path = join('content', 'posts', `${slug}.md`);
+  const path = join('public', 'guides', `${slug}.md`);
   const body = 'Intro paragraph.\n\n## A subheading\n\n- one\n- two\n\nA closing line.';
 
   try {
@@ -368,7 +368,7 @@ test('admin composition - what the dashboard writes, the blog reader reads back'
     assert.equal(read.slug, slug);
     assert.equal(read.seoTitle, 'Round Trip');
     assert.equal(read.seoDescription, 'A description with an em dash — and punctuation.');
-    assert.equal(read.coverImage, '/images/posts/cover-abc12345.png');
+    assert.equal(read.coverImage, '/uploads/cover-abc12345.png');
     assert.equal(read.coverImageAlt, 'The DeviceTry cover card with the wordmark');
     assert.equal(read.publishedAt, '2026-11-02');
     assert.equal(read.author, 'DeviceTry team');
@@ -393,7 +393,7 @@ test('admin composition - what the dashboard writes, the blog reader reads back'
 
 test('admin status - a draft is written, read back, and hidden from the public list', async () => {
   const slug = 'zz-admin-status-check';
-  const path = join('content', 'posts', `${slug}.md`);
+  const path = join('public', 'guides', `${slug}.md`);
   try {
     writeFileSync(path, composePostFile(draft({ slug, status: 'draft' })), 'utf8');
 
@@ -429,13 +429,13 @@ test('admin validation - the status must be one of the schema states', () => {
 
 test('admin publish - paths and endpoints match the repository layout and the API', () => {
   assert.equal(repository(), 'mcfoxfasty/DeviceTry', 'the slug GitHub itself reports');
-  assert.equal(postRepoPath('my-article'), 'content/posts/my-article.md');
-  assert.equal(imageRepoPath('cover-abc12345.png'), 'public/images/posts/cover-abc12345.png');
-  assert.equal(publicImagePath('cover-abc12345.png'), '/images/posts/cover-abc12345.png');
+  assert.equal(postRepoPath('my-article'), 'public/guides/my-article.md');
+  assert.equal(imageRepoPath('cover-abc12345.png'), 'public/uploads/cover-abc12345.png');
+  assert.equal(publicImagePath('cover-abc12345.png'), '/uploads/cover-abc12345.png');
   assert.equal(PUBLISH_BRANCH, 'main');
   assert.equal(
-    contentsUrl('content/posts/my article.md'),
-    'https://api.github.com/repos/mcfoxfasty/DeviceTry/contents/content/posts/my%20article.md'
+    contentsUrl('public/guides/my article.md'),
+    'https://api.github.com/repos/mcfoxfasty/DeviceTry/contents/public/guides/my%20article.md'
   );
 });
 
@@ -462,7 +462,7 @@ test('admin publish - images are committed before the article, on the publishing
     { filename: 'inline-def67890.png', contentType: 'image/png', base64: 'BBBB' },
   ];
   const result = await publishArticle({
-    draft: draft({ content: '![A described image](/images/posts/inline-def67890.png)' }),
+    draft: draft({ content: '![A described image](/uploads/inline-def67890.png)' }),
     images,
     token: 'ghp_test_token',
     request: fake,
@@ -470,9 +470,9 @@ test('admin publish - images are committed before the article, on the publishing
 
   const puts = calls.filter((call) => call.method === 'PUT');
   assert.equal(puts.length, 3, 'two images, then the article');
-  assert.match(puts[0].url, /public\/images\/posts\/cover-abc12345\.png$/);
-  assert.match(puts[1].url, /public\/images\/posts\/inline-def67890\.png$/);
-  assert.match(puts[2].url, /content\/posts\/keyboard-keys-not-registering\.md$/, 'the article lands last');
+  assert.match(puts[0].url, /public\/uploads\/cover-abc12345\.png$/);
+  assert.match(puts[1].url, /public\/uploads\/inline-def67890\.png$/);
+  assert.match(puts[2].url, /public\/guides\/keyboard-keys-not-registering\.md$/, 'the article lands last');
   for (const put of puts) {
     assert.equal(put.body?.branch, 'main');
     assert.equal(put.body?.sha, undefined, 'a creation carries no sha');
@@ -558,7 +558,7 @@ test('admin dashboard - the secrets it needs are named, and the old flow is gone
 
 test('admin editor - the dashboard offers every capability and every SEO field', () => {
   const editor = readFileSync(join('components', 'admin', 'ArticleEditor.tsx'), 'utf8');
-  for (const capability of ['H2', 'H3', 'H4', 'Bold', 'Italic', 'Strike', 'Code', 'Bullets', 'Numbered', 'Quote', 'Link', 'Table', 'Code block', 'Divider']) {
+  for (const capability of ['H2', 'H3', 'H4', 'Bold', 'Italic', 'Strike', 'Code', 'Bullets', 'Numbered', 'Quote', 'Link', 'Image', 'Table', 'Code block', 'Divider']) {
     assert.match(editor, new RegExp(capability), `the toolbar offers ${capability}`);
   }
   for (const field of [
@@ -619,7 +619,7 @@ test('admin preview - every construct the toolbar writes renders as the article 
       'Get-PnpDevice',
       '```',
       '',
-      "![A worn switch](/images/posts/switch.png 'Figure 1. The switch')",
+      "![A worn switch](/uploads/switch.png 'Figure 1. The switch')",
     ].join('\n')
   );
 
@@ -635,7 +635,7 @@ test('admin preview - every construct the toolbar writes renders as the article 
   assert.match(html, /<th class="[^"]*" style="text-align: left">What it shows<\/th>/);
   assert.match(html, /<td class="[^"]*" style="text-align: right">Hardware<\/td>/);
   assert.match(html, /<pre class="[^"]*"><code class="language-powershell">Get-PnpDevice<\/code><\/pre>/);
-  assert.match(html, /<figure class="[^"]*"><img src="\/images\/posts\/switch\.png" alt="A worn switch"[^>]*\/>/);
+  assert.match(html, /<figure class="[^"]*"><img src="\/uploads\/switch\.png" alt="A worn switch"[^>]*\/>/);
   assert.match(html, /<figcaption class="[^"]*">Figure 1\. The switch<\/figcaption>/);
 });
 
@@ -656,7 +656,7 @@ test('admin preview - article text is escaped, so a body cannot smuggle in marku
 });
 
 test('admin preview - a paragraph that is only an image becomes the figure itself', () => {
-  const html = renderPreview('![Described image](/images/posts/x.png)');
+  const html = renderPreview('![Described image](/uploads/x.png)');
   assert.match(html, /^<figure class="[^"]*">/);
   assert.doesNotMatch(html, /<p class=/);
 });
@@ -673,7 +673,7 @@ test('admin delete - a file that exists is removed with its sha, and a missing o
   }) as typeof fetch;
 
   const result = await deleteFile({
-    path: 'content/posts/old-name.md',
+    path: 'public/guides/old-name.md',
     message: 'Delete "old-name"',
     token: 'ghp_test_token',
     request: fake,
@@ -682,14 +682,14 @@ test('admin delete - a file that exists is removed with its sha, and a missing o
   assert.equal(result.deleted, true);
   assert.equal(calls.length, 2, 'a sha lookup, then the delete');
   assert.equal(calls[1].method, 'DELETE');
-  assert.match(calls[1].url, /content\/posts\/old-name\.md$/);
+  assert.match(calls[1].url, /public\/guides\/old-name\.md$/);
   assert.equal(calls[1].body?.sha, 'the-sha', 'the contents API refuses a delete without the current sha');
   assert.equal(calls[1].body?.branch, 'main');
 
   const absent = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as typeof fetch;
   assert.deepEqual(
-    await deleteFile({ path: 'content/posts/gone.md', message: 'x', token: 't', request: absent }),
-    { path: 'content/posts/gone.md', deleted: false },
+    await deleteFile({ path: 'public/guides/gone.md', message: 'x', token: 't', request: absent }),
+    { path: 'public/guides/gone.md', deleted: false },
     'deleting twice is not an error — the requested state is already true'
   );
 });
@@ -697,7 +697,7 @@ test('admin delete - a file that exists is removed with its sha, and a missing o
 test('admin delete - a refusal from GitHub is explained, not swallowed', async () => {
   const refusing = (async () => new Response('{"message":"Bad credentials"}', { status: 401 })) as typeof fetch;
   await assert.rejects(
-    deleteFile({ path: 'content/posts/x.md', message: 'x', token: 'bad', request: refusing }),
+    deleteFile({ path: 'public/guides/x.md', message: 'x', token: 'bad', request: refusing }),
     (error: Error) => {
       assert.match(error.message, /401/);
       assert.match(error.message, /Bad credentials/);
@@ -711,9 +711,9 @@ test('admin existence - a referenced image must be uploaded or already committed
   const absent = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as typeof fetch;
   const broken = (async () => new Response('{"message":"Bad credentials"}', { status: 401 })) as typeof fetch;
 
-  assert.equal(await fileExists('public/images/posts/old.png', 't', present), true);
-  assert.equal(await fileExists('public/images/posts/old.png', 't', absent), false);
-  await assert.rejects(fileExists('public/images/posts/old.png', 'bad', broken), (error: Error) =>
+  assert.equal(await fileExists('public/uploads/old.png', 't', present), true);
+  assert.equal(await fileExists('public/uploads/old.png', 't', absent), false);
+  await assert.rejects(fileExists('public/uploads/old.png', 'bad', broken), (error: Error) =>
     /401/.test(error.message)
   );
 });
@@ -746,7 +746,7 @@ test('admin collection - front matter is read the way the dashboard writes it', 
 
 test('admin collection - the article already in the repository parses entirely', () => {
   const file = readFileSync(
-    join('content', 'posts', 'keyboard-keys-not-registering-hardware-or-software.md'),
+    join('public', 'guides', 'keyboard-keys-not-registering-hardware-or-software.md'),
     'utf8'
   );
   const { data, body } = parseFrontMatter(file);
@@ -775,10 +775,10 @@ test('admin collection - base64 content survives characters ASCII would corrupt'
 
 test('admin collection - the listing asks the repository and sorts newest first', async () => {
   const files: Record<string, string> = {
-    'content/posts/newer.md': composePostFile(
+    'public/guides/newer.md': composePostFile(
       draft({ slug: 'newer', publishedAt: '2026-10-07', status: 'draft', title: 'Newer draft' })
     ),
-    'content/posts/older.md': composePostFile(
+    'public/guides/older.md': composePostFile(
       draft({ slug: 'older', publishedAt: '2026-09-01', status: 'published', title: 'Older article' })
     ),
   };
@@ -786,7 +786,7 @@ test('admin collection - the listing asks the repository and sorts newest first'
   const fake = (async (url: RequestInfo | URL) => {
     const target = String(url);
     calls.push(target);
-    if (target.includes('/contents/content/posts?')) {
+    if (target.includes('/contents/public/guides?')) {
       return new Response(
         JSON.stringify(
           Object.keys(files).map((path) => ({ path, type: 'file', name: path.split('/').pop() }))
@@ -858,7 +858,7 @@ test('admin collection - the admin reads the repository, not the build-time file
   assert.doesNotMatch(
     config,
     /outputFileTracingIncludes/,
-    'nothing traces content/posts into the worker any more — that was the empty-list bug'
+    'nothing traces public/guides into the worker any more — that was the empty-list bug'
   );
 });
 

@@ -25,8 +25,8 @@ that renders them are reviewed and versioned together.
 | `lib/admin/markdown-editing.ts` | The toolbar's operations, as pure functions. |
 | `lib/admin/github.ts` | The contents API client: `PUT /repos/{owner}/{repo}/contents/{path}`. |
 | `keystatic.config.ts` | The article schema — every field, the categories, the image paths and the editor's capabilities. Still the single source of truth. |
-| `content/posts/<slug>.md` | One article per file: YAML front matter, then the Markdown body. |
-| `public/images/posts/` | Cover images and inline images uploaded through the dashboard. |
+| `public/guides/<slug>.md` | One article per file: YAML front matter, then the Markdown body. |
+| `public/uploads/` | Cover images and inline images uploaded through the dashboard. |
 | `lib/blog/content.ts` | The read side: turns the collection into typed posts for the site. |
 | `lib/blog/seo.ts` | Canonical, Open Graph, Twitter and Article JSON-LD, as pure functions. |
 | `app/blog/` | The public blog index and the article page. |
@@ -66,7 +66,7 @@ get wrong. The old routes (`app/keystatic/…`, `app/api/keystatic/…`,
 stay deleted.
 
 Keystatic itself remains, in a smaller role: `@keystatic/core`'s reader parses
-`content/posts/*` for the site's pages, and `keystatic.config.ts` is the schema both
+`public/guides/*` for the site's pages, and `keystatic.config.ts` is the schema both
 the reader and the dashboard publisher are written against. `@keystatic/next` — the
 package that served the removed admin — is no longer imported anywhere. The old
 `KEYSTATIC_GITHUB_*` and `KEYSTATIC_SECRET` environment variables are unused and can
@@ -91,7 +91,7 @@ none to link to.
 
 The list is read from the repository **through the GitHub API**, not from the
 checked-out files — `lib/admin/articles.ts`. That is not a preference: the site's
-content reader resolves `content/posts/*` from the process's working directory,
+content reader resolves `public/guides/*` from the process's working directory,
 which is right during a build and wrong in the deployed Worker, whose working
 directory does not contain the repository. The first deploy of this dashboard
 proved it — the article file was in the bundle and the management view still said
@@ -111,7 +111,7 @@ removal fails, the save still reports success and says what went wrong.
 **Delete** asks *Are you sure you want to delete this article?* — a native
 confirmation, which works identically on iOS Safari and cannot be dismissed by a
 stray tap — and then calls `DELETE /api/admin/publish?slug=…`, which removes
-`content/posts/<slug>.md` through the GitHub API. Deleting an article that is
+`public/guides/<slug>.md` through the GitHub API. Deleting an article that is
 already gone is reported as success, because the requested state is what exists.
 
 **Status** is a field of the article, not a folder: `published`, `draft` or
@@ -125,6 +125,13 @@ all three states, which is the point of having them.
 The body is a Markdown textarea with a toolbar, not a `contenteditable` widget. The toolbar offers H2/H3/H4, bold, italic, strikethrough, inline code, bulleted and numbered lists, blockquotes, links, tables, fenced code blocks and dividers, and
 every button's operation is a pure function with a test. What the author writes is
 exactly what is committed — there is no serializer between the two.
+
+**Images** are inserted from the panel directly below the body — the toolbar's
+**Image** button scrolls to it and focuses its file picker, so it is reachable
+without hunting on a phone. A picture there is uploaded with the article: the
+file is committed to `public/uploads/` and the Markdown links it from
+`/uploads/`, with the required alt text and an optional caption (rendered as the
+figure caption). The cover image lives in the SEO sidebar's own upload field.
 
 A **Write / Preview** tab pair sits above the body. Preview renders the Markdown
 with `lib/admin/preview.ts` — the constructs the toolbar writes, styled with the
@@ -169,7 +176,7 @@ have to re-upload the images its article already has.
 ## Publishing, and why an article needs a build
 
 The endpoint commits the article's images first and then
-`content/posts/{slug}.md`, on `main`. Images go first because the Markdown links
+`public/guides/{slug}.md`, on `main`. Images go first because the Markdown links
 them at their final public paths: if the article landed first, a build between the
 two commits would publish an article whose images 404. An edit reads the file's
 current `sha` before writing, which is what the contents API requires to overwrite

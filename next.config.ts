@@ -68,9 +68,9 @@ const nextConfig: NextConfig = {
   },
   // The admin pages deliberately read the article collection from the GitHub API
   // rather than from disk — see lib/admin/articles.ts for why, and the live
-  // deployment that proved it (the bundle carried content/posts, but the reader's
+  // deployment that proved it (the bundle carried the articles, but the reader's
   // working directory did not, so the list came out empty). No tracing entry for
-  // content/posts is needed, and none is configured.
+  // public/guides is needed, and none is configured.
   output: 'standalone',
   transpilePackages: ['motion'],
   experimental: {

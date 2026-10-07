@@ -223,7 +223,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const absent: string[] = [];
 
   const cover = draft.coverImage.trim();
-  if (cover.startsWith('/images/posts/') && !inUpload.has(cover)) {
+  if (cover.startsWith(POST_IMAGE_PUBLIC_PATH) && !inUpload.has(cover)) {
     if (!(await fileExists(imageRepoPath(cover.slice(POST_IMAGE_PUBLIC_PATH.length)), token))) {
       absent.push(cover);
     }

@@ -4,14 +4,14 @@
  * THE FORMAT IS NOT INVENTED HERE. An article is a Markdown file with YAML front
  * matter whose keys are the fields of keystatic.config.ts, and the reader in
  * lib/blog/content.ts parses it against that schema. `composePostFile` therefore
- * reproduces the layout of the articles already in content/posts — scalars plain
+ * reproduces the layout of the articles already in public/guides — scalars plain
  * when YAML allows it and single-quoted when not, `tags` as a block sequence,
  * `canonicalUrl: null` when there is no override, and the body BELOW the front
  * matter (which is where `format: { contentField: 'content' }` writes it in this
  * version of the CMS).
  *
  * That format is verified empirically, not by inspection: a test composes a file,
- * writes it into content/posts, reads it back through the same reader the pages
+ * writes it into public/guides, reads it back through the same reader the pages
  * use, and asserts every field survives the round trip. A composer that produced
  * plausible-looking YAML the reader mis-parses would fail that test.
  *
@@ -76,7 +76,7 @@ export interface UploadedImage {
 
 /** Where a post is committed. Mirrors the collection path in keystatic.config.ts. */
 export function postRepoPath(slug: string): string {
-  return `content/posts/${slug}.md`;
+  return `public/guides/${slug}.md`;
 }
 
 /** The public URL an uploaded image is served from. */

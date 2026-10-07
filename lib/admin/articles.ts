@@ -3,7 +3,7 @@
  *
  * WHY NOT THE CONTENT READER THE BLOG USES.
  * `lib/blog/content.ts` wraps Keystatic's reader, which resolves
- * `content/posts/*` from the process's working directory. That is exactly right
+ * `public/guides/*` from the process's working directory. That is exactly right
  * during a build — the blog is prerendered, so those reads happen where the files
  * are — and exactly wrong in the deployed Worker, which has no working directory
  * with the repository in it: verified on the live deployment (2026-10-07), the
@@ -136,7 +136,7 @@ function asString(value: string | string[] | null, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
-/** The slug is the filename: `content/posts/<slug>.md`. */
+/** The slug is the filename: `public/guides/<slug>.md`. */
 function slugFromPath(path: string): string {
   return path.split('/').pop()?.replace(/\.mdx?$/, '') ?? '';
 }
@@ -163,7 +163,7 @@ async function fetchFile(
 
 /** The paths of every article file in the collection. */
 async function listArticlePaths(token: string, request: typeof fetch): Promise<string[]> {
-  const response = await request(`${contentsUrl('content/posts')}?ref=${PUBLISH_BRANCH}`, {
+  const response = await request(`${contentsUrl('public/guides')}?ref=${PUBLISH_BRANCH}`, {
     headers: githubHeaders(token),
   });
   if (!response.ok) {
@@ -226,7 +226,7 @@ export async function readArticle(
   options: { token: string; request?: typeof fetch }
 ): Promise<ArticleDetail | null> {
   const { token, request = fetch } = options;
-  const file = await fetchFile(`content/posts/${slug}.md`, token, request);
+  const file = await fetchFile(`public/guides/${slug}.md`, token, request);
   if (file === null) return null;
 
   const { data, body } = parseFrontMatter(file);

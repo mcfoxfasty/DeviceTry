@@ -31,7 +31,7 @@ export function postCanonicalUrl(post: BlogPost): string {
 /**
  * The absolute URL of an article's cover image.
  *
- * The CMS stores the site-relative public path (`/images/posts/x.png`); Open
+ * The CMS stores the site-relative public path (`/uploads/x.png`); Open
  * Graph and Twitter both require an absolute URL, so it is resolved against the
  * site root here. A value that is already absolute is left alone, so a cover
  * hosted elsewhere cannot be mangled into `https://sitehttps://…`.

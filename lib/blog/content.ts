@@ -11,7 +11,7 @@ import keystaticConfig, { DEFAULT_POST_STATUS } from '@/keystatic.config';
  * to know how the CMS lays its files out.
  *
  * `process.cwd()` is the repository root during a build, which is where the
- * reader resolves `content/posts/*` from.
+ * reader resolves `public/guides/*` from.
  *
  * TWO THINGS ABOUT THIS READER THAT ARE EASY TO GET WRONG (both verified against
  * a real article, 2026-10-06):

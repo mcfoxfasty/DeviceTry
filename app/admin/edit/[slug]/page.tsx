@@ -12,7 +12,7 @@ import { DEFAULT_POST_STATUS, POST_CATEGORIES, POST_STATUSES, type PostStatus } 
  *
  * The saved file — front matter, body and images — is what the editor starts
  * from, read from the repository through the GitHub API (see
- * lib/admin/articles.ts: the build-time reader cannot see content/posts in the
+ * lib/admin/articles.ts: the build-time reader cannot see public/guides in the
  * deployed Worker). Saving commits an update to the same path — the contents API
  * requires the file's current `sha`, so an edit is an overwrite, never a
  * duplicate — and if the slug was changed the old file is removed after the new
@@ -69,7 +69,7 @@ export default async function EditArticlePage({ params }: { params: Promise<{ sl
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Edit article</h1>
             <p className="mt-0.5 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
-              Saving overwrites <span className="font-mono">content/posts/{post.slug}.md</span> on{' '}
+              Saving overwrites <span className="font-mono">public/guides/{post.slug}.md</span> on{' '}
               <span className="font-mono">main</span>.
             </p>
           </div>

@@ -5,6 +5,7 @@ import {
   ALLOWED_IMAGE_TYPES,
   imageBaseName,
   contentDigest,
+  publicImagePath,
   slugify,
   validateAltText,
   validateDraft,
@@ -241,6 +242,8 @@ export function ArticleEditor({
   });
   const [coverBusy, setCoverBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imagePanelRef = useRef<HTMLDivElement | null>(null);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
   const restoredOnce = useRef(false);
 
   // ---- drafts ------------------------------------------------------------
@@ -349,7 +352,7 @@ export function ArticleEditor({
     }
 
     setImages((current) => [...current.filter((entry) => entry.filename !== image.filename), image]);
-    const url = `/images/posts/${image.filename}`;
+    const url = publicImagePath(image.filename);
     apply((state) => insertImage(state, url, imagePanel.alt.trim(), imagePanel.caption));
     setImagePanel({ alt: '', caption: '', file: null, error: '' });
   }, [apply, imagePanel, prepareUpload]);
@@ -364,7 +367,7 @@ export function ArticleEditor({
         return;
       }
       setImages((current) => [...current.filter((entry) => entry.filename !== image.filename), image]);
-      set('coverImage', `/images/posts/${image.filename}`);
+      set('coverImage', publicImagePath(image.filename));
       setCoverBusy(false);
     },
     [prepareUpload]
@@ -610,6 +613,19 @@ export function ArticleEditor({
               <button type="button" className={buttonClass} onClick={() => apply((state) => insertBlock(state, '---'))}>
                 Divider
               </button>
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => {
+                  // The upload panel sits below the textarea, so on a phone it is
+                  // off-screen. This button is how an author finds it — the same
+                  // way every other construct in this row is reached.
+                  imagePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  requestAnimationFrame(() => imageFileRef.current?.focus());
+                }}
+              >
+                Image
+              </button>
             </div>
 
             <textarea
@@ -631,13 +647,19 @@ export function ArticleEditor({
           </div>
 
           {/* inline image */}
-          <div className="rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-[#F7F6FB] dark:bg-[#192332] p-3">
-            <p className="text-sm font-medium">Insert an image</p>
+          <div
+            ref={imagePanelRef}
+            className="rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-[#F7F6FB] dark:bg-[#192332] p-3"
+          >
+            <p className="text-sm font-medium">Insert an image into the article</p>
             <p className="mt-0.5 text-xs text-[#8996A6]">
-              Alt text is required — it is what a screen reader announces instead of the picture.
+              Also reachable from the toolbar’s Image button. Alt text is required — it is what a screen reader announces
+              instead of the picture. The file is committed to <span className="font-mono">public/uploads/</span> and the
+              article links it from <span className="font-mono">/uploads/</span>.
             </p>
             <div className="mt-3 flex flex-col gap-3">
               <input
+                ref={imageFileRef}
                 type="file"
                 accept={Object.keys(ALLOWED_IMAGE_TYPES).join(',')}
                 onChange={(event) => {
@@ -831,7 +853,7 @@ export function ArticleEditor({
               }
             </button>
             <p className="text-xs text-[#8996A6]">
-              Commits <span className="font-mono">content/posts/{draft.slug || 'slug'}.md</span> and the images to{' '}
+              Commits <span className="font-mono">public/guides/{draft.slug || 'slug'}.md</span> and the images to{' '}
               <span className="font-mono">main</span>.
               {fullDraft.status === 'published'
                 ? ' The article appears on the site after the next build.'

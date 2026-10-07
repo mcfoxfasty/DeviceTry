@@ -38,7 +38,7 @@ import type { BlogPost } from '../lib/blog/content';
  * something else.
  */
 
-const POSTS_DIR = join('content', 'posts');
+const POSTS_DIR = join('public', 'guides');
 
 function postFiles(): string[] {
   if (!existsSync(POSTS_DIR)) return [];
@@ -57,7 +57,7 @@ function fixture(overrides: Partial<BlogPost> = {}): BlogPost {
     content: '\nThe first paragraph of the body explains the fault in one sentence.\n\n## A subheading\n',
     seoTitle: null,
     seoDescription: null,
-    coverImage: '/images/posts/sample.png',
+    coverImage: '/uploads/sample.png',
     coverImageAlt: 'A laptop with its lid open, keyboard in view',
     publishedAt: '2026-10-06',
     author: 'DeviceTry team',
@@ -104,8 +104,8 @@ test('CMS schema - every inline image prompts for alt text and a caption', () =>
 });
 
 test('CMS schema - uploaded images are committed into the repository, under the path they are served from', () => {
-  assert.equal(POST_IMAGE_DIRECTORY, 'public/images/posts');
-  assert.equal(POST_IMAGE_PUBLIC_PATH, '/images/posts/');
+  assert.equal(POST_IMAGE_DIRECTORY, 'public/uploads');
+  assert.equal(POST_IMAGE_PUBLIC_PATH, '/uploads/');
   // The public path must be the served form of the same directory: uploads that
   // commit to one place and are requested from another render as broken images.
   assert.equal(
@@ -185,7 +185,7 @@ test('article SEO - the canonical is the site route, unless the author overrode 
 });
 
 test('article SEO - the cover image resolves to an absolute URL either way', () => {
-  assert.equal(postCoverUrl(fixture()), `${SITE_URL}/images/posts/sample.png`);
+  assert.equal(postCoverUrl(fixture()), `${SITE_URL}/uploads/sample.png`);
   assert.equal(
     postCoverUrl(fixture({ coverImage: 'https://cdn.example/cover.png' })),
     'https://cdn.example/cover.png',
