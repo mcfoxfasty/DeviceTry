@@ -11,7 +11,6 @@ status: published
 tags:
   - Microphone
   - performance
-  - test micro
 canonicalUrl: null
 ---
 
