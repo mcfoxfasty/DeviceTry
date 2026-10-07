@@ -15,7 +15,7 @@ import {
   findMigration,
 } from '../lib/tools/migration';
 import { TOOLS_REGISTRY, ALL_TOOL_PAGES } from '../lib/tools/registry';
-import { nextRedirects } from '../next.config.redirects';
+import { articlePathRedirects, nextRedirects } from '../next.config.redirects';
 import {
   getPublishedGuides,
   getGuideBySlug,
@@ -63,7 +63,6 @@ test('Migration sources and retired slugs never appear in any registry', () => {
 
 test('nextRedirects wires every migration as a permanent redirect', () => {
   const redirects = nextRedirects();
-  assert.equal(redirects.length, ROUTE_MIGRATIONS.length);
 
   for (const m of ROUTE_MIGRATIONS) {
     const match = redirects.find((r) => r.source === `/test/${m.from}`);
@@ -72,6 +71,24 @@ test('nextRedirects wires every migration as a permanent redirect', () => {
     assert.equal(match.destination, expected);
     assert.equal(match.permanent, true);
   }
+
+  // The tool migrations are the whole of /test/*, and the only redirects beyond
+  // them are the article-path moves — asserted as a set rather than a count, so a
+  // redirect added here has to be added to this test on purpose.
+  assert.equal(
+    redirects.filter((r) => r.source.startsWith('/test/')).length,
+    ROUTE_MIGRATIONS.length,
+    'each tool migration is wired exactly once'
+  );
+  for (const move of articlePathRedirects()) {
+    assert.ok(
+      redirects.some(
+        (r) => r.source === move.source && r.destination === move.destination && r.permanent === move.permanent
+      ),
+      `No redirect wired for ${move.source}`
+    );
+  }
+  assert.equal(redirects.length, ROUTE_MIGRATIONS.length + articlePathRedirects().length);
 });
 
 test('findMigration resolves old slugs and ignores everything else', () => {

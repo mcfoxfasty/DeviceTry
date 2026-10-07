@@ -3,28 +3,34 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ArticlesTable, type ArticleRow } from '@/components/admin/ArticlesTable';
-import { listArticles, publishToken } from '@/lib/admin/articles';
+import { publishToken } from '@/lib/admin/articles';
+import { readManagedCollection } from '@/lib/admin/collection';
 import { GithubError } from '@/lib/admin/github';
 import { isAuthenticated } from '@/lib/admin/session';
 import { postCategoryLabel, postStatusLabel } from '@/keystatic.config';
-import { BLOG_PATH } from '@/lib/blog/seo';
+import { ARTICLE_PATH } from '@/lib/blog/seo';
 
 /**
- * The management view: every article in the collection, with its state.
+ * The management view: EVERY article in the repository, from both collections.
  *
- * The list is read from the repository through the GitHub API — see
- * lib/admin/articles.ts for why the dashboard does not use the build-time content
- * reader. The practical consequence is the one that matters here: the table shows
- * what the repository holds right now, including an article committed a moment
- * ago and not yet built, and an article deleted a moment ago is gone from it.
+ * Two things about this page are load-bearing.
  *
- * The guard is here, on the server, before anything renders — not in the table
- * component. An unauthenticated request is redirected to the form and never
- * receives the page's markup, so there is nothing for a client to un-hide.
+ * 1. THE LIST IS COMPLETE. It merges the CMS articles in `public/guides/*.md` with
+ *    the imported guides in `content/guides/**` (lib/admin/collection.ts), because
+ *    the site publishes both and a dashboard that shows one of them is a dashboard
+ *    that hides most of its own content. The two are read from the repository
+ *    through the GitHub API — see lib/admin/articles.ts for why the dashboard does
+ *    not use the build-time content reader — so the table shows what the repository
+ *    holds right now: an article committed a moment ago and not yet built, gone from
+ *    here the moment it is deleted.
  *
- * `force-dynamic` is required rather than optional: the page reads a cookie and
- * an upstream API, so it can never be prerendered, and asking Next not to try
- * keeps the build from producing a static admin page that everyone would share.
+ * 2. THE GUARD IS HERE, ON THE SERVER, before anything renders — not in the table
+ *    component. An unauthenticated request is redirected to the form and never
+ *    receives the page's markup, so there is nothing for a client to un-hide.
+ *
+ * `force-dynamic` is required rather than optional: the page reads a cookie and an
+ * upstream API, so it can never be prerendered, and asking Next not to try keeps the
+ * build from producing a static admin page that everyone would share.
  */
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +44,7 @@ export default async function AdminPage() {
 
   const token = publishToken();
   let articles: ArticleRow[] = [];
+  let unreadable: string[] = [];
   let readError: string | null = null;
 
   if (token.length === 0) {
@@ -46,17 +53,20 @@ export default async function AdminPage() {
       'GITHUB_TOKEN is not set for this deployment, so the article collection cannot be read. Bind it as a Worker secret (or in the workspace environment) and reload.';
   } else {
     try {
-      const posts = await listArticles({ token });
-      articles = posts.map((post) => ({
-        slug: post.slug,
-        title: post.title,
-        publishedAt: post.publishedAt,
-        categoryLabel: postCategoryLabel(post.category),
-        statusValue: post.status,
-        statusLabel: postStatusLabel(post.status),
+      const collection = await readManagedCollection({ token });
+      unreadable = collection.unreadable;
+      articles = collection.articles.map((article) => ({
+        slug: article.slug,
+        title: article.title,
+        publishedAt: article.publishedAt,
+        categoryLabel: postCategoryLabel(article.category),
+        statusValue: article.status,
+        statusLabel: postStatusLabel(article.status),
         // A draft or an archived article has no public URL to link to — that is
         // what its status means.
-        publicPath: post.status === 'published' ? `${BLOG_PATH}/${post.slug}` : null,
+        publicPath: article.status === 'published' ? `${ARTICLE_PATH}/${article.slug}` : null,
+        source: article.source,
+        repoPath: article.repoPath,
       }));
     } catch (error) {
       readError =
@@ -68,6 +78,9 @@ export default async function AdminPage() {
     }
   }
 
+  const guides = articles.filter((article) => article.source === 'legacy').length;
+  const cms = articles.length - guides;
+
   return (
     <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="mx-auto max-w-6xl">
@@ -77,7 +90,9 @@ export default async function AdminPage() {
             <p className="mt-0.5 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
               {readError
                 ? 'The article list could not be read.'
-                : `${articles.length} article${articles.length === 1 ? '' : 's'} in the collection.`}
+                : `${articles.length} article${articles.length === 1 ? '' : 's'} — ${guides} typed guide${
+                    guides === 1 ? '' : 's'
+                  } in content/guides and ${cms} CMS article${cms === 1 ? '' : 's'} in public/guides.`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -113,20 +128,38 @@ export default async function AdminPage() {
               + New Article
             </Link>
           </div>
-        ) : articles.length === 0 ? (
-          <div className="rounded-2xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-8 text-center">
-            <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
-              No articles yet. The first one is a click away.
-            </p>
-            <Link
-              href="/admin/new"
-              className="mt-4 inline-flex rounded-lg bg-[#0F766E] dark:bg-[#14B8A6] px-4 py-2.5 text-sm font-medium text-white dark:text-[#0B111A] hover:bg-[#0D665F] dark:hover:bg-[#2DD4BF] transition"
-            >
-              + New Article
-            </Link>
-          </div>
         ) : (
-          <ArticlesTable articles={articles} />
+          <>
+            {/* A guide module this dashboard cannot address is named rather than
+                omitted: a row that silently vanishes is how the old list hid most
+                of the collection in the first place. */}
+            {unreadable.length > 0 ? (
+              <p
+                role="alert"
+                className="mb-3 rounded-lg border border-[#FEF3C7] dark:border-[#451A03] bg-[#FEF3C7] dark:bg-[#451A03] px-3 py-2 text-sm text-[#B45309] dark:text-[#F59E0B]"
+              >
+                {unreadable.length} guide module{unreadable.length === 1 ? '' : 's'} could not be read and
+                {unreadable.length === 1 ? ' is' : ' are'} not listed: {unreadable.join(', ')}. Each must
+                export a `GuideArticle` with a top-level `slug`, `title` and `published` flag.
+              </p>
+            ) : null}
+
+            {articles.length === 0 ? (
+              <div className="rounded-2xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-8 text-center">
+                <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
+                  No articles yet. The first one is a click away.
+                </p>
+                <Link
+                  href="/admin/new"
+                  className="mt-4 inline-flex rounded-lg bg-[#0F766E] dark:bg-[#14B8A6] px-4 py-2.5 text-sm font-medium text-white dark:text-[#0B111A] hover:bg-[#0D665F] dark:hover:bg-[#2DD4BF] transition"
+                >
+                  + New Article
+                </Link>
+              </div>
+            ) : (
+              <ArticlesTable articles={articles} />
+            )}
+          </>
         )}
       </div>
     </main>

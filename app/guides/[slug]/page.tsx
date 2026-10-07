@@ -1,20 +1,51 @@
-import React from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CalendarDays, User } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
-import { getGuideBySlug, getPublishedGuides } from '@/lib/guides/registry';
 import type { GuideArticle } from '@/content/guides/schema';
 import { GUIDE_IMAGE_WIDTHS, guideImageFile } from '@/lib/guides/images';
 import { compactTitle, DEFAULT_OG_IMAGE } from '@/lib/seo/metadata';
 import { GuideArticleView } from '@/components/guides/GuideArticleView';
+import { PostBody } from '@/components/blog/PostBody';
+import { ArticleFooter } from '@/components/blog/ArticleFooter';
+import { buildArticleFooter } from '@/lib/blog/footers';
+import { buildPostJsonLd, buildPostMetadata, ARTICLE_PATH } from '@/lib/blog/seo';
+import { listPublishedArticles, resolvePublishedArticle } from '@/lib/articles/registry';
+import { postCategoryLabel } from '@/keystatic.config';
 import { SITE_URL } from '@/lib/site';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+/**
+ * One article, at `/guides/<slug>`.
+ *
+ * TWO SOURCES, ONE URL SPACE. This route serves both kinds of article the site
+ * has: an imported guide written as a typed module under `content/guides/**`
+ * (rendered by GuideArticleView, with its own sections, figures and FAQ set) and a
+ * CMS article written as `public/guides/<slug>.md` in the dashboard (compiled by
+ * PostBody). lib/articles/registry.ts decides which one a slug names, preferring
+ * the guide when somehow both exist.
+ *
+ * WHY `dynamicParams = false`. Articles are prerendered, and a slug no build has
+ * seen is a 404 rather than a page rendered on demand. Publishing an article is a
+ * commit, and the next build turns it into a page; without this, Next would try to
+ * render an unknown slug inside the Cloudflare Worker, where the MDX compiler's
+ * dynamic code evaluation is unavailable. Saying so is more honest than a route
+ * that half-works.
+ */
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  // Published articles only, from both collections. A draft or an archived article
+  // gets no route at all, which — with `dynamicParams = false` above — means its
+  // URL is a 404 rather than a page that has to remember not to index itself.
+  const articles = await listPublishedArticles();
+  return articles.map((article) => ({ slug: article.slug }));
 }
 
 /**
@@ -63,16 +94,8 @@ function guideSocialImage(guide: GuideArticle) {
     : undefined;
 }
 
-export function generateStaticParams() {
-  // Prerender published guides only; drafts 404 and are never listed.
-  return getPublishedGuides().map((g) => ({ slug: g.slug }));
-}
-
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug } = await params;
-  const guide = getGuideBySlug(slug);
-  if (!guide) return { title: 'Guide Not Found — DeviceTry' };
-
+/** The metadata for an imported guide. */
+function guideMetadata(guide: GuideArticle): Metadata {
   const socialImage = guideSocialImage(guide);
 
   // An article without its own lead artwork still needs a card: the site-wide
@@ -111,11 +134,122 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const article = await resolvePublishedArticle(slug);
+  if (!article) return { title: 'Article Not Found — DeviceTry' };
+  return article.source === 'cms' ? buildPostMetadata(article.post) : guideMetadata(article.guide);
+}
+
+/** A publication date a reader can read: ISO in the data, prose in the page. */
+function formatDate(iso: string): string {
+  if (!iso) return '';
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 export default async function GuidePage({ params }: PageProps) {
   const { slug } = await params;
-  const guide = getGuideBySlug(slug);
-  if (!guide) notFound();
+  const article = await resolvePublishedArticle(slug);
+  if (!article) notFound();
   const t = getDictionary();
+
+  // ------------------------------------------------------------ CMS article
+  if (article.source === 'cms') {
+    const { post } = article;
+
+    // The generated foot is part of the page's data, not decoration: the FAQ it
+    // produces is also what the FAQPage graph below describes, so structured data
+    // and visible page cannot disagree about what the article answers.
+    const footer = buildArticleFooter(post, { candidates: await listPublishedArticles() });
+    const jsonLd = buildPostJsonLd(post, { faqs: footer.faqs });
+
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
+        <Navbar t={t} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+
+        <main id="main-content" className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-10">
+          <article className="max-w-3xl mx-auto">
+            <Link
+              href={ARTICLE_PATH}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#0F766E] dark:hover:text-[#14B8A6] transition-colors mb-6"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              All guides
+            </Link>
+
+            <header>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
+                {postCategoryLabel(post.category)}
+              </span>
+              <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#142033] dark:text-[#E9EEF4]">
+                {post.title}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium text-[#8996A6]">
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" aria-hidden="true" />
+                  {post.author}
+                </span>
+                {post.publishedAt ? (
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarDays className="w-3.5 h-3.5" aria-hidden="true" />
+                    <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
+                  </span>
+                ) : null}
+              </div>
+            </header>
+
+            {/* The cover reserves its box before the bytes arrive, so a slow image
+                cannot shift the whole article down the page. */}
+            {post.coverImage ? (
+              <figure className="mt-6">
+                {/* eslint-disable-next-line @next/next/no-img-element -- CMS uploads have no known intrinsic size for next/image. */}
+                <img
+                  src={post.coverImage}
+                  alt={post.coverImageAlt}
+                  width={1200}
+                  height={630}
+                  className="w-full aspect-[1200/630] object-cover rounded-2xl border border-[#DFE5EB] dark:border-[#223043]"
+                />
+              </figure>
+            ) : null}
+
+            <div className="mt-8">
+              <PostBody content={post.content} />
+            </div>
+
+            {post.tags.length > 0 ? (
+              <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-[#DFE5EB] dark:border-[#223043] pt-5">
+                <span className="text-[11px] font-semibold text-[#8996A6]">Tags</span>
+                {post.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-[#F1F4F7] dark:bg-[#192332] px-2.5 py-1 text-[11px] font-medium text-[#5F6B7A] dark:text-[#9AA6B8]"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <ArticleFooter content={footer} />
+          </article>
+        </main>
+
+        <Footer t={t} />
+      </div>
+    );
+  }
+
+  // --------------------------------------------------------- imported guide
+  const { guide } = article;
 
   // One JSON-LD graph built from the article's own fields, so nothing in it
   // can drift from the page. FAQPage is generated from `guide.faqs` rather

@@ -20,7 +20,7 @@ import { config, collection, fields } from '@keystatic/core';
  * an article's text, its assets, and the code that renders it are reviewed and
  * versioned together. The consequence to know about is that the deployed site is
  * statically prerendered, so a new article appears only after the next build —
- * see `dynamicParams` in app/blog/[slug]/page.tsx, which makes that honest
+ * see `dynamicParams` in app/guides/[slug]/page.tsx, which makes that honest
  * instead of silently rendering a half-configured page.
  *
  * WHY THE POSTS ARE PLAIN MARKDOWN AND NOT MARKDOC.
@@ -76,9 +76,9 @@ export function postCategoryLabel(value: string): string {
 /**
  * The three states an article can be in.
  *
- * `published` is the only state the public site renders: `/blog`, the article
- * routes and the sitemap read through `listPublishedPosts`, so a draft or an
- * archived article is invisible to readers and to search engines without anyone
+ * `published` is the only state the public site renders: the guides hub, the
+ * article route and the sitemap read through `listPublishedArticles`, so a draft or
+ * an archived article is invisible to readers and to search engines without anyone
  * having to remember to hide it. Files written before the field existed have no
  * `status` key at all, and the reader's default — `published` — is what keeps
  * those articles live, which is why the default is the state every article used

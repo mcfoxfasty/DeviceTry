@@ -13,8 +13,20 @@ import type { BlogPost } from './content';
  * and the JSON-LD graph without a browser.
  */
 
-/** Where articles live. One constant, so a route rename is one edit. */
-export const BLOG_PATH = '/blog';
+/**
+ * Where articles live. One constant, so a route rename is one edit.
+ *
+ * This is `/guides`, and NOT a separate `/blog` tree, because everything the CMS
+ * publishes is a guide: the collection is `public/guides/*.md`, the hand-authored
+ * guides are `content/guides/*`, and one URL space is what lets an article and a
+ * guide cross-link each other without either being a special case. `/blog` and
+ * `/blog/<slug>` stay alive as permanent redirects (next.config.redirects.ts) so
+ * links and search results from before the move keep resolving.
+ */
+export const ARTICLE_PATH = '/guides';
+
+/** The hub an article's breadcrumb points back to. */
+export const GUIDES_INDEX_PATH = '/guides';
 
 /**
  * The canonical URL for an article.
@@ -25,7 +37,7 @@ export const BLOG_PATH = '/blog';
  */
 export function postCanonicalUrl(post: BlogPost): string {
   const override = post.canonicalUrl?.trim();
-  return override ? override : `${SITE_URL}${BLOG_PATH}/${post.slug}`;
+  return override ? override : `${SITE_URL}${ARTICLE_PATH}/${post.slug}`;
 }
 
 /**
@@ -56,12 +68,14 @@ export function postSeoTitle(post: BlogPost): string {
 /**
  * Strip Markdown down to readable prose.
  *
- * Only used to derive a fallback description from the body, so it deliberately
- * does the few things that would otherwise leak syntax into a SERP snippet:
- * fenced code, image syntax, link URLs, heading marks, and list bullets. It is
- * not a renderer and does not try to be one.
+ * Used to derive a fallback description from the body — and, since the article's
+ * foot is generated from the article, to turn a section into a plain-text FAQ
+ * answer (lib/blog/footers.ts). It deliberately does the few things that would
+ * otherwise leak syntax into a SERP snippet or a spoken answer: fenced code,
+ * image syntax, link URLs, heading marks, and list bullets. It is not a renderer
+ * and does not try to be one.
  */
-function toPlainText(markdown: string): string {
+export function plainTextFromMarkdown(markdown: string): string {
   return markdown
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
@@ -85,7 +99,7 @@ export function derivedDescription(markdown: string): string {
   const paragraphs = markdown.split(/\n\s*\n/);
   let first = '';
   for (const block of paragraphs) {
-    const text = toPlainText(block);
+    const text = plainTextFromMarkdown(block);
     // Skip front matter echoes, horizontal rules and stray tags: a description
     // built from punctuation is worse than none.
     if (text.length >= 40) {
@@ -127,7 +141,7 @@ export function postPublishedIso(post: BlogPost): string {
 export function buildPostMetadata(post: BlogPost): Metadata {
   const title = postSeoTitle(post);
   const description = postDescription(post);
-  const url = `${SITE_URL}${BLOG_PATH}/${post.slug}`;
+  const url = `${SITE_URL}${ARTICLE_PATH}/${post.slug}`;
   const cover = postCoverUrl(post);
 
   return {
@@ -163,10 +177,21 @@ export function buildPostMetadata(post: BlogPost): Metadata {
  * template is specified around; `mainEntityOfPage`, `articleSection` and
  * `keywords` are the fields that make it useful to a search engine rather than
  * merely valid.
+ *
+ * `faqs` is optional and is passed the same list the page renders under
+ * "Frequently asked questions" (lib/blog/footers.ts). A FAQPage node claims the
+ * page answers those questions in those words, so it is only emitted when the
+ * visible section was actually built — the graph cannot describe an answer a
+ * reader would not find, and an article whose foot is empty emits no FAQPage at
+ * all rather than an empty one.
  */
-export function buildPostJsonLd(post: BlogPost): Record<string, unknown> {
-  const url = `${SITE_URL}${BLOG_PATH}/${post.slug}`;
+export function buildPostJsonLd(
+  post: BlogPost,
+  options: { faqs?: Array<{ q: string; a: string }> } = {}
+): Record<string, unknown> {
+  const url = `${SITE_URL}${ARTICLE_PATH}/${post.slug}`;
   const canonical = postCanonicalUrl(post);
+  const faqs = options.faqs ?? [];
 
   return {
     '@context': 'https://schema.org',
@@ -195,10 +220,22 @@ export function buildPostJsonLd(post: BlogPost): Record<string, unknown> {
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-          { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}${BLOG_PATH}` },
+          { '@type': 'ListItem', position: 2, name: 'Guides', item: `${SITE_URL}${GUIDES_INDEX_PATH}` },
           { '@type': 'ListItem', position: 3, name: post.title, item: url },
         ],
       },
+      ...(faqs.length > 0
+        ? [
+            {
+              '@type': 'FAQPage',
+              mainEntity: faqs.map((faq) => ({
+                '@type': 'Question',
+                name: faq.q,
+                acceptedAnswer: { '@type': 'Answer', text: faq.a },
+              })),
+            },
+          ]
+        : []),
     ],
   };
 }

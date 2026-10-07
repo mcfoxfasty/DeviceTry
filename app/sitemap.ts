@@ -1,8 +1,6 @@
 import { MetadataRoute } from 'next';
 import { ALL_TOOL_PAGES } from '@/lib/tools/registry';
-import { getPublishedGuides } from '@/lib/guides/registry';
-import { listPublishedPosts } from '@/lib/blog/content';
-import { BLOG_PATH } from '@/lib/blog/seo';
+import { listPublishedArticles } from '@/lib/articles/registry';
 import { SITE_URL, SITE_LAST_UPDATED, STATIC_PAGES } from '@/lib/site';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -24,26 +22,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // Published guides only — drafts never enter the sitemap.
-  for (const guide of getPublishedGuides()) {
+  // Every published article, from one list. It used to be two loops — the guides
+  // registry and the CMS collection — which meant two chances for a published
+  // article to be missing from the sitemap, and two places to keep the
+  // published-only rule. Drafts and archived articles are filtered where they are
+  // read (lib/articles/registry.ts), so neither can reach this loop at all.
+  for (const article of await listPublishedArticles()) {
     sitemapEntries.push({
-      url: `${SITE_URL}/guides/${guide.slug}`,
-      lastModified: guide.updatedAt,
+      url: `${SITE_URL}/guides/${article.slug}`,
+      lastModified: article.publishedAt ? new Date(`${article.publishedAt}T00:00:00Z`) : SITE_LAST_UPDATED,
       changeFrequency: 'monthly',
-      priority: 0.7,
-    });
-  }
-
-  // CMS articles, read from the content collection rather than a hand-kept list,
-  // so a published article cannot be missing here. `listPublishedPosts` reads
-  // front matter only — every field a sitemap entry needs — and excludes drafts
-  // and archived articles, which have no public URL to list.
-  for (const post of await listPublishedPosts()) {
-    sitemapEntries.push({
-      url: `${SITE_URL}${BLOG_PATH}/${post.slug}`,
-      lastModified: post.publishedAt ? new Date(`${post.publishedAt}T00:00:00Z`) : SITE_LAST_UPDATED,
-      changeFrequency: 'monthly',
-      priority: 0.6,
+      // An imported guide is the site's own long-form work; a CMS article is the
+      // same kind of page at a slightly lower priority, which is the ordering the
+      // two loops used before they were merged.
+      priority: article.source === 'guide' ? 0.7 : 0.6,
     });
   }
 

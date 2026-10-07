@@ -36,17 +36,33 @@ import {
 } from '@/lib/admin/github';
 import { DEFAULT_POST_STATUS } from '@/keystatic.config';
 
-/** What the management table needs from one article. */
+/**
+ * What the management table needs from one article.
+ *
+ * `source` and `repoPath` are what let one table hold both collections. An article
+ * is either a Markdown file the dashboard writes (`cms`) or a typed module under
+ * `content/guides/**` (`legacy`), and every action the table offers has to be sent
+ * to the right one — a Delete aimed at the wrong source removes the wrong file.
+ */
 export interface ArticleSummary {
   slug: string;
   title: string;
   publishedAt: string;
   category: string;
   status: string;
+  source: 'cms' | 'legacy';
+  /** `public/guides/<slug>.md` for a CMS article; the module path for a guide. */
+  repoPath: string;
 }
 
-/** One article with everything the editor loads. */
-export interface ArticleDetail extends ArticleSummary {
+/**
+ * One article with everything the editor loads.
+ *
+ * An edit is always a CMS article — an imported guide is edited as source through
+ * its own page — so `source` and `repoPath` are omitted rather than filled with
+ * values nothing here uses.
+ */
+export interface ArticleDetail extends Omit<ArticleSummary, 'source' | 'repoPath'> {
   seoTitle: string;
   seoDescription: string;
   coverImage: string;
@@ -197,6 +213,8 @@ function summarize(path: string, file: string): ArticleSummary {
     // A file without the field predates it, and reads as the state every article
     // had before: published.
     status: asString(data.status, DEFAULT_POST_STATUS),
+    source: 'cms',
+    repoPath: path,
   };
 }
 
@@ -261,4 +279,22 @@ export function publishToken(): string {
 /** The repository the dashboard manages, for a page that wants to name it. */
 export function managedRepository(): string {
   return repository();
+}
+
+/**
+ * One article's body and front matter, by source — the read a status change needs.
+ *
+ * A status change rewrites a file, so it has to read that file first (the contents
+ * API refuses a write without the current `sha`, and lib/admin/authoring.ts rewrites
+ * only the one key). Returning `null` rather than throwing lets the endpoint answer
+ * "that article is not in the repository" as a 404 instead of a 500.
+ */
+export async function readArticleFile(
+  slug: string,
+  options: { token: string; request?: typeof fetch }
+): Promise<{ path: string; file: string } | null> {
+  const { token, request = fetch } = options;
+  const path = `public/guides/${slug}.md`;
+  const file = await fetchFile(path, token, request);
+  return file === null ? null : { path, file };
 }

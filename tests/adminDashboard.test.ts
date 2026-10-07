@@ -325,15 +325,11 @@ test('admin composition - the file matches the shape of the articles already pub
     .split('\n')
     .filter((line) => /^[a-zA-Z]+:/.test(line))
     .map((line) => line.split(':')[0]);
-  // The one key the dashboard adds is `status`, in its schema position — and the
-  // articles predating the field have no such key, which is why the reader treats
-  // a missing status as `published` rather than an error.
-  assert.deepEqual(
-    keys.filter((key) => key !== 'status'),
-    existingKeys,
-    'the key order matches the published article exactly, plus status'
-  );
-  assert.doesNotMatch(existing, /^status:/m, 'the pre-existing article has no status key at all');
+  // The collection and the composer agree on the key order, including `status`: an
+  // article saved from this dashboard is edited in place, so a reordering here would
+  // show up as a rewritten article the first time someone edits one.
+  assert.deepEqual(keys, existingKeys, 'the key order matches the collection exactly');
+  assert.match(keys.join(','), /category,status,tags/, 'and `status` sits in its schema position');
 });
 
 test('admin composition - what the dashboard writes, the blog reader reads back', async () => {
@@ -412,12 +408,24 @@ test('admin status - a draft is written, read back, and hidden from the public l
   }
 });
 
-test('admin status - an article whose file has no status key reads as published', async () => {
-  // The article predates the field; its live URL must not depend on anyone adding
-  // a key to files the dashboard did not write.
-  const existing = await getPost('keyboard-keys-not-registering-hardware-or-software');
-  assert.ok(existing, 'the pre-existing article is present');
-  assert.equal(existing.status, 'published');
+test('admin status - a file with no status key reads as published', async () => {
+  // Some articles predate the field, and a hand-written file may never carry one.
+  // Their live URL must not depend on anyone adding a key.
+  const slug = 'zz-admin-no-status-key';
+  const path = join('public', 'guides', `${slug}.md`);
+  try {
+    writeFileSync(
+      path,
+      composePostFile(draft({ slug })).replace(/^status: published\n/m, ''),
+      'utf8'
+    );
+    const read = await getPost(slug);
+    assert.ok(read, 'the reader finds a file with no status key');
+    assert.equal(read.status, 'published', 'and treats the missing key as the state every article had');
+    assert.ok((await listPublishedPosts()).some((post) => post.slug === slug), 'so it is published, not hidden');
+  } finally {
+    rmSync(path, { force: true });
+  }
 });
 
 test('admin validation - the status must be one of the schema states', () => {
@@ -558,7 +566,7 @@ test('admin dashboard - the secrets it needs are named, and the old flow is gone
 
 test('admin editor - the dashboard offers every capability and every SEO field', () => {
   const editor = readFileSync(join('components', 'admin', 'ArticleEditor.tsx'), 'utf8');
-  for (const capability of ['H2', 'H3', 'H4', 'Bold', 'Italic', 'Strike', 'Code', 'Bullets', 'Numbered', 'Quote', 'Link', 'Image', 'Table', 'Code block', 'Divider']) {
+  for (const capability of ['H2', 'H3', 'H4', 'Bold', 'Italic', 'Strike', 'Code', 'Bullets', 'Numbered', 'Quote', 'Link', 'Image', 'Table', 'Code block', 'Divider', 'Undo', 'Redo']) {
     assert.match(editor, new RegExp(capability), `the toolbar offers ${capability}`);
   }
   for (const field of [
@@ -582,6 +590,30 @@ test('admin editor - the dashboard offers every capability and every SEO field',
   assert.match(editor, /validateAltText\(draft\.coverImageAlt/, 'and neither can the cover');
   assert.match(editor, /slugify\(value\)/, 'the slug follows the title');
   assert.match(editor, /slugEdited/, 'until the author takes it over');
+});
+
+test('admin editor - undo, redo, rich paste and the HTML source view are wired', () => {
+  const editor = readFileSync(join('components', 'admin', 'ArticleEditor.tsx'), 'utf8');
+
+  // The shortcuts drive the editor's own stack, not the browser's — which does not
+  // know about a toolbar's programmatic edits. See the header comment in the file.
+  assert.match(editor, /key === 'z' && !event\.shiftKey/, 'Ctrl+Z is handled');
+  assert.match(editor, /key === 'y' \|\| \(key === 'z' && event\.shiftKey\)/, 'and Ctrl+Y / Ctrl+Shift+Z for redo');
+  assert.match(editor, /stepHistory\('undo'\)/);
+  assert.match(editor, /stepHistory\('redo'\)/);
+  assert.match(editor, /disabled=\{history\.past\.length === 0\}/, 'Undo is off when there is nothing to undo');
+
+  // A paste keeps its formatting: the HTML clipboard flavour is converted, and a
+  // paste without one is left to the browser.
+  assert.match(editor, /onPaste=\{onPaste\}/);
+  assert.match(editor, /getData\('text\/html'\)/, 'the HTML clipboard flavour is what is converted');
+  assert.match(editor, /htmlToMarkdown\(htmlFlavour\)/);
+
+  // And the HTML / Source tab: rendered from the body, edited, converted back only
+  // when it was edited.
+  assert.match(editor, /\['source', 'HTML \/ Source'\]/);
+  assert.match(editor, /setHtml\(renderPreview\(draft\.content\)\)/);
+  assert.match(editor, /if \(view === 'source' && next !== 'source' && htmlDirty\)/);
 });
 
 test('admin uploads - a filename is derived from the original name and the bytes', async () => {
@@ -846,8 +878,13 @@ test('admin collection - a refusal from GitHub is explained, not shown as an emp
 
 test('admin collection - the admin reads the repository, not the build-time files', () => {
   const list = readFileSync(join('app', 'admin', 'page.tsx'), 'utf8');
-  assert.match(list, /listArticles\(\{ token \}\)/, 'the management view asks GitHub');
+  assert.match(list, /readManagedCollection\(\{ token \}\)/, 'the management view asks GitHub');
   assert.doesNotMatch(list, /listPosts\(/, 'and not the reader the Worker cannot resolve');
+  assert.doesNotMatch(
+    list,
+    /getPublishedGuides|GUIDE_ARTICLES/,
+    'nor the guides registry, which the deployed Worker cannot resolve either'
+  );
   assert.match(list, /publishToken\(\)/);
 
   const edit = readFileSync(join('app', 'admin', 'edit', '[slug]', 'page.tsx'), 'utf8');

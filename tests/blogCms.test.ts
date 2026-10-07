@@ -12,7 +12,7 @@ import {
   postCategoryLabel,
 } from '../keystatic.config';
 import {
-  BLOG_PATH,
+  ARTICLE_PATH,
   buildPostJsonLd,
   buildPostMetadata,
   derivedDescription,
@@ -173,7 +173,7 @@ test('content guard - every article declares a cover image, its alt text, a date
 // ----------------------------------------------------------------------- SEO
 
 test('article SEO - the canonical is the site route, unless the author overrode it', () => {
-  assert.equal(postCanonicalUrl(fixture()), `${SITE_URL}${BLOG_PATH}/sample-article`);
+  assert.equal(postCanonicalUrl(fixture()), `${SITE_URL}${ARTICLE_PATH}/sample-article`);
   assert.equal(
     postCanonicalUrl(fixture({ canonicalUrl: 'https://elsewhere.example/republished' })),
     'https://elsewhere.example/republished',
@@ -181,7 +181,7 @@ test('article SEO - the canonical is the site route, unless the author overrode 
   );
   // An empty string is what a cleared optional field serialises to; it must not
   // win over the real route.
-  assert.equal(postCanonicalUrl(fixture({ canonicalUrl: '   ' })), `${SITE_URL}${BLOG_PATH}/sample-article`);
+  assert.equal(postCanonicalUrl(fixture({ canonicalUrl: '   ' })), `${SITE_URL}${ARTICLE_PATH}/sample-article`);
 });
 
 test('article SEO - the cover image resolves to an absolute URL either way', () => {
@@ -200,13 +200,13 @@ test('article SEO - metadata carries canonical, Open Graph and Twitter from the 
   });
   const metadata = buildPostMetadata(post);
 
-  assert.equal(metadata.alternates?.canonical, `${SITE_URL}${BLOG_PATH}/sample-article`);
+  assert.equal(metadata.alternates?.canonical, `${SITE_URL}${ARTICLE_PATH}/sample-article`);
   assert.equal(metadata.title, 'Keyboard Faults: Hardware or Software?');
 
   const og = metadata.openGraph as Record<string, unknown>;
   assert.equal(og.type, 'article');
   assert.equal(og.title, 'Keyboard Faults: Hardware or Software?');
-  assert.equal(og.url, `${SITE_URL}${BLOG_PATH}/sample-article`);
+  assert.equal(og.url, `${SITE_URL}${ARTICLE_PATH}/sample-article`);
   assert.deepEqual(og.images, [
     { url: `${SITE_URL}${post.coverImage}`, alt: post.coverImageAlt },
   ]);
@@ -277,7 +277,7 @@ test('article SEO - the JSON-LD graph is an Article with breadcrumbs and a real 
     items.map((item) => item.position),
     [1, 2, 3],
   );
-  assert.equal(items[1].item, `${SITE_URL}${BLOG_PATH}`);
+  assert.equal(items[1].item, `${SITE_URL}${ARTICLE_PATH}`);
 });
 
 // -------------------------------------------------------------------- routes
@@ -285,31 +285,47 @@ test('article SEO - the JSON-LD graph is an Article with breadcrumbs and a real 
 test('article routes - an unknown slug 404s instead of compiling MDX on demand', () => {
   // Publishing is a commit; without this the Worker would try to render a slug
   // that no build has seen, which is where dynamic code evaluation is banned.
-  const source = readFileSync(join('app', 'blog', '[slug]', 'page.tsx'), 'utf8');
+  const source = readFileSync(join('app', 'guides', '[slug]', 'page.tsx'), 'utf8');
   assert.match(source, /export const dynamicParams = false/);
 });
 
-test('article routes - the CMS is excluded from crawlers and the blog is in the sitemap', () => {
+test('article routes - the CMS is excluded from crawlers and the guides hub is in the sitemap', () => {
   assert.match(readFileSync('app/robots.ts', 'utf8'), /'\/admin'/);
   const sitemap = readFileSync('app/sitemap.ts', 'utf8');
-  assert.match(sitemap, /listPublishedPosts\(\)/, 'articles come from the collection, published ones only');
+  assert.match(sitemap, /listPublishedArticles\(\)/, 'articles come from the registry, published ones only');
   assert.doesNotMatch(
     sitemap,
     /listPosts\(\)/,
     'the sitemap never reads the unfiltered list, or a draft would be indexed'
   );
-  assert.match(readFileSync('lib/site.ts', 'utf8'), /path: '\/blog'/, 'the blog index is in STATIC_PAGES');
+  assert.match(readFileSync('lib/site.ts', 'utf8'), /path: '\/guides'/, 'the guides hub is in STATIC_PAGES');
+});
+
+test('article routes - the old /blog tree is a permanent redirect, not a second copy', () => {
+  // The moved routes must not exist as pages too: two URLs serving one article
+  // is the duplicate-content problem the canonical tag exists to prevent, and a
+  // redirect that lands on another working page never gets followed.
+  assert.equal(existsSync(join('app', 'blog')), false, 'the /blog routes are deleted, not shadowed');
+
+  const redirects = readFileSync('next.config.redirects.ts', 'utf8');
+  assert.match(redirects, /source: '\/blog', destination: '\/guides', permanent: true/);
+  assert.match(redirects, /source: '\/blog\/:slug', destination: '\/guides\/:slug', permanent: true/);
 });
 
 test('article routes - drafts and archived articles have no public route or index entry', () => {
-  // The index and the article routes must read the published list — that is what
+  // The hub and the article route must read the published list — that is what
   // makes a draft's URL a 404 rather than a page that has to remember a robots
   // directive. `listPosts` stays for the management view, which shows every state.
-  const index = readFileSync('app/blog/page.tsx', 'utf8');
-  assert.match(index, /listPublishedPosts\(\)/);
-  assert.doesNotMatch(index, /listPosts\(\)/);
+  const hub = readFileSync(join('app', 'guides', 'page.tsx'), 'utf8');
+  assert.match(hub, /listPublishedArticles\(\)/);
+  assert.doesNotMatch(hub, /listPosts\(\)/);
 
-  const article = readFileSync(join('app', 'blog', '[slug]', 'page.tsx'), 'utf8');
-  assert.match(article, /listPublishedPosts\(\)/, 'static params are published articles only');
-  assert.match(article, /post\.status !== 'published'/, 'a non-published state is a 404, not a hidden page');
+  const registry = readFileSync(join('lib', 'articles', 'registry.ts'), 'utf8');
+  assert.match(registry, /listPublishedArticles\(\)/, 'static params are published articles only');
+  assert.match(registry, /post\.status !== 'published'/, 'a non-published state is a 404, not a hidden page');
+  assert.match(
+    readFileSync(join('app', 'guides', '[slug]', 'page.tsx'), 'utf8'),
+    /listPublishedArticles\(\)/,
+    'the route builds its static params from the same published list'
+  );
 });

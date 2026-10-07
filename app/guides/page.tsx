@@ -1,11 +1,12 @@
-import React from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
-import { getPublishedGuides, GUIDE_CATEGORIES } from '@/lib/guides/registry';
+import { GUIDE_CATEGORIES } from '@/lib/guides/registry';
+import { listPublishedArticles, type PublishedArticleRef } from '@/lib/articles/registry';
+import { POST_CATEGORIES } from '@/keystatic.config';
 import { SITE_URL } from '@/lib/site';
 import { siteOpenGraph } from '@/lib/seo/metadata';
 
@@ -23,9 +24,38 @@ export const metadata: Metadata = {
   }),
 };
 
-export default function GuidesHub() {
+/**
+ * The hub every article lives under.
+ *
+ * It lists everything the site publishes — the imported guides under
+ * `content/guides/**` and the CMS articles under `public/guides/*.md` — from the
+ * one registry that knows about both (lib/articles/registry.ts), so an article
+ * written in the dashboard is a card here the moment the next build runs, without
+ * anyone remembering to add it to a list.
+ *
+ * The section headings come from the site's taxonomy, merged rather than
+ * hardcoded: the guide categories in their established order first, then the two
+ * CMS-only categories (`buying`, `how-to`) when anything is filed under them. A
+ * category with no articles renders no heading.
+ */
+const SECTION_ORDER: Array<{ key: string; label: string }> = [
+  ...GUIDE_CATEGORIES.map((category) => ({ key: category.key as string, label: category.label })),
+  ...POST_CATEGORIES.filter(
+    (category) => !GUIDE_CATEGORIES.some((guide) => guide.key === category.value)
+  ).map((category) => ({ key: category.value as string, label: category.label })),
+];
+
+/** The small label on a card: what kind of article this is. */
+function kindLabel(article: PublishedArticleRef): string {
+  if (article.source === 'guide') {
+    return article.type === 'buying' ? 'Buying guide' : article.type === 'how-to' ? 'How-to' : 'Troubleshooting';
+  }
+  return POST_CATEGORIES.find((category) => category.value === article.category)?.label ?? 'Article';
+}
+
+export default async function GuidesHub() {
   const t = getDictionary();
-  const guides = getPublishedGuides();
+  const articles = await listPublishedArticles();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
@@ -44,30 +74,34 @@ export default function GuidesHub() {
           </p>
         </div>
 
-        {GUIDE_CATEGORIES.map((cat) => {
-          const catGuides = guides.filter((g) => g.category === cat.key);
-          if (catGuides.length === 0) return null;
+        {SECTION_ORDER.map((category) => {
+          const inCategory = articles.filter((article) => article.category === category.key);
+          if (inCategory.length === 0) return null;
           return (
-            <section key={cat.key} className="mt-10">
+            <section key={category.key} className="mt-10">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#172033] dark:text-[#E9EEF4] mb-4">
-                {cat.label}
+                {category.label}
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {catGuides.map((g) => (
+                {inCategory.map((article) => (
                   <Link
-                    key={g.slug}
-                    href={`/guides/${g.slug}`}
+                    key={`${article.source}-${article.slug}`}
+                    href={`/guides/${article.slug}`}
                     className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                   >
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
-                      {g.type === 'buying' ? 'Buying guide' : g.type === 'how-to' ? 'How-to' : 'Troubleshooting'}
+                      {kindLabel(article)}
                     </span>
                     <h3 className="mt-2 text-sm font-bold leading-snug text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
-                      {g.title}
+                      {article.title}
                     </h3>
-                    <p className="mt-2 text-xs text-[#59677D] dark:text-[#9AA6B8] leading-relaxed line-clamp-3 flex-1">
-                      {g.description}
-                    </p>
+                    {article.description ? (
+                      <p className="mt-2 text-xs text-[#59677D] dark:text-[#9AA6B8] leading-relaxed line-clamp-3 flex-1">
+                        {article.description}
+                      </p>
+                    ) : (
+                      <span className="flex-1" />
+                    )}
                     <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#0F766E] dark:text-[#14B8A6]">
                       Read guide
                       <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />

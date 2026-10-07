@@ -15,6 +15,7 @@ import {
 import { POST_IMAGE_PUBLIC_PATH } from '@/keystatic.config';
 import type { NextRequest } from 'next/server';
 import { GithubError, deleteFile, fileExists, publishArticle, repository } from '@/lib/admin/github';
+import { deleteLegacyGuide, readLegacyGuide } from '@/lib/admin/legacy-guides';
 import { isAuthenticated } from '@/lib/admin/session';
 
 /**
@@ -70,6 +71,14 @@ function json(status: number, body: Record<string, unknown>): Response {
  * Deleting a file that is not there is a success (`deleted: false`), not an
  * error — a double click, or a delete racing a rebuild, should not read as a
  * failure when the requested state, no file, is exactly what exists.
+ *
+ * TWO SOURCES, ONE ACTION. `?source=legacy` deletes an imported guide module, which
+ * is a two-step operation rather than one: the module is detached from
+ * `content/guides/index.ts` FIRST and the file removed second, so a failure between
+ * them leaves an unreferenced module rather than an import of a missing file. See
+ * lib/admin/legacy-guides.ts. A guide whose import the dashboard cannot find is
+ * refused outright — deleting it would break the build, which is the one outcome
+ * worse than a delete that did not happen.
  */
 export async function DELETE(request: NextRequest): Promise<Response> {
   if (!(await isAuthenticated(request.cookies))) {
@@ -95,13 +104,32 @@ export async function DELETE(request: NextRequest): Promise<Response> {
     return json(503, { ok: false, message: 'The CMS schema does not name a GitHub repository to publish to.' });
   }
 
+  const source = request.nextUrl.searchParams.get('source') === 'legacy' ? 'legacy' : 'cms';
+
   try {
+    if (source === 'legacy') {
+      const guide = await readLegacyGuide(slug, { token });
+      if (!guide) {
+        return json(404, { ok: false, message: `No imported guide declares the slug “${slug}”.` });
+      }
+      const result = await deleteLegacyGuide({ guide, token });
+      return json(200, {
+        ok: true,
+        slug,
+        source,
+        path: result.path,
+        deleted: result.deleted,
+        indexUpdated: result.indexUpdated,
+        repository: repo,
+      });
+    }
+
     const result = await deleteFile({
       path: postRepoPath(slug),
       message: `Delete "${slug}"`,
       token,
     });
-    return json(200, { ok: true, slug, deleted: result.deleted, repository: repo });
+    return json(200, { ok: true, slug, source, deleted: result.deleted, repository: repo });
   } catch (error) {
     if (error instanceof GithubError) {
       return json(502, { ok: false, message: error.message });
@@ -275,7 +303,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     return json(200, {
       ok: true,
       slug: result.slug,
-      url: `/blog/${result.slug}`,
+      // The route the site actually serves the article from. It moved from
+      // `/blog` to `/guides` when the two content trees were merged; the old
+      // path survives only as a permanent redirect, so this is the address to
+      // link to and the one the dashboard shows back to the author.
+      url: `/guides/${result.slug}`,
       repository: repo,
       ...(warnings.length > 0 ? { warnings } : {}),
       commits: result.commits.map((commit) => ({ path: commit.path, created: commit.created })),

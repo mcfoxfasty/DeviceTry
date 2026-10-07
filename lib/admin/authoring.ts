@@ -1,5 +1,5 @@
 /**
- * Turning a dashboard draft into the exact file /blog reads.
+ * Turning a dashboard draft into the exact file the guides route reads.
  *
  * THE FORMAT IS NOT INVENTED HERE. An article is a Markdown file with YAML front
  * matter whose keys are the fields of keystatic.config.ts, and the reader in
@@ -301,7 +301,46 @@ export function yamlScalar(value: string): string {
 }
 
 /**
- * Compose the file that /blog reads.
+ * Set an existing article file's `status`, touching nothing else.
+ *
+ * THE ONE EDIT THE MANAGEMENT TABLE MAKES WITHOUT OPENING THE EDITOR. Publishing or
+ * retiring an article from the list is a status change, and it has to be a
+ * status change — reading the file, rewriting ONLY that key and committing it back
+ * means the rest of the file is byte-identical, so the diff a reviewer sees is the
+ * one line that changed. Composing the file from a parsed draft instead would
+ * normalise quoting, reorder keys and re-wrap the body: a one-word edit that shows
+ * up as a rewritten article.
+ *
+ * The key is inserted after `category` when the file predates the field, which is
+ * where composePostFile puts it, so an article that gains a status for the first
+ * time looks exactly like one the editor saved.
+ *
+ * A file with no front matter is returned unchanged. The caller treats that as a
+ * refusal rather than writing a status nowhere: there is no key to set, and a file
+ * that is all body is not an article this dashboard composed.
+ */
+export function withFrontMatterStatus(file: string, status: PostStatus): string {
+  const lines = file.replace(/\r\n/g, '\n').split('\n');
+  if (lines[0]?.trim() !== '---') return file;
+  const closing = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (closing === -1) return file;
+
+  const existing = lines.findIndex((line, index) => index > 0 && index < closing && /^status:\s*/.test(line));
+  if (existing !== -1) {
+    lines[existing] = `status: ${status}`;
+    return lines.join('\n');
+  }
+
+  const category = lines.findIndex(
+    (line, index) => index > 0 && index < closing && /^category:\s*/.test(line)
+  );
+  const at = category === -1 ? closing : category + 1;
+  lines.splice(at, 0, `status: ${status}`);
+  return lines.join('\n');
+}
+
+/**
+ * Compose the file /guides reads.
  *
  * Field order matches the articles already in the repository, so a diff on a CMS
  * edit shows changed values rather than a reordered file.

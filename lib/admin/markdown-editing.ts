@@ -153,6 +153,97 @@ export function insertBlock(state: EditState, block: string): EditResult {
   };
 }
 
+// ---------------------------------------------------------------- undo / redo
+
+/**
+ * The editor's undo history, as a pure data structure.
+ *
+ * WHY THE BROWSER'S OWN UNDO IS NOT ENOUGH. The toolbar edits the document
+ * programmatically — it rewrites the textarea's value — and a browser's undo stack
+ * only knows about the changes the USER made: after a toolbar action, Ctrl+Z in
+ * Chrome undoes the typing from before it and leaves the toolbar's change in place,
+ * which is worse than doing nothing. So the editor keeps its own stack of states,
+ * and the buttons and the shortcuts both go through it.
+ *
+ * WHAT IS RECORDED, AND WHEN. Every state the document was in before a change that
+ * the toolbar or a paste made is pushed. Typing is pushed too, but COALESCED: a
+ * snapshot taken within `TYPING_COALESCE_MS` of the previous one replaces nothing
+ * and adds nothing, so a burst of typing is one undo step — which is what every
+ * editor's Ctrl+Z does, and what stops a 400-word paragraph from becoming 400
+ * presses.
+ *
+ * WHAT AN UNDO RESTORES. The value AND the selection. Restoring the text without the
+ * caret puts the cursor at the end of the document, so an author who undoes a
+ * formatting change then types gets their words in the wrong place.
+ */
+export interface History { past: EditState[]; future: EditState[]; lastAt: number }
+
+/** A coarse cap: the states are a few hundred bytes each, and nobody needs 200. */
+export const MAX_HISTORY = 100;
+
+/** Typing within this window of the last snapshot is one undo step. */
+export const TYPING_COALESCE_MS = 600;
+
+/** An empty history — nothing to undo, nothing to redo. */
+export function emptyHistory(): History {
+  return { past: [], future: [], lastAt: 0 };
+}
+
+/**
+ * Record the state a change is ABOUT to replace.
+ *
+ * Any redo stack is dropped: once a new change is made, the states that were undone
+ * are no longer reachable, and keeping them would let Redo jump to a document that
+ * never existed.
+ */
+export function record(history: History, state: EditState, at: number, coalesceMs = 0): History {
+  const snapshot: EditState = {
+    value: state.value,
+    selectionStart: state.selectionStart,
+    selectionEnd: state.selectionEnd,
+  };
+  if (coalesceMs > 0 && history.past.length > 0 && at - history.lastAt <= coalesceMs) {
+    // The same burst of typing: the earlier snapshot already holds the state this
+    // one would replace, so only the clock moves.
+    return { past: history.past, future: [], lastAt: at };
+  }
+  return { past: [...history.past, snapshot].slice(-MAX_HISTORY), future: [], lastAt: at };
+}
+
+/** The state to restore for an undo, and the history that follows from it. */
+export function undo(
+  history: History,
+  current: EditState
+): { history: History; state: EditState } | null {
+  const previous = history.past[history.past.length - 1];
+  if (!previous) return null;
+  return {
+    history: {
+      past: history.past.slice(0, -1),
+      future: [current, ...history.future].slice(0, MAX_HISTORY),
+      lastAt: 0,
+    },
+    state: previous,
+  };
+}
+
+/** The state to restore for a redo, and the history that follows from it. */
+export function redo(
+  history: History,
+  current: EditState
+): { history: History; state: EditState } | null {
+  const [next, ...rest] = history.future;
+  if (!next) return null;
+  return {
+    history: {
+      past: [...history.past, current].slice(-MAX_HISTORY),
+      future: rest,
+      lastAt: 0,
+    },
+    state: next,
+  };
+}
+
 /** A GitHub-flavoured Markdown table with a header row and one empty body row. */
 export function tableTemplate(): string {
   return ['| Column | Column |', '| --- | --- |', '|  |  |'].join('\n');

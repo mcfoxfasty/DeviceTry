@@ -12,17 +12,24 @@ import {
   type UploadedImage,
 } from '@/lib/admin/authoring';
 import {
+  TYPING_COALESCE_MS,
   codeBlockTemplate,
+  emptyHistory,
   imageMarkdown,
   insertBlock,
   insertImage,
   insertText,
   prefixLines,
+  record,
+  redo,
   tableTemplate,
   toggleWrap,
+  undo,
   type EditResult,
   type EditState,
+  type History,
 } from '@/lib/admin/markdown-editing';
+import { htmlToMarkdown } from '@/lib/admin/html-to-markdown';
 import { renderPreview } from '@/lib/admin/preview';
 import type { PostStatus } from '@/keystatic.config';
 
@@ -56,7 +63,25 @@ import type { PostStatus } from '@/keystatic.config';
  * THE PREVIEW TAB renders the body with lib/admin/preview.ts — the same
  * constructs the toolbar writes, styled like components/blog/PostBody.tsx — so an
  * author can check an article before it becomes a commit.
- */
+ *
+ * THE HTML / SOURCE TAB is the body as HTML, and it is EDITABLE. It exists for the
+ * two jobs a Markdown textarea cannot do: fixing markup a paste produced, and
+ * seeing what a construct actually is before trusting it. Leaving the tab converts
+ * the HTML back to Markdown with lib/admin/html-to-markdown.ts — the same converter
+ * a rich paste uses — but ONLY when the HTML was actually edited, so an author who
+ * visits the tab and leaves never has their Markdown rewritten by a round trip it
+ * did not need to make.
+ *
+ * UNDO IS THE EDITOR'S OWN. The toolbar edits the document programmatically, and a
+ * browser's undo stack only covers what the user typed: after a toolbar action,
+ * Ctrl+Z would undo the typing from before it and leave the action in place. So the
+ * editor keeps a stack of states (lib/admin/markdown-editing.ts), the toolbar's
+ * Undo/Redo buttons drive it, and Ctrl+Z / Ctrl+Y are intercepted to drive the same
+ * one — typing included, coalesced into bursts so a paragraph is one step.
+*/
+
+/** What the body can be shown as. */
+type EditorView = 'write' | 'preview' | 'source';
 
 const DRAFT_KEY = 'devicetry-admin-draft-v1';
 
@@ -232,7 +257,13 @@ export function ArticleEditor({
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [restored, setRestored] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [view, setView] = useState<'write' | 'preview'>('write');
+  const [view, setView] = useState<EditorView>('write');
+  /** The editor's own undo stack — see the header comment for why it exists. */
+  const [history, setHistory] = useState<History>(emptyHistory);
+  /** The body as HTML, while the HTML / Source tab is open. */
+  const [html, setHtml] = useState('');
+  /** Whether the HTML was edited — conversion back happens only if it was. */
+  const [htmlDirty, setHtmlDirty] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [imagePanel, setImagePanel] = useState<{ alt: string; caption: string; file: File | null; error: string }>({
     alt: '',
@@ -289,20 +320,136 @@ export function ArticleEditor({
   }, [initialDraft]);
 
   // ---- markdown editing ---------------------------------------------------
-  const apply = useCallback((operation: (state: EditState) => EditResult) => {
+
+  /** Put the caret back where an edit left it, which is where the author looks. */
+  const focusSelection = useCallback((selection: { selectionStart: number; selectionEnd: number }) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const next = operation({
-      value: textarea.value,
-      selectionStart: textarea.selectionStart,
-      selectionEnd: textarea.selectionEnd,
-    });
-    setDraft((current) => ({ ...current, content: next.value }));
     requestAnimationFrame(() => {
       textarea.focus();
-      textarea.setSelectionRange(next.selectionStart, next.selectionEnd);
+      textarea.setSelectionRange(selection.selectionStart, selection.selectionEnd);
     });
   }, []);
+
+  /**
+   * Run one toolbar operation, remembering the state it replaced.
+   *
+   * `apply` is also what a rich paste and the HTML source tab go through, so all
+   * three land in one undo history and one place decides how the caret moves.
+   */
+  const apply = useCallback(
+    (operation: (state: EditState) => EditResult) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const before: EditState = {
+        value: textarea.value,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+      };
+      const next = operation(before);
+      // A button that changed nothing is not an undo step.
+      if (next.value === before.value) {
+        focusSelection(next);
+        return;
+      }
+      setHistory((current) => record(current, before, Date.now()));
+      setDraft((current) => ({ ...current, content: next.value }));
+      focusSelection(next);
+    },
+    [focusSelection]
+  );
+
+  /**
+   * Typing, recorded as a coalesced burst.
+   *
+   * The snapshot is the textarea's value BEFORE this keystroke; the caret is the
+   * one after it, which is close enough for an undo of a burst — the alternative is
+   * to reimplement selectionchange tracking to save a one-character offset.
+   */
+  const onBodyChange = (value: string, textarea: HTMLTextAreaElement) => {
+    setHistory((current) =>
+      record(
+        current,
+        { value: draft.content, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
+        Date.now(),
+        TYPING_COALESCE_MS
+      )
+    );
+    setDraft((current) => ({ ...current, content: value }));
+  };
+
+  /** Undo or redo one step, moving the text and the caret together. */
+  const stepHistory = useCallback(
+    (direction: 'undo' | 'redo') => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const current: EditState = {
+        value: textarea.value,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+      };
+      const step = direction === 'undo' ? undo(history, current) : redo(history, current);
+      if (!step) return;
+      setHistory(step.history);
+      setDraft((draftState) => ({ ...draftState, content: step.state.value }));
+      focusSelection(step.state);
+    },
+    [focusSelection, history]
+  );
+
+  /**
+   * Paste with the formatting kept.
+   *
+   * A rich paste carries the same content twice: as HTML, which is what the author
+   * saw, and as plain text, which has lost every table, list and emphasis. The HTML
+   * flavour is converted and inserted, so a pasted table arrives as a Markdown table;
+   * a paste with no HTML (or one this converter cannot make anything of) is left to
+   * the browser, which inserts the plain text exactly as before.
+   *
+   * A multi-line paste goes in as its own block — splicing a table into the middle
+   * of a sentence produces a paragraph the preview cannot parse — while a one-line
+   * paste lands at the caret like any other text.
+   */
+  const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const clipboard = event.clipboardData;
+    const htmlFlavour = clipboard?.getData('text/html') ?? '';
+    if (htmlFlavour.trim().length === 0) return;
+
+    const markdown = htmlToMarkdown(htmlFlavour);
+    if (markdown.trim().length === 0) return;
+
+    event.preventDefault();
+    const pasted = markdown.trimEnd();
+    apply((state) => (pasted.includes('\n') ? insertBlock(state, pasted) : insertText(state, pasted)));
+  };
+
+  /**
+   * Change the body's view, carrying the HTML round trip when it is needed.
+   *
+   * Leaving the HTML tab converts the HTML back to Markdown only if it was edited:
+   * an author who opened the tab to look and left would otherwise have their
+   * Markdown replaced by a reconstruction of itself — and a reconstruction is a lossy
+   * thing to do for no reason.
+   */
+  const switchView = (next: EditorView): void => {
+    if (view === 'source' && next !== 'source' && htmlDirty) {
+      const markdown = htmlToMarkdown(html);
+      if (markdown.trim().length > 0 && markdown !== draft.content) {
+        setHistory((current) =>
+          record(current, { value: draft.content, selectionStart: 0, selectionEnd: 0 }, Date.now())
+        );
+        set('content', markdown.trimEnd());
+      }
+      setHtmlDirty(false);
+    }
+    if (next === 'source') {
+      // The HTML the preview shows is the HTML the source tab edits, so what an
+      // author corrects there is what they were looking at.
+      setHtml(renderPreview(draft.content));
+      setHtmlDirty(false);
+    }
+    setView(next);
+  };
 
   const set = <K extends keyof DraftState>(key: K, value: DraftState[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -445,7 +592,7 @@ export function ArticleEditor({
           fullDraft.status === 'published'
             ? `Committed to the repository. It appears on the site after the next build.${renamed}`
             : `Saved as ${fullDraft.status}. It stays off the public site until its status is published.${renamed}`,
-        url: fullDraft.status === 'published' ? (body.url ?? `/blog/${fullDraft.slug}`) : undefined,
+        url: fullDraft.status === 'published' ? (body.url ?? `/guides/${fullDraft.slug}`) : undefined,
       });
       try {
         localStorage.removeItem(DRAFT_KEY);
@@ -491,7 +638,7 @@ export function ArticleEditor({
             <div className="min-w-0 flex-1">
               <Field label="URL slug" error={shown('slug')}>
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-xs text-[#8996A6]">/blog/</span>
+                  <span className="shrink-0 text-xs text-[#8996A6]">/guides/</span>
                   <input
                     className={inputClass}
                     value={draft.slug}
@@ -523,6 +670,7 @@ export function ArticleEditor({
                   [
                     ['write', 'Write'],
                     ['preview', 'Preview'],
+                    ['source', 'HTML / Source'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -530,7 +678,7 @@ export function ArticleEditor({
                     role="tab"
                     type="button"
                     aria-selected={view === value}
-                    onClick={() => setView(value)}
+                    onClick={() => switchView(value)}
                     className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                       view === value
                         ? 'bg-[#0F766E] dark:bg-[#14B8A6] text-white dark:text-[#0B111A]'
@@ -559,9 +707,53 @@ export function ArticleEditor({
                   <div dangerouslySetInnerHTML={{ __html: renderPreview(draft.content) }} />
                 )}
               </div>
+            ) : view === 'source' ? (
+              /**
+               * The body as HTML, and editable. Every construct the preview shows
+               * is one of the toolbar's own, so correcting the markup here is a
+               * change to an article rather than a hand-edited page: what is saved
+               * is still Markdown.
+               */
+              <div className="flex flex-col gap-2">
+                <p className="rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-[#F7F6FB] dark:bg-[#192332] px-3 py-2 text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8]">
+                  The body as HTML. Edit it and switch back to <strong>Write</strong> to convert it to
+                  Markdown — headings, emphasis, lists, tables, quotes, code, links and captioned images all
+                  round-trip. Anything outside that set (nested lists, custom elements, raw scripts) is
+                  flattened to text rather than kept, so leave the controlled constructs here.
+                </p>
+                <textarea
+                  value={html}
+                  onChange={(event) => {
+                    setHtml(event.target.value);
+                    setHtmlDirty(true);
+                  }}
+                  rows={18}
+                  spellCheck={false}
+                  aria-label="Article body as HTML"
+                  className={`${inputClass} font-mono text-[12px] leading-relaxed min-h-[320px] resize-y`}
+                />
+              </div>
             ) : (
               <>
             <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => stepHistory('undo')}
+                disabled={history.past.length === 0}
+                title="Undo (Ctrl+Z)"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => stepHistory('redo')}
+                disabled={history.future.length === 0}
+                title="Redo (Ctrl+Y)"
+              >
+                Redo
+              </button>
               {HEADING_BUTTONS.map(({ level, label }) => (
                 <button
                   key={label}
@@ -631,7 +823,25 @@ export function ArticleEditor({
             <textarea
               ref={textareaRef}
               value={draft.content}
-              onChange={(event) => set('content', event.target.value)}
+              onChange={(event) => onBodyChange(event.target.value, event.target)}
+              onPaste={onPaste}
+              onKeyDown={(event) => {
+                // The shortcuts drive the editor's own stack, because the
+                // browser's does not know about the toolbar's changes — see the
+                // header comment. Shift+Ctrl+Z is redo, which is what macOS and
+                // several editors use, so both it and Ctrl+Y are accepted.
+                if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+                const key = event.key.toLowerCase();
+                if (key === 'z' && !event.shiftKey) {
+                  event.preventDefault();
+                  stepHistory('undo');
+                  return;
+                }
+                if (key === 'y' || (key === 'z' && event.shiftKey)) {
+                  event.preventDefault();
+                  stepHistory('redo');
+                }
+              }}
               rows={18}
               spellCheck
               placeholder={'Write the article.\n\n## A subheading\n\n- a list item\n\n| Column | Column |\n| --- | --- |\n|  |  |'}
