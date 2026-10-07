@@ -892,11 +892,16 @@ test('admin collection - the admin reads the repository, not the build-time file
   assert.doesNotMatch(edit, /getPost\(/, 'the edit page does not read the collection from disk');
 
   const config = readFileSync('next.config.ts', 'utf8');
-  assert.doesNotMatch(
+  // The admin reads from GitHub, not from bundled files — that is still true.
+  // But the public site's BUILD-TIME readers (lib/blog/content.ts) need the
+  // CMS articles bundled so the Worker can render the static pages. This traces
+  // public/guides/*.md into the routes that call listPublishedPosts().
+  assert.match(
     config,
     /outputFileTracingIncludes/,
-    'nothing traces public/guides into the worker any more — that was the empty-list bug'
+    'public site build-time readers need public/guides/*.md bundled into the Worker'
   );
+  assert.match(config, /'\/guides'\s*:\s*\[\s*['"]public\/guides\/[^\s'"]+\.md['"]/, 'the guides routes trace in the CMS articles');
 });
 
 test('admin lifecycle - the routes exist, are guarded, and wire the whole flow', () => {

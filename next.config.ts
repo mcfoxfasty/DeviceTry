@@ -69,9 +69,20 @@ const nextConfig: NextConfig = {
   // The admin pages deliberately read the article collection from the GitHub API
   // rather than from disk — see lib/admin/articles.ts for why, and the live
   // deployment that proved it (the bundle carried the articles, but the reader's
-  // working directory did not, so the list came out empty). No tracing entry for
-  // public/guides is needed, and none is configured.
+  // working directory did not, so the list came out empty).
+  //
+  // BUT: the public site's build-time readers (lib/blog/content.ts) also need
+  // public/guides/*.md to be present in the Worker bundle, because those files
+  // are read at build time to generate the static pages. Without tracing these
+  // in, the deployed Worker has no articles to render.
   output: 'standalone',
+  outputFileTracingIncludes: {
+    // Bundle CMS articles so the build-time reader can find them in the Worker.
+    '/guides': ['public/guides/*.md'],
+    '/guides/[slug]': ['public/guides/*.md'],
+    '/sitemap': ['public/guides/*.md'],
+    '/robots': ['public/guides/*.md'],
+  },
   transpilePackages: ['motion'],
   experimental: {
     // 2 GiB cgroup: static-generation workers inherit the NODE_OPTIONS heap
