@@ -1,31 +1,57 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ArticleEditor } from '@/components/admin/ArticleEditor';
+import { ArticlesTable, type ArticleRow } from '@/components/admin/ArticlesTable';
 import { isAuthenticated } from '@/lib/admin/session';
-import { POST_CATEGORIES } from '@/keystatic.config';
+import { listPosts } from '@/lib/blog/content';
+import { postCategoryLabel, postStatusLabel } from '@/keystatic.config';
+import { BLOG_PATH } from '@/lib/blog/seo';
 
 /**
- * The dashboard: the article editor, behind the session cookie.
+ * The management view: every article in the collection, with its state.
  *
- * The guard is here, on the server, before anything renders — not in the editor
+ * The list is read at request time from the same collection the site builds from
+ * (content/posts, through the same reader the public pages use), so the table
+ * shows the repository's truth rather than a cached copy — including articles a
+ * previous publish wrote that no build has rendered yet.
+ *
+ * The guard is here, on the server, before anything renders — not in the table
  * component. An unauthenticated request is redirected to the form and never
- * receives the editor's markup, so there is nothing for a client to un-hide.
+ * receives the page's markup, so there is nothing for a client to un-hide.
  *
- * `force-dynamic` is required rather than optional: the page reads a cookie, so it
- * can never be prerendered, and asking Next not to try keeps the build from
- * producing a static admin page that everyone would share.
- *
- * The categories come from keystatic.config.ts — the same list the article pages
- * use for their labels — so a new category can never exist in the editor and be
- * missing from the site.
+ * `force-dynamic` is required rather than optional: the page reads a cookie and
+ * the filesystem, so it can never be prerendered, and asking Next not to try
+ * keeps the build from producing a static admin page that everyone would share.
  */
 
 export const dynamic = 'force-dynamic';
 
+export const metadata: Metadata = {
+  title: 'All Articles — DeviceTry Admin',
+};
+
 export default async function AdminPage() {
   if (!(await isAuthenticated(await cookies()))) redirect('/admin/login');
 
-  const today = new Date().toISOString().slice(0, 10);
+  let articles: ArticleRow[] = [];
+  let readError: string | null = null;
+  try {
+    const posts = await listPosts();
+    articles = posts.map((post) => ({
+      slug: post.slug,
+      title: post.title,
+      publishedAt: post.publishedAt,
+      categoryLabel: postCategoryLabel(post.category),
+      statusValue: post.status,
+      statusLabel: postStatusLabel(post.status),
+      // A draft or an archived article has no public URL to link to — that is
+      // what its status means.
+      publicPath: post.status === 'published' ? `${BLOG_PATH}/${post.slug}` : null,
+    }));
+  } catch (error) {
+    readError = error instanceof Error ? error.message : 'The article files could not be read.';
+  }
 
   return (
     <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -34,23 +60,51 @@ export default async function AdminPage() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">DeviceTry Admin</h1>
             <p className="mt-0.5 text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
-              Write an article, then publish it straight to the repository.
+              {readError
+                ? 'The article list could not be read.'
+                : `${articles.length} article${articles.length === 1 ? '' : 's'} in the collection.`}
             </p>
           </div>
-          <form method="post" action="/api/admin/logout">
-            <button
-              type="submit"
-              className="rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] px-3 py-2 text-sm font-medium hover:border-[#CBD5E1] dark:hover:border-[#31435D] transition"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/new"
+              className="rounded-lg bg-[#0F766E] dark:bg-[#14B8A6] px-3 py-2 text-sm font-medium text-white dark:text-[#0B111A] hover:bg-[#0D665F] dark:hover:bg-[#2DD4BF] transition"
             >
-              Sign out
-            </button>
-          </form>
+              + New Article
+            </Link>
+            <form method="post" action="/api/admin/logout">
+              <button
+                type="submit"
+                className="rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] px-3 py-2 text-sm font-medium hover:border-[#CBD5E1] dark:hover:border-[#31435D] transition"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </header>
 
-        <ArticleEditor
-          categories={POST_CATEGORIES.map((category) => ({ value: category.value, label: category.label }))}
-          today={today}
-        />
+        {readError ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-[#FEE2E2] dark:border-[#450A0A] bg-[#FEE2E2] dark:bg-[#450A0A] px-3 py-2 text-sm text-[#DC2626] dark:text-[#EF4444]"
+          >
+            {readError}
+          </p>
+        ) : articles.length === 0 ? (
+          <div className="rounded-2xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-8 text-center">
+            <p className="text-sm text-[#5F6B7A] dark:text-[#9AA6B8]">
+              No articles yet. The first one is a click away.
+            </p>
+            <Link
+              href="/admin/new"
+              className="mt-4 inline-flex rounded-lg bg-[#0F766E] dark:bg-[#14B8A6] px-4 py-2.5 text-sm font-medium text-white dark:text-[#0B111A] hover:bg-[#0D665F] dark:hover:bg-[#2DD4BF] transition"
+            >
+              + New Article
+            </Link>
+          </div>
+        ) : (
+          <ArticlesTable articles={articles} />
+        )}
       </div>
     </main>
   );

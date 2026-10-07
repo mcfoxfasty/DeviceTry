@@ -62,6 +62,7 @@ function fixture(overrides: Partial<BlogPost> = {}): BlogPost {
     publishedAt: '2026-10-06',
     author: 'DeviceTry team',
     category: 'input-gaming',
+    status: 'published',
     tags: ['keyboard', 'troubleshooting'],
     canonicalUrl: null,
     ...overrides,
@@ -290,6 +291,25 @@ test('article routes - an unknown slug 404s instead of compiling MDX on demand',
 
 test('article routes - the CMS is excluded from crawlers and the blog is in the sitemap', () => {
   assert.match(readFileSync('app/robots.ts', 'utf8'), /'\/admin'/);
-  assert.match(readFileSync('app/sitemap.ts', 'utf8'), /listPosts\(\)/, 'articles come from the collection');
+  const sitemap = readFileSync('app/sitemap.ts', 'utf8');
+  assert.match(sitemap, /listPublishedPosts\(\)/, 'articles come from the collection, published ones only');
+  assert.doesNotMatch(
+    sitemap,
+    /listPosts\(\)/,
+    'the sitemap never reads the unfiltered list, or a draft would be indexed'
+  );
   assert.match(readFileSync('lib/site.ts', 'utf8'), /path: '\/blog'/, 'the blog index is in STATIC_PAGES');
+});
+
+test('article routes - drafts and archived articles have no public route or index entry', () => {
+  // The index and the article routes must read the published list — that is what
+  // makes a draft's URL a 404 rather than a page that has to remember a robots
+  // directive. `listPosts` stays for the management view, which shows every state.
+  const index = readFileSync('app/blog/page.tsx', 'utf8');
+  assert.match(index, /listPublishedPosts\(\)/);
+  assert.doesNotMatch(index, /listPosts\(\)/);
+
+  const article = readFileSync(join('app', 'blog', '[slug]', 'page.tsx'), 'utf8');
+  assert.match(article, /listPublishedPosts\(\)/, 'static params are published articles only');
+  assert.match(article, /post\.status !== 'published'/, 'a non-published state is a 404, not a hidden page');
 });

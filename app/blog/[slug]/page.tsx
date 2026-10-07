@@ -5,7 +5,7 @@ import { ArrowLeft, CalendarDays, User } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
-import { getPost, listPosts } from '@/lib/blog/content';
+import { getPost, listPublishedPosts } from '@/lib/blog/content';
 import { BLOG_PATH, buildPostJsonLd, buildPostMetadata } from '@/lib/blog/seo';
 import { postCategoryLabel } from '@/keystatic.config';
 import { PostBody } from '@/components/blog/PostBody';
@@ -28,14 +28,17 @@ interface PageProps {
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
-  const posts = await listPosts();
+  // Published articles only. A draft or an archived article gets no route at all,
+  // which — with `dynamicParams = false` below — means its URL is a 404 rather
+  // than a page that has to remember not to index itself.
+  const posts = await listPublishedPosts();
   return posts.map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPost(slug);
-  if (!post) return { title: 'Article Not Found — DeviceTry' };
+  if (!post || post.status !== 'published') return { title: 'Article Not Found — DeviceTry' };
   return buildPostMetadata(post);
 }
 
@@ -54,7 +57,10 @@ function formatDate(iso: string): string {
 export default async function BlogPostPage({ params }: PageProps) {
   const { slug } = await params;
   const post = await getPost(slug);
-  if (!post) notFound();
+  // The management dashboard can read a draft or an archived article; the public
+  // site cannot. Its state is decided in the file, so a status change publishes
+  // or unpublishes on the next build without any other edit.
+  if (!post || post.status !== 'published') notFound();
   const t = getDictionary();
 
   /**

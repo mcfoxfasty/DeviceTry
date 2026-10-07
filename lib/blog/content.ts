@@ -1,5 +1,5 @@
 import { createReader } from '@keystatic/core/reader';
-import keystaticConfig from '@/keystatic.config';
+import keystaticConfig, { DEFAULT_POST_STATUS } from '@/keystatic.config';
 
 /**
  * The read side of the CMS.
@@ -42,6 +42,8 @@ export interface BlogPostMeta {
   publishedAt: string;
   author: string;
   category: string;
+  /** Publication state. Files written before the field existed read as `published`. */
+  status: string;
   tags: string[];
   canonicalUrl: string | null;
 }
@@ -71,10 +73,23 @@ export async function listPosts(): Promise<BlogPostMeta[]> {
       publishedAt: entry.publishedAt ?? '',
       author: entry.author,
       category: entry.category,
+      status: entry.status ?? DEFAULT_POST_STATUS,
       tags: [...entry.tags],
       canonicalUrl: entry.canonicalUrl ?? null,
     }))
     .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
+}
+
+/**
+ * The articles the public site shows.
+ *
+ * Drafts and archived articles are excluded at the one place every public reader
+ * goes through — the blog index, the article routes' static params and the
+ * sitemap — so their URLs do not exist to be indexed, and no page has to remember
+ * a robots directive for them.
+ */
+export async function listPublishedPosts(): Promise<BlogPostMeta[]> {
+  return (await listPosts()).filter((post) => post.status === 'published');
 }
 
 /** Resolve the body whether the reader hands back a string or a lazy reader. */
@@ -102,6 +117,7 @@ export async function getPost(slug: string): Promise<BlogPost | null> {
     publishedAt: entry.publishedAt ?? '',
     author: entry.author,
     category: entry.category,
+    status: entry.status ?? DEFAULT_POST_STATUS,
     tags: [...entry.tags],
     canonicalUrl: entry.canonicalUrl ?? null,
   };

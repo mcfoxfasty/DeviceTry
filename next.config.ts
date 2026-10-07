@@ -67,6 +67,15 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
+  // The admin management view and the edit page read content/posts at request
+  // time (the same collection the site builds from). Without this, the files the
+  // build traces for those routes would not include the articles, and the list
+  // would be empty on the Worker even though it is correct under `next start`.
+  outputFileTracingIncludes: {
+    '/admin': ['./content/posts/**/*.md'],
+    '/admin/new': ['./content/posts/**/*.md'],
+    '/admin/edit/[slug]': ['./content/posts/**/*.md'],
+  },
   transpilePackages: ['motion'],
   experimental: {
     // 2 GiB cgroup: static-generation workers inherit the NODE_OPTIONS heap

@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 import { ALL_TOOL_PAGES } from '@/lib/tools/registry';
 import { getPublishedGuides } from '@/lib/guides/registry';
-import { listPosts } from '@/lib/blog/content';
+import { listPublishedPosts } from '@/lib/blog/content';
 import { BLOG_PATH } from '@/lib/blog/seo';
 import { SITE_URL, SITE_LAST_UPDATED, STATIC_PAGES } from '@/lib/site';
 
@@ -35,9 +35,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // CMS articles, read from the content collection rather than a hand-kept list,
-  // so a published article cannot be missing here. `listPosts` reads front matter
-  // only, which is every field a sitemap entry needs.
-  for (const post of await listPosts()) {
+  // so a published article cannot be missing here. `listPublishedPosts` reads
+  // front matter only — every field a sitemap entry needs — and excludes drafts
+  // and archived articles, which have no public URL to list.
+  for (const post of await listPublishedPosts()) {
     sitemapEntries.push({
       url: `${SITE_URL}${BLOG_PATH}/${post.slug}`,
       lastModified: post.publishedAt ? new Date(`${post.publishedAt}T00:00:00Z`) : SITE_LAST_UPDATED,

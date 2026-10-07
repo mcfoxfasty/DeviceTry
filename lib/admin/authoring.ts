@@ -24,7 +24,14 @@
  * cover AND on every inline image reference in the body.
  */
 
-import { POST_CATEGORIES, POST_IMAGE_DIRECTORY, POST_IMAGE_PUBLIC_PATH } from '@/keystatic.config';
+import {
+  DEFAULT_POST_STATUS,
+  POST_CATEGORIES,
+  POST_IMAGE_DIRECTORY,
+  POST_IMAGE_PUBLIC_PATH,
+  POST_STATUSES,
+  type PostStatus,
+} from '@/keystatic.config';
 import { imageReferences } from '@/lib/admin/markdown-editing';
 
 /** Everything an article carries. Empty strings mean "not filled in". */
@@ -38,9 +45,24 @@ export interface PostDraft {
   publishedAt: string;
   author: string;
   category: string;
+  /** Publication state: only `published` renders on the public site. */
+  status: PostStatus;
   tags: string[];
   canonicalUrl: string;
   content: string;
+}
+
+/** A slug an existing article was saved under, when an edit renamed it. */
+export interface PublishPayload {
+  draft: PostDraft;
+  images: UploadedImage[];
+  /**
+   * The slug the article was read from, when this is an edit whose slug changed.
+   * Publishing then commits the new file AND removes the old one — a rename, not
+   * a copy — because two files with one article's content is a duplicate URL the
+   * moment both are built.
+   */
+  previousSlug?: string;
 }
 
 /** An image the dashboard uploaded along with the article. */
@@ -50,12 +72,6 @@ export interface UploadedImage {
   contentType: string;
   /** Base64 of the bytes, without the `data:` prefix. */
   base64: string;
-}
-
-/** The body the publish endpoint accepts. */
-export interface PublishPayload {
-  draft: PostDraft;
-  images: UploadedImage[];
 }
 
 /** Where a post is committed. Mirrors the collection path in keystatic.config.ts. */
@@ -209,6 +225,10 @@ export function validateDraft(draft: PostDraft): Record<string, string> {
     errors.category = 'Choose one of the site categories.';
   }
 
+  if (!POST_STATUSES.some((status) => status.value === draft.status)) {
+    errors.status = 'Choose a status: published, draft or archived.';
+  }
+
   if (draft.tags.length > 12) errors.tags = 'At most 12 tags (the schema enforces this).';
 
   const canonical = draft.canonicalUrl.trim();
@@ -302,6 +322,7 @@ export function composePostFile(draft: PostDraft): string {
     `publishedAt: ${draft.publishedAt.trim()}`,
     `author: ${yamlScalar(draft.author.trim())}`,
     `category: ${draft.category}`,
+    `status: ${draft.status}`,
     tags.length > 0 ? 'tags:' : 'tags: []',
     ...tags.map((tag) => `  - ${yamlScalar(tag)}`),
     `canonicalUrl: ${canonical.length > 0 ? yamlScalar(canonical) : 'null'}`,

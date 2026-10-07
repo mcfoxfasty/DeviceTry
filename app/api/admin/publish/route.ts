@@ -2,6 +2,8 @@ import {
   MAX_IMAGES,
   MAX_TOTAL_IMAGE_BYTES,
   base64ByteLength,
+  imageRepoPath,
+  postRepoPath,
   publicImagePath,
   referencedUploads,
   validateDraft,
@@ -10,14 +12,19 @@ import {
   type PublishPayload,
   type UploadedImage,
 } from '@/lib/admin/authoring';
+import { POST_IMAGE_PUBLIC_PATH } from '@/keystatic.config';
 import type { NextRequest } from 'next/server';
-import { GithubError, publishArticle, repository } from '@/lib/admin/github';
+import { GithubError, deleteFile, fileExists, publishArticle, repository } from '@/lib/admin/github';
 import { isAuthenticated } from '@/lib/admin/session';
 
 /**
- * Publishing: authenticated, validated, then committed to GitHub.
+ * The article's lifecycle endpoint.
  *
- * THE ORDER OF THE CHECKS MATTERS.
+ * `POST` saves an article — new or edited — and its images; `DELETE?slug=…`
+ * removes one. Both authenticate the session first, then the token, then the
+ * payload, and both answer with GitHub's own words when GitHub refuses.
+ *
+ * POST: THE ORDER OF THE CHECKS MATTERS.
  * 1. Session first. An unauthenticated caller learns nothing about the payload,
  *    the repository or the token.
  * 2. Then the credential, so a misconfigured deployment says so immediately
@@ -51,10 +58,63 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
+/**
+ * The one irreversible action, and the checks it cannot skip.
+ *
+ * The slug names the file; a well-formed slug is required before anything is
+ * looked up, because a traversal (`..%2F…`) must be rejected as a slug rather
+ * than survive into a path. The session and the token are checked first, in the
+ * same order the publish handler uses: an unauthenticated caller learns nothing
+ * about the repository, and a misconfigured deployment says so by name.
+ *
+ * Deleting a file that is not there is a success (`deleted: false`), not an
+ * error — a double click, or a delete racing a rebuild, should not read as a
+ * failure when the requested state, no file, is exactly what exists.
+ */
+export async function DELETE(request: NextRequest): Promise<Response> {
+  if (!(await isAuthenticated(request.cookies))) {
+    return json(401, { ok: false, message: 'Your session has expired. Sign in again and retry.' });
+  }
+
+  const token = (process.env.GITHUB_TOKEN ?? '').trim();
+  if (token.length === 0) {
+    return json(503, {
+      ok: false,
+      message:
+        'GITHUB_TOKEN is not set for this deployment, so nothing can be committed. Bind it as a Worker secret (or in the workspace environment) and try again.',
+    });
+  }
+
+  const slug = (request.nextUrl.searchParams.get('slug') ?? '').trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return json(400, { ok: false, message: 'That slug does not name an article file.' });
+  }
+
+  const repo = repository();
+  if (repo.length === 0) {
+    return json(503, { ok: false, message: 'The CMS schema does not name a GitHub repository to publish to.' });
+  }
+
+  try {
+    const result = await deleteFile({
+      path: postRepoPath(slug),
+      message: `Delete "${slug}"`,
+      token,
+    });
+    return json(200, { ok: true, slug, deleted: result.deleted, repository: repo });
+  } catch (error) {
+    if (error instanceof GithubError) {
+      return json(502, { ok: false, message: error.message });
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    return json(500, { ok: false, message: `Deleting failed before GitHub accepted the request: ${detail}` });
+  }
+}
+
 /** Structural check of the payload, before any rule that needs real fields. */
 function readPayload(value: unknown): PublishPayload | null {
   if (typeof value !== 'object' || value === null) return null;
-  const candidate = value as { draft?: unknown; images?: unknown };
+  const candidate = value as { draft?: unknown; images?: unknown; previousSlug?: unknown };
   if (typeof candidate.draft !== 'object' || candidate.draft === null) return null;
   if (!Array.isArray(candidate.images)) return null;
 
@@ -69,6 +129,7 @@ function readPayload(value: unknown): PublishPayload | null {
     'publishedAt',
     'author',
     'category',
+    'status',
     'canonicalUrl',
     'content',
   ] as const;
@@ -76,6 +137,16 @@ function readPayload(value: unknown): PublishPayload | null {
     if (typeof draft[field] !== 'string') return null;
   }
   if (!Array.isArray(draft.tags) || draft.tags.some((tag) => typeof tag !== 'string')) return null;
+
+  // A rename carries the slug the article is filed under today. Anything that is
+  // not a plain slug would not name a real file to remove.
+  let previousSlug: string | undefined;
+  if (candidate.previousSlug !== undefined) {
+    if (typeof candidate.previousSlug !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate.previousSlug)) {
+      return null;
+    }
+    previousSlug = candidate.previousSlug;
+  }
 
   const images: UploadedImage[] = [];
   for (const entry of candidate.images) {
@@ -91,7 +162,7 @@ function readPayload(value: unknown): PublishPayload | null {
     images.push({ filename: image.filename, contentType: image.contentType, base64: image.base64 });
   }
 
-  return { draft: draft as unknown as PostDraft, images };
+  return { draft: draft as unknown as PostDraft, images, previousSlug };
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -142,21 +213,32 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (problem) return json(400, { ok: false, message: problem });
   }
 
-  // The cover is committed like any other image, so it has to be one of them:
-  // a path that points at a file nobody uploaded would publish a broken lead image.
+  //
+  // Every image the article references must either be part of this upload or
+  // already be in the repository. The first case is a new image; the second is an
+  // edit's body pointing at images an earlier publish committed — which is normal,
+  // and the reason this check is an existence lookup rather than a demand that
+  // everything be re-uploaded on every save.
+  const inUpload = new Set(images.map((image) => publicImagePath(image.filename)));
+  const absent: string[] = [];
+
   const cover = draft.coverImage.trim();
-  if (cover.startsWith('/images/posts/') && !images.some((image) => publicImagePath(image.filename) === cover)) {
-    return json(400, {
-      ok: false,
-      message: 'The cover image is not part of this upload. Choose the cover again so it is included.',
-    });
+  if (cover.startsWith('/images/posts/') && !inUpload.has(cover)) {
+    if (!(await fileExists(imageRepoPath(cover.slice(POST_IMAGE_PUBLIC_PATH.length)), token))) {
+      absent.push(cover);
+    }
   }
 
   const { missing } = referencedUploads(draft.content, images);
-  if (missing.length > 0) {
+  for (const url of missing) {
+    if (!(await fileExists(imageRepoPath(url.slice(POST_IMAGE_PUBLIC_PATH.length)), token))) {
+      absent.push(url);
+    }
+  }
+  if (absent.length > 0) {
     return json(400, {
       ok: false,
-      message: `The body references ${missing.join(', ')}, which this upload does not contain. Re-insert those images so they are uploaded with the article.`,
+      message: `The article references ${absent.join(', ')}, which is neither part of this upload nor in the repository. Re-insert those images so they are uploaded with the article.`,
     });
   }
 
@@ -168,11 +250,34 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   try {
     const result = await publishArticle({ draft, images, token });
+
+    // A rename: the new file is committed above, the old one is removed here —
+    // in that order, so the article is never missing while the rename is in
+    // flight. A failure to remove is reported as a warning rather than an error,
+    // because the save itself succeeded.
+    const warnings: string[] = [];
+    if (payload.previousSlug && payload.previousSlug !== draft.slug.trim()) {
+      try {
+        await deleteFile({
+          path: postRepoPath(payload.previousSlug),
+          message: `Rename "${draft.title.trim()}" to ${draft.slug.trim()}`,
+          token,
+        });
+      } catch (renameError) {
+        warnings.push(
+          renameError instanceof GithubError
+            ? `The article was saved, but removing the old file failed: ${renameError.message}`
+            : `The article was saved, but removing the old file failed: ${renameError instanceof Error ? renameError.message : String(renameError)}`
+        );
+      }
+    }
+
     return json(200, {
       ok: true,
       slug: result.slug,
       url: `/blog/${result.slug}`,
       repository: repo,
+      ...(warnings.length > 0 ? { warnings } : {}),
       commits: result.commits.map((commit) => ({ path: commit.path, created: commit.created })),
     });
   } catch (error) {

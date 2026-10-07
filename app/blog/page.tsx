@@ -4,7 +4,7 @@ import { CalendarDays, Tag } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
-import { listPosts } from '@/lib/blog/content';
+import { listPublishedPosts } from '@/lib/blog/content';
 import { BLOG_PATH } from '@/lib/blog/seo';
 import { postCategoryLabel } from '@/keystatic.config';
 import { siteOpenGraph } from '@/lib/seo/metadata';
@@ -39,7 +39,7 @@ function formatDate(iso: string): string {
 
 export default async function BlogIndexPage() {
   const t = getDictionary();
-  const posts = await listPosts();
+  const posts = await listPublishedPosts();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">

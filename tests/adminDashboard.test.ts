@@ -36,10 +36,13 @@ import {
   PUBLISH_BRANCH,
   base64EncodeUtf8,
   contentsUrl,
+  deleteFile,
+  fileExists,
   githubErrorMessage,
   publishArticle,
   repository,
 } from '../lib/admin/github';
+import { escapeHtml, renderInline, renderPreview } from '../lib/admin/preview';
 import {
   ALLOWED_HEADING_LEVELS,
   codeBlockTemplate,
@@ -51,7 +54,7 @@ import {
   tableTemplate,
   toggleWrap,
 } from '../lib/admin/markdown-editing';
-import { getPost, listPosts } from '../lib/blog/content';
+import { getPost, listPosts, listPublishedPosts } from '../lib/blog/content';
 import { POST_CATEGORIES } from '../keystatic.config';
 
 /**
@@ -206,6 +209,7 @@ const draft = (overrides: Partial<PostDraft> = {}): PostDraft => ({
   publishedAt: '2026-10-06',
   author: 'DeviceTry team',
   category: POST_CATEGORIES[0].value,
+  status: 'published',
   tags: ['keyboard'],
   canonicalUrl: '',
   content: 'A paragraph of the article.',
@@ -298,6 +302,7 @@ test('admin composition - the file matches the shape of the articles already pub
     'publishedAt',
     'author',
     'category',
+    'status',
     'tags',
     'canonicalUrl',
   ]);
@@ -314,7 +319,15 @@ test('admin composition - the file matches the shape of the articles already pub
     .split('\n')
     .filter((line) => /^[a-zA-Z]+:/.test(line))
     .map((line) => line.split(':')[0]);
-  assert.deepEqual(keys, existingKeys, 'the key order matches the published article exactly');
+  // The one key the dashboard adds is `status`, in its schema position — and the
+  // articles predating the field have no such key, which is why the reader treats
+  // a missing status as `published` rather than an error.
+  assert.deepEqual(
+    keys.filter((key) => key !== 'status'),
+    existingKeys,
+    'the key order matches the published article exactly, plus status'
+  );
+  assert.doesNotMatch(existing, /^status:/m, 'the pre-existing article has no status key at all');
 });
 
 test('admin composition - what the dashboard writes, the blog reader reads back', async () => {
@@ -359,13 +372,51 @@ test('admin composition - what the dashboard writes, the blog reader reads back'
     assert.match(read.content, /## A subheading/);
     assert.match(read.content, /A closing line\./);
 
+    assert.equal(read.status, 'published', 'the status the sidebar chose is what the reader hands back');
+
     const listed = (await listPosts()).find((post) => post.slug === slug);
-    assert.ok(listed, 'the article also appears in the listing the index and sitemap use');
+    assert.ok(listed, 'the article also appears in the listing the management table uses');
     assert.equal(listed.publishedAt, '2026-11-02');
+    const publishedList = (await listPublishedPosts()).find((post) => post.slug === slug);
+    assert.ok(publishedList, 'a published article is in the public list');
   } finally {
     rmSync(path, { force: true });
   }
   assert.equal(existsSync(path), false, 'the round-trip file is not left behind');
+});
+
+test('admin status - a draft is written, read back, and hidden from the public list', async () => {
+  const slug = 'zz-admin-status-check';
+  const path = join('content', 'posts', `${slug}.md`);
+  try {
+    writeFileSync(path, composePostFile(draft({ slug, status: 'draft' })), 'utf8');
+
+    const read = await getPost(slug);
+    assert.ok(read);
+    assert.equal(read.status, 'draft', 'the reader hands back exactly the status in the file');
+
+    assert.ok((await listPosts()).some((post) => post.slug === slug), 'the management list shows every status');
+    assert.equal(
+      (await listPublishedPosts()).some((post) => post.slug === slug),
+      false,
+      'the public list — index, static params, sitemap — excludes it'
+    );
+  } finally {
+    rmSync(path, { force: true });
+  }
+});
+
+test('admin status - an article whose file has no status key reads as published', async () => {
+  // The article predates the field; its live URL must not depend on anyone adding
+  // a key to files the dashboard did not write.
+  const existing = await getPost('keyboard-keys-not-registering-hardware-or-software');
+  assert.ok(existing, 'the pre-existing article is present');
+  assert.equal(existing.status, 'published');
+});
+
+test('admin validation - the status must be one of the schema states', () => {
+  assert.deepEqual(validateDraft(draft({ status: 'draft' })), {}, 'draft is a valid state');
+  assert.ok(validateDraft(draft({ status: 'someday' as PostDraft['status'] })).status);
 });
 
 // ------------------------------------------------------------ github publish
@@ -514,6 +565,7 @@ test('admin editor - the dashboard offers every capability and every SEO field',
     'Publish date',
     'Author',
     'Category',
+    'Status',
     'Tags',
     'Canonical URL override',
   ]) {
@@ -532,4 +584,169 @@ test('admin uploads - a filename is derived from the original name and the bytes
   assert.equal(await contentDigest('AAAA'), first, 'the same bytes give the same name');
   assert.notEqual(await contentDigest('BBBB'), first, 'different bytes do not collide');
   assert.equal(first.length, 8);
+});
+
+// ------------------------------------------------------------------ preview
+
+test('admin preview - every construct the toolbar writes renders as the article will', () => {
+  const html = renderPreview(
+    [
+      '## The five-minute test',
+      '',
+      'A paragraph with **bold**, _italic_, ~~a strike~~ and `inline code`.',
+      '',
+      '- one',
+      '- two',
+      '',
+      '1. first',
+      '2. second',
+      '',
+      '> A quoted sentence.',
+      '',
+      '---',
+      '',
+      '| What it shows | Meaning |',
+      '| :--- | ---: |',
+      '| Nothing | Hardware |',
+      '',
+      '```powershell',
+      'Get-PnpDevice',
+      '```',
+      '',
+      "![A worn switch](/images/posts/switch.png 'Figure 1. The switch')",
+    ].join('\n')
+  );
+
+  assert.match(html, /<h2 class="/);
+  assert.match(html, /<strong>bold<\/strong>/);
+  assert.match(html, /<em>italic<\/em>/);
+  assert.match(html, /<del>a strike<\/del>/);
+  assert.match(html, /<code class="[^"]*">inline code<\/code>/);
+  assert.match(html, /<ul class="[^"]*"><li class="pl-1">one<\/li><li class="pl-1">two<\/li><\/ul>/);
+  assert.match(html, /<ol class="[^"]*">/);
+  assert.match(html, /<blockquote class="[^"]*">A quoted sentence\.<\/blockquote>/);
+  assert.match(html, /<hr class="[^"]*" \/>/);
+  assert.match(html, /<th class="[^"]*" style="text-align: left">What it shows<\/th>/);
+  assert.match(html, /<td class="[^"]*" style="text-align: right">Hardware<\/td>/);
+  assert.match(html, /<pre class="[^"]*"><code class="language-powershell">Get-PnpDevice<\/code><\/pre>/);
+  assert.match(html, /<figure class="[^"]*"><img src="\/images\/posts\/switch\.png" alt="A worn switch"[^>]*\/>/);
+  assert.match(html, /<figcaption class="[^"]*">Figure 1\. The switch<\/figcaption>/);
+});
+
+test('admin preview - a link is an anchor, and internal ones stay internal', () => {
+  const internal = renderInline('[the tester](/test/keyboard-test)');
+  assert.match(internal, /^<a href="\/test\/keyboard-test" class="[^"]*">the tester<\/a>$/);
+
+  const external = renderInline('[the docs](https://example.com/a)');
+  assert.match(external, /target="_blank" rel="noopener noreferrer"/);
+});
+
+test('admin preview - article text is escaped, so a body cannot smuggle in markup', () => {
+  assert.equal(escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+  const html = renderPreview('A <script>alert(1)</script> and an <img src=x onerror=alert(1)>');
+  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;script&gt;/);
+});
+
+test('admin preview - a paragraph that is only an image becomes the figure itself', () => {
+  const html = renderPreview('![Described image](/images/posts/x.png)');
+  assert.match(html, /^<figure class="[^"]*">/);
+  assert.doesNotMatch(html, /<p class=/);
+});
+
+// ------------------------------------------------------------- delete + edit
+
+test('admin delete - a file that exists is removed with its sha, and a missing one is a fact', async () => {
+  const calls: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+  const fake = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+    calls.push({ url: String(url), method, body });
+    return new Response('{"sha":"the-sha"}', { status: method === 'DELETE' ? 200 : 200 });
+  }) as typeof fetch;
+
+  const result = await deleteFile({
+    path: 'content/posts/old-name.md',
+    message: 'Delete "old-name"',
+    token: 'ghp_test_token',
+    request: fake,
+  });
+
+  assert.equal(result.deleted, true);
+  assert.equal(calls.length, 2, 'a sha lookup, then the delete');
+  assert.equal(calls[1].method, 'DELETE');
+  assert.match(calls[1].url, /content\/posts\/old-name\.md$/);
+  assert.equal(calls[1].body?.sha, 'the-sha', 'the contents API refuses a delete without the current sha');
+  assert.equal(calls[1].body?.branch, 'main');
+
+  const absent = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as typeof fetch;
+  assert.deepEqual(
+    await deleteFile({ path: 'content/posts/gone.md', message: 'x', token: 't', request: absent }),
+    { path: 'content/posts/gone.md', deleted: false },
+    'deleting twice is not an error — the requested state is already true'
+  );
+});
+
+test('admin delete - a refusal from GitHub is explained, not swallowed', async () => {
+  const refusing = (async () => new Response('{"message":"Bad credentials"}', { status: 401 })) as typeof fetch;
+  await assert.rejects(
+    deleteFile({ path: 'content/posts/x.md', message: 'x', token: 'bad', request: refusing }),
+    (error: Error) => {
+      assert.match(error.message, /401/);
+      assert.match(error.message, /Bad credentials/);
+      return true;
+    }
+  );
+});
+
+test('admin existence - a referenced image must be uploaded or already committed', async () => {
+  const present = (async () => new Response('{"sha":"s"}', { status: 200 })) as typeof fetch;
+  const absent = (async () => new Response('{"message":"Not Found"}', { status: 404 })) as typeof fetch;
+  const broken = (async () => new Response('{"message":"Bad credentials"}', { status: 401 })) as typeof fetch;
+
+  assert.equal(await fileExists('public/images/posts/old.png', 't', present), true);
+  assert.equal(await fileExists('public/images/posts/old.png', 't', absent), false);
+  await assert.rejects(fileExists('public/images/posts/old.png', 'bad', broken), (error: Error) =>
+    /401/.test(error.message)
+  );
+});
+
+test('admin lifecycle - the routes exist, are guarded, and wire the whole flow', () => {
+  const list = readFileSync(join('app', 'admin', 'page.tsx'), 'utf8');
+  assert.match(list, /isAuthenticated\(await cookies\(\)\)/, 'the management view is behind the session');
+  assert.match(list, /redirect\('\/admin\/login'\)/);
+  assert.match(list, /listPosts\(\)/, 'it reads the same collection the site builds from');
+  assert.match(list, /\/admin\/new/, 'it links to the new-article editor');
+
+  const fresh = readFileSync(join('app', 'admin', 'new', 'page.tsx'), 'utf8');
+  assert.match(fresh, /isAuthenticated\(await cookies\(\)\)/);
+  assert.match(fresh, /ArticleEditor/);
+
+  const edit = readFileSync(join('app', 'admin', 'edit', '[slug]', 'page.tsx'), 'utf8');
+  assert.match(edit, /isAuthenticated\(await cookies\(\)\)/);
+  assert.match(edit, /getPost\(slug\)/, 'an edit loads the saved article');
+  assert.match(edit, /existingSlug/, 'so saving updates the same file rather than duplicating it');
+  assert.match(edit, /notFound\(\)/, 'an unknown slug is not an editor with empty fields');
+
+  const table = readFileSync(join('components', 'admin', 'ArticlesTable.tsx'), 'utf8');
+  assert.match(
+    table,
+    /Are you sure you want to delete this article\?/,
+    'the confirmation says exactly what the flow promises'
+  );
+  assert.match(table, /method: 'DELETE'/);
+  assert.match(table, /router\.refresh\(\)/, 'the list re-reads the collection after a delete');
+
+  const route = readFileSync(join('app', 'api', 'admin', 'publish', 'route.ts'), 'utf8');
+  assert.match(route, /export async function DELETE/, 'the endpoint answers DELETE');
+  assert.match(route, /searchParams\.get\('slug'\)/);
+  assert.match(route, /\/\^\[a-z0-9]\+\(\?:-\[a-z0-9]\+\)\*\$\//, 'the slug is a slug before it becomes a path');
+  assert.match(route, /deleteFile\(\{/, 'and deletes through the sha-aware contents client');
+  assert.match(route, /previousSlug/, 'a renamed article removes its old file');
+  assert.match(route, /fileExists\(/, 'an edit may reference images an earlier publish committed');
+
+  const editor = readFileSync(join('components', 'admin', 'ArticleEditor.tsx'), 'utf8');
+  assert.match(editor, /renderPreview/, 'the Preview tab is wired');
+  assert.match(editor, /role="tab"/, 'and is a tab, not a hidden second editor');
 });

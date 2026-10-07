@@ -22,6 +22,8 @@ import {
   type EditResult,
   type EditState,
 } from '@/lib/admin/markdown-editing';
+import { renderPreview } from '@/lib/admin/preview';
+import type { PostStatus } from '@/keystatic.config';
 
 /**
  * The article editor: one Markdown body, one SEO panel, one publish button.
@@ -40,11 +42,19 @@ import {
  * accessibility. The same checks run again in /api/admin/publish, because a form
  * is a convenience and the endpoint is the guarantee.
  *
- * DRAFTS SURVIVE A CLOSED TAB. Mobile browsers discard background tabs, and an
- * author who loses 800 words to that will not come back. The text fields are saved
- * to localStorage on every change and restored on load; uploaded images are
- * deliberately not, because several megabytes of base64 in localStorage is the one
- * thing that would break the store for everything else on this origin.
+ * DRAFTS SURVIVE A CLOSED TAB — for a new article. Mobile browsers discard
+ * background tabs, and an author who loses 800 words to that will not come back.
+ * The text fields are saved to localStorage on every change and restored on load;
+ * uploaded images are deliberately not, because several megabytes of base64 in
+ * localStorage is the one thing that would break the store for everything else on
+ * this origin. An EXISTING article's values come from the repository, so its
+ * editor does not touch localStorage at all: restoring yesterday's half-typed
+ * local draft over the committed text would look like data loss, and the
+ * committed file is the truth an edit starts from.
+ *
+ * THE PREVIEW TAB renders the body with lib/admin/preview.ts — the same
+ * constructs the toolbar writes, styled like components/blog/PostBody.tsx — so an
+ * author can check an article before it becomes a commit.
  */
 
 const DRAFT_KEY = 'devicetry-admin-draft-v1';
@@ -77,16 +87,40 @@ interface DraftState {
   publishedAt: string;
   author: string;
   category: string;
+  status: PostStatus;
   tagText: string;
   canonicalUrl: string;
   content: string;
 }
 
-/** A published article, or a failure worth showing the author verbatim. */
+/**
+ * The values an edit page loads from the saved article.
+ *
+ * Everything here is committed data; the editor derives its UI-only fields from
+ * it (`slugEdited` is true for an existing article — the slug is a live URL, so a
+ * re-titled article keeps its address — and `tagText` is the tags joined).
+ */
+export interface SavedArticle {
+  title: string;
+  slug: string;
+  seoTitle: string;
+  seoDescription: string;
+  coverImage: string;
+  coverImageAlt: string;
+  publishedAt: string;
+  author: string;
+  category: string;
+  status: PostStatus;
+  tags: string[];
+  canonicalUrl: string;
+  content: string;
+}
+
+/** A committed article, or a failure worth showing the author verbatim. */
 type Status =
   | { kind: 'idle' }
   | { kind: 'publishing' }
-  | { kind: 'ok'; message: string; url: string }
+  | { kind: 'ok'; message: string; url?: string }
   | { kind: 'error'; message: string; errors?: Record<string, string> };
 
 const inputClass =
@@ -135,30 +169,69 @@ function Field({
   );
 }
 
-export function ArticleEditor({ categories, today }: { categories: Category[]; today: string }) {
+export function ArticleEditor({
+  categories,
+  statuses,
+  today,
+  saved = null,
+  existingSlug = null,
+}: {
+  categories: Category[];
+  /** The status options, passed in so the schema stays a server-side concern. */
+  statuses: Category[];
+  today: string;
+  /** The saved article's values, when this is an edit rather than a new article. */
+  saved?: SavedArticle | null;
+  /** The slug the saved article is filed under, when there is one. */
+  existingSlug?: string | null;
+}) {
+  /** An edit keeps its committed slug and never reads the local draft store. */
+  const isEdit = existingSlug !== null;
+
   const initialDraft: DraftState = useMemo(
-    () => ({
-      title: '',
-      slug: '',
-      slugEdited: false,
-      seoTitle: '',
-      seoDescription: '',
-      coverImage: '',
-      coverImageAlt: '',
-      publishedAt: today,
-      author: 'DeviceTry team',
-      category: categories[0]?.value ?? 'how-to',
-      tagText: '',
-      canonicalUrl: '',
-      content: '',
-    }),
-    [categories, today]
+    () =>
+      saved
+        ? {
+            title: saved.title,
+            slug: saved.slug,
+            slugEdited: true,
+            seoTitle: saved.seoTitle,
+            seoDescription: saved.seoDescription,
+            coverImage: saved.coverImage,
+            coverImageAlt: saved.coverImageAlt,
+            publishedAt: saved.publishedAt,
+            author: saved.author,
+            category: saved.category,
+            status: saved.status,
+            tagText: saved.tags.join(', '),
+            canonicalUrl: saved.canonicalUrl,
+            content: saved.content,
+          }
+        : {
+            title: '',
+            slug: '',
+            slugEdited: false,
+            seoTitle: '',
+            seoDescription: '',
+            coverImage: '',
+            coverImageAlt: '',
+            publishedAt: today,
+            author: 'DeviceTry team',
+            category: categories[0]?.value ?? 'how-to',
+            // The options are the schema's own list, passed from the server page.
+            status: (statuses[0]?.value ?? 'published') as PostStatus,
+            tagText: '',
+            canonicalUrl: '',
+            content: '',
+          },
+    [saved, categories, statuses, today]
   );
 
   const [draft, setDraft] = useState<DraftState>(initialDraft);
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [restored, setRestored] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [view, setView] = useState<'write' | 'preview'>('write');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [imagePanel, setImagePanel] = useState<{ alt: string; caption: string; file: File | null; error: string }>({
     alt: '',
@@ -172,7 +245,7 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
 
   // ---- drafts ------------------------------------------------------------
   useEffect(() => {
-    if (restoredOnce.current) return;
+    if (isEdit || restoredOnce.current) return;
     restoredOnce.current = true;
     try {
       const stored = localStorage.getItem(DRAFT_KEY);
@@ -185,16 +258,20 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
     } catch {
       // A corrupt draft is not worth an error message; the editor simply starts empty.
     }
-  }, []);
+    // `isEdit` is a prop an editor page never changes after mount; the run-once
+    // ref above is what actually makes this restore-once.
+  }, [isEdit]);
 
   useEffect(() => {
-    if (!restoredOnce.current) return;
+    // An existing article is not persisted locally at all — see the comment on
+    // the restore effect above.
+    if (isEdit || !restoredOnce.current) return;
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch {
       // Storage can be full or disabled; the editor must still work.
     }
-  }, [draft]);
+  }, [draft, isEdit]);
 
   const discardDraft = useCallback(() => {
     try {
@@ -325,7 +402,7 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
   const publish = useCallback(async () => {
     setAttempted(true);
     if (!ready) {
-      setStatus({ kind: 'error', message: 'Fix the highlighted fields before publishing.' });
+      setStatus({ kind: 'error', message: 'Fix the highlighted fields before saving.' });
       return;
     }
 
@@ -334,25 +411,38 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
       const response = await fetch('/api/admin/publish', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ draft: fullDraft, images }),
+        body: JSON.stringify({
+          draft: fullDraft,
+          images,
+          // A rename: the new file is committed and the old one removed, so an
+          // edit never leaves the same article at two URLs.
+          ...(isEdit && fullDraft.slug !== existingSlug ? { previousSlug: existingSlug } : {}),
+        }),
       });
       const body = (await response.json().catch(() => null)) as
-        | { ok?: boolean; message?: string; url?: string; errors?: Record<string, string> }
+        | { ok?: boolean; message?: string; url?: string; warnings?: string[]; errors?: Record<string, string> }
         | null;
 
       if (!response.ok || !body?.ok) {
         setStatus({
           kind: 'error',
-          message: body?.message ?? `Publishing failed (HTTP ${response.status}).`,
+          message: body?.message ?? `Saving failed (HTTP ${response.status}).`,
           errors: body?.errors,
         });
         return;
       }
 
+      const renamed =
+        body.warnings && body.warnings.length > 0 ? ` ${body.warnings.join(' ')}` : '';
       setStatus({
         kind: 'ok',
-        message: 'Committed to the repository.',
-        url: body.url ?? `/blog/${fullDraft.slug}`,
+        // A draft or an archived article has no public URL to offer — saying so
+        // is the difference between "saved" and "why is it not on the site?".
+        message:
+          fullDraft.status === 'published'
+            ? `Committed to the repository. It appears on the site after the next build.${renamed}`
+            : `Saved as ${fullDraft.status}. It stays off the public site until its status is published.${renamed}`,
+        url: fullDraft.status === 'published' ? (body.url ?? `/blog/${fullDraft.slug}`) : undefined,
       });
       try {
         localStorage.removeItem(DRAFT_KEY);
@@ -365,7 +455,7 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
         message: `The request did not complete: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
-  }, [fullDraft, images, ready]);
+  }, [fullDraft, images, ready, isEdit, existingSlug]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -420,6 +510,54 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
 
           {/* toolbar */}
           <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div
+                role="tablist"
+                aria-label="Editor view"
+                className="inline-flex rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#192332] p-0.5"
+              >
+                {(
+                  [
+                    ['write', 'Write'],
+                    ['preview', 'Preview'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    role="tab"
+                    type="button"
+                    aria-selected={view === value}
+                    onClick={() => setView(value)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                      view === value
+                        ? 'bg-[#0F766E] dark:bg-[#14B8A6] text-white dark:text-[#0B111A]'
+                        : 'text-[#5F6B7A] dark:text-[#9AA6B8] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-[#8996A6]">
+                {draft.content.length.toLocaleString()} characters
+              </span>
+            </div>
+
+            {view === 'preview' ? (
+              /**
+               * The body as the article will read. renderPreview emits only this
+               * file's own markup with every text run escaped, so the HTML of an
+               * in-progress article cannot do anything but display.
+               */
+              <div className="min-h-[320px] rounded-lg border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#192332] p-4 sm:p-6">
+                {draft.content.trim().length === 0 ? (
+                  <p className="text-sm text-[#8996A6]">Nothing to preview yet — write something first.</p>
+                ) : (
+                  <div dangerouslySetInnerHTML={{ __html: renderPreview(draft.content) }} />
+                )}
+              </div>
+            ) : (
+              <>
             <div className="flex flex-wrap gap-1.5">
               {HEADING_BUTTONS.map(({ level, label }) => (
                 <button
@@ -488,6 +626,8 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
                 {shown('content') ?? statusErrors(status, 'content')}
               </span>
             ) : null}
+              </>
+            )}
           </div>
 
           {/* inline image */}
@@ -641,6 +781,24 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
               </select>
             </Field>
 
+            <Field
+              label="Status"
+              hint="Drafts and archived articles are hidden from the public site and the sitemap."
+              error={shown('status')}
+            >
+              <select
+                className={inputClass}
+                value={draft.status}
+                onChange={(event) => set('status', event.target.value as PostStatus)}
+              >
+                {statuses.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
             <Field label="Tags" hint="Comma separated, up to 12." error={shown('tags')}>
               <input
                 className={inputClass}
@@ -658,16 +816,39 @@ export function ArticleEditor({ categories, today }: { categories: Category[]; t
               disabled={status.kind === 'publishing'}
               className="w-full rounded-lg bg-[#0F766E] dark:bg-[#14B8A6] px-4 py-3 text-base font-medium text-white dark:text-[#0B111A] hover:bg-[#0D665F] dark:hover:bg-[#2DD4BF] disabled:opacity-60 transition"
             >
-              {status.kind === 'publishing' ? 'Publishing…' : 'Publish to GitHub'}
+              {
+                status.kind === 'publishing'
+                  ? isEdit
+                    ? 'Saving…'
+                    : 'Publishing…'
+                  : fullDraft.status === 'published'
+                    ? isEdit
+                      ? 'Save changes'
+                      : 'Publish to GitHub'
+                    : fullDraft.status === 'draft'
+                      ? 'Save as draft'
+                      : 'Save as archived'
+              }
             </button>
             <p className="text-xs text-[#8996A6]">
               Commits <span className="font-mono">content/posts/{draft.slug || 'slug'}.md</span> and the images to{' '}
-              <span className="font-mono">main</span>. The article appears on the site after the next build.
+              <span className="font-mono">main</span>.
+              {fullDraft.status === 'published'
+                ? ' The article appears on the site after the next build.'
+                : ' It stays off the public site until its status is published.'}
             </p>
 
             {status.kind === 'ok' ? (
               <p className="rounded-lg border border-[#DCFCE7] dark:border-[#052E16] bg-[#DCFCE7] dark:bg-[#052E16] px-3 py-2 text-xs text-[#16A34A] dark:text-[#22C55E]">
-                {status.message} <a className="underline" href={status.url}>{status.url}</a>
+                {status.message}
+                {status.url ? (
+                  <>
+                    {' '}
+                    <a className="underline" href={status.url}>
+                      {status.url}
+                    </a>
+                  </>
+                ) : null}
               </p>
             ) : null}
             {status.kind === 'error' ? (

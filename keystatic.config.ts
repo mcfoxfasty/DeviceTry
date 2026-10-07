@@ -74,6 +74,33 @@ export function postCategoryLabel(value: string): string {
 }
 
 /**
+ * The three states an article can be in.
+ *
+ * `published` is the only state the public site renders: `/blog`, the article
+ * routes and the sitemap read through `listPublishedPosts`, so a draft or an
+ * archived article is invisible to readers and to search engines without anyone
+ * having to remember to hide it. Files written before the field existed have no
+ * `status` key at all, and the reader's default — `published` — is what keeps
+ * those articles live, which is why the default is the state every article used
+ * to have rather than a new one.
+ */
+export const POST_STATUSES = [
+  { label: 'Published', value: 'published' },
+  { label: 'Draft', value: 'draft' },
+  { label: 'Archived', value: 'archived' },
+] as const;
+
+export type PostStatus = (typeof POST_STATUSES)[number]['value'];
+
+/** The status an article has when its file does not say, or the author did not choose. */
+export const DEFAULT_POST_STATUS: PostStatus = 'published';
+
+/** Label for a status value, for the management table's badges. */
+export function postStatusLabel(value: string): string {
+  return POST_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
+/**
  * The rich-text editor's exact capability set.
  *
  * Exported so the tests can assert the two things the CMS promises instead of
@@ -234,6 +261,17 @@ const keystaticConfig = config({
           label: 'Category',
           options: POST_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
           defaultValue: 'how-to',
+        }),
+
+        /**
+         * Publication state. `published` renders on the site; `draft` and
+         * `archived` do not — see POST_STATUSES above for why the default is
+         * `published` rather than `draft`.
+         */
+        status: fields.select({
+          label: 'Status',
+          options: POST_STATUSES.map((s) => ({ label: s.label, value: s.value })),
+          defaultValue: DEFAULT_POST_STATUS,
         }),
 
         /**

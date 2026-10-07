@@ -126,6 +126,23 @@ async function existingSha(
   return typeof body?.sha === 'string' ? body.sha : undefined;
 }
 
+/**
+ * Whether a path already exists in the repository.
+ *
+ * The publish endpoint uses it for image references the current upload does not
+ * carry: an edit's body points at images committed by an earlier publish, and
+ * those are fine — a path that is neither here nor in the repository is a broken
+ * image waiting to be built.
+ */
+export async function fileExists(path: string, token: string, request: typeof fetch = fetch): Promise<boolean> {
+  const response = await request(`${contentsUrl(path)}?ref=${PUBLISH_BRANCH}`, {
+    headers: headers(token),
+  });
+  if (response.status === 200) return true;
+  if (response.status === 404) return false;
+  throw new GithubError(response.status, githubErrorMessage(response.status, await response.text()));
+}
+
 /** Create or update one file in the repository. */
 export async function commitFile(options: {
   path: string;
@@ -165,6 +182,36 @@ export interface PublishResult {
   slug: string;
   articlePath: string;
   commits: CommitResult[];
+}
+
+/**
+ * Delete one file from the repository.
+ *
+ * The contents API refuses to delete without the file's current `sha`, so this is
+ * the same lookup the write path does, then `DELETE` with the sha and the branch.
+ * A 404 from the lookup means there is nothing to delete, which is reported as a
+ * fact (`deleted: false`) rather than dressed up as an error — deleting twice
+ * should not be a failure.
+ */
+export async function deleteFile(options: {
+  path: string;
+  message: string;
+  token: string;
+  request?: typeof fetch;
+}): Promise<{ path: string; deleted: boolean }> {
+  const { path, message, token, request = fetch } = options;
+  const sha = await existingSha(path, token, request);
+  if (sha === undefined) return { path, deleted: false };
+
+  const response = await request(contentsUrl(path), {
+    method: 'DELETE',
+    headers: headers(token, true),
+    body: JSON.stringify({ message, sha, branch: PUBLISH_BRANCH }),
+  });
+  if (!response.ok) {
+    throw new GithubError(response.status, githubErrorMessage(response.status, await response.text()));
+  }
+  return { path, deleted: true };
 }
 
 /**
