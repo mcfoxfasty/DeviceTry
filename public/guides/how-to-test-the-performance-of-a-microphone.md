@@ -12,6 +12,8 @@ tags: []
 canonicalUrl: null
 ---
 
+![Microphone performance](/uploads/img-1761-754c3ecb.webp)
+
 Read time 7 min
 How to test the performance of a microphone
 When performing a practical test of a microphone be sure to get manufacturers info about specifications and applications. Besides the reading, it is a good idea to compare against a known reference, for instance, a measurement microphone with a linear response, for example the 4006A Omnidirectional Microphone.
