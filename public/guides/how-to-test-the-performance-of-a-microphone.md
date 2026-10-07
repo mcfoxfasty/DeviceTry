@@ -10,6 +10,7 @@ category: audio
 status: published
 tags:
   - Microphone
+  - performance
 canonicalUrl: null
 ---
 
