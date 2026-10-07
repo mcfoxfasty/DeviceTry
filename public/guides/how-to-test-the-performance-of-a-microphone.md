@@ -8,7 +8,8 @@ publishedAt: 2026-10-06
 author: DeviceTry team
 category: audio
 status: published
-tags: []
+tags:
+  - Microphone
 canonicalUrl: null
 ---
 
