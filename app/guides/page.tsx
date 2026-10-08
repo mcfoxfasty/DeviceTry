@@ -5,7 +5,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { getDictionary } from '@/lib/i18n';
 import { GUIDE_CATEGORIES } from '@/lib/guides/registry';
-import { listPublishedArticles, type PublishedArticleRef } from '@/lib/articles/registry';
+import { listSiteArticles, type PublishedArticleRef } from '@/lib/articles/registry';
 import { POST_CATEGORIES } from '@/keystatic.config';
 import { SITE_URL } from '@/lib/site';
 import { siteOpenGraph } from '@/lib/seo/metadata';
@@ -30,8 +30,9 @@ export const metadata: Metadata = {
  * It lists everything the site publishes — the imported guides under
  * `content/guides/**` and the CMS articles under `public/guides/*.md` — from the
  * one registry that knows about both (lib/articles/registry.ts), so an article
- * written in the dashboard is a card here the moment the next build runs, without
- * anyone remembering to add it to a list.
+ * written in the dashboard is a card here the moment it is published, without
+ * anyone remembering to add it to a list: the files in `public/guides/` are the
+ * list, and the repository read fills in whatever the build has not seen.
  *
  * The section headings come from the site's taxonomy, merged rather than
  * hardcoded: the guide categories in their established order first, then the two
@@ -53,9 +54,35 @@ function kindLabel(article: PublishedArticleRef): string {
   return POST_CATEGORIES.find((category) => category.value === article.category)?.label ?? 'Article';
 }
 
+/**
+ * The collection an article came from, named on its card.
+ *
+ * The two kinds of article are edited in different places and stored as different
+ * things — a CMS article is Markdown written in the dashboard, a typed guide is a
+ * source module — and the dashboard already labels every row. A reader who arrives
+ * from `/admin` should not have to guess which kind of article they opened, so the
+ * hub says it too.
+ */
+function sourceLabel(article: PublishedArticleRef): string {
+  return article.source === 'cms' ? 'CMS article' : 'Typed guide';
+}
+
+/**
+ * Rendered per request rather than frozen at build time.
+ *
+ * The list is the site's whole article set: what the build knows plus any published
+ * CMS article the build has never seen, read from the repository (see
+ * lib/articles/registry.ts). That read is the point — an article published from
+ * `/admin` a minute ago belongs on this page now, not after the next deploy — and it
+ * cannot happen inside a prerendered page. When no token is configured the read is
+ * skipped and the page renders exactly the build's list, so a deployment without one
+ * loses nothing it had before.
+ */
+export const dynamic = 'force-dynamic';
+
 export default async function GuidesHub() {
   const t = getDictionary();
-  const articles = await listPublishedArticles();
+  const articles = await listSiteArticles();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F6FB] dark:bg-[#0B111A] text-[#142033] dark:text-[#E9EEF4] font-sans">
@@ -89,8 +116,13 @@ export default async function GuidesHub() {
                     href={`/guides/${article.slug}`}
                     className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                   >
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
-                      {kindLabel(article)}
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
+                        {kindLabel(article)}
+                      </span>
+                      <span className="rounded-full border border-[#E2E8F0] dark:border-[#223043] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#7A8798] dark:text-[#8896A8]">
+                        {sourceLabel(article)}
+                      </span>
                     </span>
                     <h3 className="mt-2 text-sm font-bold leading-snug text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
                       {article.title}

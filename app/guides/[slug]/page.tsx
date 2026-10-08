@@ -10,10 +10,17 @@ import { GUIDE_IMAGE_WIDTHS, guideImageFile } from '@/lib/guides/images';
 import { compactTitle, DEFAULT_OG_IMAGE } from '@/lib/seo/metadata';
 import { GuideArticleView } from '@/components/guides/GuideArticleView';
 import { PostBody } from '@/components/blog/PostBody';
+import { PostBodyHtml } from '@/components/blog/PostBodyHtml';
 import { ArticleFooter } from '@/components/blog/ArticleFooter';
 import { buildArticleFooter } from '@/lib/blog/footers';
 import { buildPostJsonLd, buildPostMetadata, ARTICLE_PATH } from '@/lib/blog/seo';
-import { listPublishedArticles, resolvePublishedArticle } from '@/lib/articles/registry';
+import {
+  listPublishedArticles,
+  listSiteArticles,
+  resolveLiveArticle,
+  resolvePublishedArticle,
+  type ResolvedArticle,
+} from '@/lib/articles/registry';
 import { postCategoryLabel } from '@/keystatic.config';
 import { SITE_URL } from '@/lib/site';
 
@@ -31,19 +38,24 @@ interface PageProps {
  * PostBody). lib/articles/registry.ts decides which one a slug names, preferring
  * the guide when somehow both exist.
  *
- * WHY `dynamicParams = false`. Articles are prerendered, and a slug no build has
- * seen is a 404 rather than a page rendered on demand. Publishing an article is a
- * commit, and the next build turns it into a page; without this, Next would try to
- * render an unknown slug inside the Cloudflare Worker, where the MDX compiler's
- * dynamic code evaluation is unavailable. Saying so is more honest than a route
- * that half-works.
+ * WHY `dynamicParams = true`. Every article the build knows is prerendered — fast,
+ * static output — and a slug the build has never seen is rendered on demand instead
+ * of 404ing. That is the difference between "publishing is a commit that the next
+ * deploy turns into a page" and "publishing works". The on-demand path reads the
+ * article from the repository (lib/articles/registry.ts) and renders its body with
+ * the eval-free renderer, because the Cloudflare Worker bans dynamic code
+ * evaluation and the MDX compiler needs exactly that. A slug in neither the build
+ * nor the repository still 404s, so a genuinely missing URL stays missing.
  */
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  // Published articles only, from both collections. A draft or an archived article
-  // gets no route at all, which — with `dynamicParams = false` above — means its
-  // URL is a 404 rather than a page that has to remember not to index itself.
+  // Published articles only, from both collections — the set that is prerendered.
+  // A draft or an archived article gets no prerendered route, which is what keeps
+  // its URL out of the static output rather than hiding it after the fact. (It is
+  // not a 404 by construction any more: the route renders unknown slugs on demand,
+  // and the on-demand read applies the same published-only rule — see
+  // lib/articles/registry.ts.)
   const articles = await listPublishedArticles();
   return articles.map((article) => ({ slug: article.slug }));
 }
@@ -136,9 +148,21 @@ function guideMetadata(guide: GuideArticle): Metadata {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const article = await resolvePublishedArticle(slug);
+  const article = await resolveArticle(slug);
   if (!article) return { title: 'Article Not Found — DeviceTry' };
   return article.source === 'cms' ? buildPostMetadata(article.post) : guideMetadata(article.guide);
+}
+
+/**
+ * The article a slug names, from the build first and the repository second.
+ *
+ * One resolver used by both `generateMetadata` and the page, so the `<title>` a
+ * crawler reads is derived from the same article the page renders — a metadata
+ * pass that resolved a different version of the article than the body would be a
+ * page describing itself incorrectly.
+ */
+async function resolveArticle(slug: string): Promise<ResolvedArticle | null> {
+  return (await resolvePublishedArticle(slug)) ?? (await resolveLiveArticle(slug));
 }
 
 /** A publication date a reader can read: ISO in the data, prose in the page. */
@@ -156,7 +180,7 @@ function formatDate(iso: string): string {
 
 export default async function GuidePage({ params }: PageProps) {
   const { slug } = await params;
-  const article = await resolvePublishedArticle(slug);
+  const article = await resolveArticle(slug);
   if (!article) notFound();
   const t = getDictionary();
 
@@ -167,7 +191,11 @@ export default async function GuidePage({ params }: PageProps) {
     // The generated foot is part of the page's data, not decoration: the FAQ it
     // produces is also what the FAQPage graph below describes, so structured data
     // and visible page cannot disagree about what the article answers.
-    const footer = buildArticleFooter(post, { candidates: await listPublishedArticles() });
+    //
+    // The candidates are the SITE's whole list — built and repository articles
+    // together — so a newly published article can be recommended by an older one,
+    // and never itself (the ranking excludes the article being read).
+    const footer = buildArticleFooter(post, { candidates: await listSiteArticles() });
     const jsonLd = buildPostJsonLd(post, { faqs: footer.faqs });
 
     return (
@@ -186,9 +214,19 @@ export default async function GuidePage({ params }: PageProps) {
             </Link>
 
             <header>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
-                {postCategoryLabel(post.category)}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
+                  {postCategoryLabel(post.category)}
+                </span>
+                {/* Which collection this article came from, stated on the page the
+                    way the dashboard states it on the row: a CMS article is written
+                    in the dashboard and stored as Markdown, a typed guide is a source
+                    module. A reader cross-checking the dashboard should not have to
+                    guess which kind of article they are looking at. */}
+                <span className="rounded-full border border-[#DFE5EB] dark:border-[#223043] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#5F6B7A] dark:text-[#9AA6B8]">
+                  CMS article
+                </span>
+              </div>
               <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#142033] dark:text-[#E9EEF4]">
                 {post.title}
               </h1>
@@ -222,7 +260,14 @@ export default async function GuidePage({ params }: PageProps) {
             ) : null}
 
             <div className="mt-8">
-              <PostBody content={post.content} />
+              {/* The body renderer follows the article's ORIGIN, not a preference:
+                  a compiled article was compiled during the build, and a body read
+                  at request time cannot be compiled at all in the Worker. */}
+              {article.origin === 'repository' ? (
+                <PostBodyHtml content={post.content} />
+              ) : (
+                <PostBody content={post.content} />
+              )}
             </div>
 
             {post.tags.length > 0 ? (

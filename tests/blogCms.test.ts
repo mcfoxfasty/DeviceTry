@@ -282,11 +282,20 @@ test('article SEO - the JSON-LD graph is an Article with breadcrumbs and a real 
 
 // -------------------------------------------------------------------- routes
 
-test('article routes - an unknown slug 404s instead of compiling MDX on demand', () => {
-  // Publishing is a commit; without this the Worker would try to render a slug
-  // that no build has seen, which is where dynamic code evaluation is banned.
+test('article routes - a slug no build has seen is served from the repository, not 404ed', () => {
+  // The old contract was a 404 here: publishing was a commit, and the Worker cannot
+  // compile MDX. The route now resolves such a slug through the live CMS read (see
+  // lib/articles/registry.ts) and renders the body with the eval-free renderer, so an
+  // article published a minute ago has a page before the next build without needing
+  // the compiler. A slug in neither the build nor the repository still 404s.
   const source = readFileSync(join('app', 'guides', '[slug]', 'page.tsx'), 'utf8');
-  assert.match(source, /export const dynamicParams = false/);
+  assert.match(source, /export const dynamicParams = true/);
+  assert.match(source, /await resolveLiveArticle\(slug\)/, 'the route falls back to the repository');
+  assert.match(
+    source,
+    /origin === 'repository'[\s\S]*?<PostBodyHtml/,
+    'a request-time body is rendered without the MDX compiler',
+  );
 });
 
 test('article routes - the CMS is excluded from crawlers and the guides hub is in the sitemap', () => {
@@ -317,7 +326,7 @@ test('article routes - drafts and archived articles have no public route or inde
   // makes a draft's URL a 404 rather than a page that has to remember a robots
   // directive. `listPosts` stays for the management view, which shows every state.
   const hub = readFileSync(join('app', 'guides', 'page.tsx'), 'utf8');
-  assert.match(hub, /listPublishedArticles\(\)/);
+  assert.match(hub, /listSiteArticles\(\)/, 'the hub lists the site-wide set, its live additions included');
   assert.doesNotMatch(hub, /listPosts\(\)/);
 
   const registry = readFileSync(join('lib', 'articles', 'registry.ts'), 'utf8');

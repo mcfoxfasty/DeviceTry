@@ -129,6 +129,16 @@ export function GuideArticleView({ guide }: { guide: GuideArticle }) {
           <span className="px-2 py-0.5 rounded-full bg-[#F6F8FB] dark:bg-[#192332] text-[#59677D] dark:text-[#9AA6B8] capitalize">
             {guide.category.replace('-', ' & ')}
           </span>
+          {/*
+            Which collection this article came from, stated on the page the way the
+            hub states it on the card and the dashboard states it on the row: a typed
+            guide is a source module under content/guides, a CMS article is Markdown
+            written in the dashboard. A reader (or the person who just published
+            something) should not have to infer it.
+          */}
+          <span className="px-2 py-0.5 rounded-full border border-[#DFE5EB] dark:border-[#223043] text-[#59677D] dark:text-[#9AA6B8]">
+            Typed guide
+          </span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-[#142033] dark:text-[#E9EEF4] tracking-tight leading-tight">
           {guide.title}

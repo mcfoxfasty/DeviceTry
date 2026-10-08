@@ -12,7 +12,7 @@ The site publishes two kinds of article and `public/guides` is the storage for b
 
 | Kind | Lives in | Written | Rendered by |
 | --- | --- | --- | --- |
-| **CMS article** | `public/guides/<slug>.md` | this dashboard | `components/blog/PostBody.tsx` (MDX at build time) |
+| **CMS article** | `public/guides/<slug>.md` | this dashboard | `components/blog/PostBody.tsx` (MDX, at build time) or `components/blog/PostBodyHtml.tsx` (read at request time) |
 | **Typed guide** | `content/guides/<category>/<slug>.ts` | as source | `components/guides/GuideArticleView.tsx` |
 
 Both are served from **`/guides/<slug>`**, listed on **`/guides`**, and in the
@@ -20,6 +20,17 @@ sitemap — from one registry, `lib/articles/registry.ts`, so neither can be mis
 from one surface and present in another. `/blog` and `/blog/<slug>` are permanent
 redirects (next.config.redirects.ts): every link, bookmark and search result from
 before the merge keeps working, and a crawler is told where the content moved.
+
+**A new CMS article does not wait for a build.** Every article the build knows is
+prerendered; a slug the build has never seen is resolved from the repository (the
+GitHub API, `lib/articles/registry.ts`), so an article published a minute ago has a
+page at its URL and a card on `/guides` before the next deploy — which is why
+`/guides` is rendered per request, merging the repository's published list into the
+build's. An **edit** still reaches readers on the next build: a prerendered page
+cannot be recalled at request time, and serving the new text at the article's URL
+while the old text is still cached elsewhere would put two versions of one article
+on the site at once. There is no index to update in either direction — the file is
+the entry, and where it lives is what makes it a CMS article.
 
 **`/admin` lists BOTH.** The management table reads the CMS collection and the typed
 guides and shows them in one list, each row labelled with its source. That gap was a
@@ -77,7 +88,9 @@ vanishes is how the old list hid most of the collection in the first place.
 | `lib/admin/authoring.ts` | Draft validation, the exact file format `/guides` reads, and the one-key status rewrite. |
 | `lib/admin/markdown-editing.ts` | The toolbar's operations and the undo history, as pure functions. |
 | `lib/admin/github.ts` | The contents API client: `PUT /repos/{owner}/{repo}/contents/{path}`. |
-| `lib/articles/registry.ts` | The site's read side: both collections as one list, `/guides/<slug>` resolution, and the collision rule. |
+| `lib/articles/registry.ts` | The site's read side: both collections as one list, `/guides/<slug>` resolution (the build first, the repository second), the live CMS read, and the collision rule. |
+| `components/blog/PostBodyHtml.tsx` | Renders a body read at request time with `lib/admin/preview.ts` — the eval-free path, because a Worker cannot compile MDX. |
+| `tests/cmsPipeline.test.ts` | Guards the join: a published file becomes a page and a hub card without a build, a draft does not, and the two body renderers share one class contract. |
 | `lib/blog/footers.ts` | The generated foot of an article: FAQs, related checks, related reading. |
 | `components/blog/ArticleFooter.tsx` | Renders that foot. |
 | `keystatic.config.ts` | The CMS article schema — every field, the categories, the image paths and the editor's capabilities. Still the single source of truth. |
@@ -97,7 +110,7 @@ vanishes is how the old list hid most of the collection in the first place.
 | Variable | What it is |
 | --- | --- |
 | `ADMIN_PASSWORD` | The dashboard password. Falls back to the documented default `MySecretPass2026!` when unset — the login page says so while that is true. Set it. |
-| `GITHUB_TOKEN` | A token with **Contents: read and write** on `mcfoxfasty/DeviceTry`. Reading the collections and publishing are impossible without it, and `/api/admin/publish` says so by name rather than failing silently. |
+| `GITHUB_TOKEN` | A token with **Contents: read and write** on `mcfoxfasty/DeviceTry`. Reading the collections and publishing are impossible without it, and `/api/admin/publish` says so by name rather than failing silently. The public site uses the same token to serve an article the build has not seen yet; without it the site still serves every built article, and a publish becomes visible on the next deploy. |
 | `NEXT_PUBLIC_SITE_URL` | Required separately at deploy time (see `lib/site.ts`); canonical and Open Graph URLs are built from it. |
 
 Set them in the deployment environment and in the workspace's `.env.local` if you
@@ -161,7 +174,9 @@ articles yet" (2026-10-07). Reading through the API also makes the list never a 
 behind: an article committed a minute ago is listed, and a deleted one is gone,
 without waiting for a deploy. The cost is a couple of requests plus one per file,
 which needs `GITHUB_TOKEN` — without it the page says so by name instead of
-rendering an empty list.
+rendering an empty list. The public site's request-time read is the same reader
+(`lib/articles/registry.ts`), so the dashboard and the page a reader opens cannot
+disagree about what an article says.
 
 **Edit** (`/admin/edit/<slug>`) loads the saved file — front matter, body and images
 — into the Markdown editor. Saving commits an update to **the same path**: the
@@ -309,8 +324,17 @@ requires to overwrite instead of answering `409`.
 
 That push is also the deployment trigger: Cloudflare builds from the repository's
 push event, so a publish, an edit, a delete and a status change all reach the site
-through the same path the code does — after a build. The site is statically
-prerendered, including `/guides/<slug>`.
+through the same path the code does.
+
+Reaching readers takes one of two roads, depending on whether the build has seen the
+file. An article the build knows is a prerendered page. A **newer** one is served
+from the repository at request time: the article route falls back to
+`resolveLiveArticle` (`app/guides/[slug]/page.tsx`) and renders its body with
+`PostBodyHtml`, and `/guides` merges the repository's published list into the
+build's (`listSiteArticles`). A draft is neither — the live read applies the same
+published-only rule, so an unpublished file has no page and no card, exactly as it
+has none before a build. A slug in neither the build nor the repository is still a
+404, which is the honest answer for a URL that does not exist.
 
 A rename — the same save with a changed slug — commits the new file and then deletes
 the old one. `DELETE /api/admin/publish?slug=…` does the second half on its own, and

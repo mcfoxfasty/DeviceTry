@@ -24,6 +24,14 @@
  * below the closing delimiter. It is not a YAML implementation, and it is tested
  * against the article already in the repository as well as against composed
  * drafts, so a change in that format fails a test rather than the dashboard.
+ *
+ * TWO CONSUMERS, ONE READER. The dashboard reads the collection to list and edit
+ * it, and the PUBLIC site reads it through `lib/articles/registry.ts` to serve an
+ * article whose build never saw it (a publish between deploys). Both go through
+ * this file, so a CMS article cannot mean one thing to the dashboard and another
+ * to the page a reader opens — and both go through the API for the same reason:
+ * the build-time reader resolves `public/guides/*` from a working directory that a
+ * deployed Worker does not have.
  */
 
 import {
@@ -71,6 +79,20 @@ export interface ArticleDetail extends Omit<ArticleSummary, 'source' | 'repoPath
   tags: string[];
   canonicalUrl: string;
   content: string;
+}
+
+/**
+ * One article file, parsed whole: front matter and body together, plus the path it
+ * was read from.
+ *
+ * The management table wants summaries and the site's request-time reader
+ * (lib/articles/registry.ts) wants full articles; both are projections of this one
+ * record, so front matter is parsed in exactly one place and a field cannot be
+ * extracted one way for the dashboard and another way for the site.
+ */
+export interface ArticleRecord extends ArticleDetail {
+  /** `public/guides/<slug>.md`. */
+  repoPath: string;
 }
 
 export interface FrontMatter {
@@ -201,54 +223,18 @@ async function listArticlePaths(token: string, request: typeof fetch): Promise<s
     .map((entry) => entry.path);
 }
 
-/** Everything a listing needs from one file, or `null` if it cannot be read. */
-function summarize(path: string, file: string): ArticleSummary {
-  const { data } = parseFrontMatter(file);
-  const slug = slugFromPath(path);
-  return {
-    slug,
-    title: asString(data.title, slug),
-    publishedAt: asString(data.publishedAt),
-    category: asString(data.category, 'how-to'),
-    // A file without the field predates it, and reads as the state every article
-    // had before: published.
-    status: asString(data.status, DEFAULT_POST_STATUS),
-    source: 'cms',
-    repoPath: path,
-  };
-}
-
-/** Every article in the collection, newest first — all statuses. */
-export async function listArticles(options: {
-  token: string;
-  request?: typeof fetch;
-}): Promise<ArticleSummary[]> {
-  const { token, request = fetch } = options;
-  const paths = await listArticlePaths(token, request);
-
-  const articles = await Promise.all(
-    paths.map(async (path) => {
-      const file = await fetchFile(path, token, request);
-      return file === null ? null : summarize(path, file);
-    })
-  );
-
-  return articles
-    .filter((article): article is ArticleSummary => article !== null)
-    .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
-}
-
-/** One article with its body, or `null` when the repository has no such file. */
-export async function readArticle(
-  slug: string,
-  options: { token: string; request?: typeof fetch }
-): Promise<ArticleDetail | null> {
-  const { token, request = fetch } = options;
-  const file = await fetchFile(`public/guides/${slug}.md`, token, request);
-  if (file === null) return null;
-
+/**
+ * One article file, as a record: front matter plus the body below it.
+ *
+ * A file with no `status` key predates the field and reads as the state every
+ * article had before it existed — `published` — which is what keeps an older file's
+ * live URL independent of anyone adding the key.
+ */
+export function articleFromFile(path: string, file: string): ArticleRecord {
   const { data, body } = parseFrontMatter(file);
+  const slug = slugFromPath(path);
   const tags = Array.isArray(data.tags) ? data.tags : [];
+
   return {
     slug,
     title: asString(data.title, slug),
@@ -263,7 +249,66 @@ export async function readArticle(
     tags,
     canonicalUrl: asString(data.canonicalUrl),
     content: body,
+    repoPath: path,
   };
+}
+
+/** Everything a listing needs from one file. */
+function summarize(article: ArticleRecord): ArticleSummary {
+  return {
+    slug: article.slug,
+    title: article.title,
+    publishedAt: article.publishedAt,
+    category: article.category,
+    status: article.status,
+    source: 'cms',
+    repoPath: article.repoPath,
+  };
+}
+
+/**
+ * Every article in the collection with its body, newest first.
+ *
+ * One request for the listing plus one per file, in parallel. This is what a
+ * request-time read of the whole CMS needs: the guide hub lists cards built from
+ * front matter, and an article page renders a body, and both are the same read.
+ */
+export async function listArticleDetails(options: {
+  token: string;
+  request?: typeof fetch;
+}): Promise<ArticleRecord[]> {
+  const { token, request = fetch } = options;
+  const paths = await listArticlePaths(token, request);
+
+  const records = await Promise.all(
+    paths.map(async (path) => {
+      const file = await fetchFile(path, token, request);
+      return file === null ? null : articleFromFile(path, file);
+    })
+  );
+
+  return records
+    .filter((article): article is ArticleRecord => article !== null)
+    .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
+}
+
+/** Every article in the collection, newest first — all statuses, no bodies. */
+export async function listArticles(options: {
+  token: string;
+  request?: typeof fetch;
+}): Promise<ArticleSummary[]> {
+  return (await listArticleDetails(options)).map(summarize);
+}
+
+/** One article with its body, or `null` when the repository has no such file. */
+export async function readArticle(
+  slug: string,
+  options: { token: string; request?: typeof fetch }
+): Promise<ArticleDetail | null> {
+  const { token, request = fetch } = options;
+  const path = `public/guides/${slug}.md`;
+  const file = await fetchFile(path, token, request);
+  return file === null ? null : articleFromFile(path, file);
 }
 
 /** True when a token is configured, so a page can say what is missing by name. */
