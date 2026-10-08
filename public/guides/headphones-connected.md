@@ -13,3 +13,5 @@ canonicalUrl: null
 ---
 
 ## Headphones Connected
+
+![Headphones Connected](/uploads/img-1766-bef3a11b.jpeg)
