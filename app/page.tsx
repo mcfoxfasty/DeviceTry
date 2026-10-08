@@ -5,6 +5,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { LandingClient, HomeGuidePick } from '@/components/LandingClient';
 import { getPublishedGuides } from '@/lib/guides/registry';
+import { coverImageUrl } from '@/lib/articles/registry';
 import { SITE_URL } from '@/lib/site';
 import { siteOpenGraph } from '@/lib/seo/metadata';
 
@@ -35,6 +36,11 @@ function pickHomeGuides(): HomeGuidePick[] {
     title: g.title,
     description: g.description,
     type: g.type,
+    // Resolved server-side to a REAL file: a featured image's src is a base
+    // path (/guides/<slug>-hero) whose shipped rasters are -<width>.webp, so
+    // handing the bare base to an <img> was a guaranteed 404.
+    coverImage: g.featuredImage ? coverImageUrl(g.featuredImage.src, g.featuredImage.kind) : '',
+    coverImageAlt: g.featuredImage?.alt ?? '',
   }));
 }
 

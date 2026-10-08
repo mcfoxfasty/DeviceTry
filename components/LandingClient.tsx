@@ -31,6 +31,9 @@ export interface HomeGuidePick {
   title: string;
   description: string;
   type: 'troubleshooting' | 'buying' | 'how-to';
+  /** A real, loadable cover URL (already resolved server-side), or '' when the article has none. */
+  coverImage: string;
+  coverImageAlt: string;
 }
 
 interface LandingClientProps {
@@ -1264,6 +1267,20 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                   data-guide-card
                   className="glass group min-w-[86%] sm:min-w-[46%] lg:min-w-[31.5%] snap-start p-5 rounded-xl border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                 >
+                  {guide.coverImage ? (
+                    <div className="aspect-video w-full overflow-hidden rounded-lg border border-[#E2E8F0] dark:border-[#223043] bg-[#F1F4F7] dark:bg-[#192332] mb-3">
+                      <Image
+                        src={guide.coverImage}
+                        alt={guide.coverImageAlt || guide.title}
+                        width={1200}
+                        height={630}
+                        sizes="(min-width: 1024px) 32vw, (min-width: 640px) 46vw, 86vw"
+                        className="h-full w-full object-cover"
+                        unoptimized
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : null}
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
                     {guide.type === 'troubleshooting'
                       ? t.landing.guideTypeTroubleshooting

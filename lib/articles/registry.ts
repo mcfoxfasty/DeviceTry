@@ -96,7 +96,38 @@ export type ResolvedArticle =
   | { source: 'guide'; slug: string; guide: GuideArticle }
   | { source: 'cms'; slug: string; post: BlogPost; origin: ArticleOrigin };
 
+import { guideImageFallback, guideImageThemes } from '@/lib/guides/images';
+
 const isoDay = (date: Date): string => date.toISOString().slice(0, 10);
+
+/**
+ * The cover URL a card can load.
+ *
+ * A guide's `featuredImage.src` is a BASE path (`/guides/microphone-not-working-hero`):
+ * the shipped rasters are suffixed `-<width>.webp` (and, for a diagram, a theme
+ * segment), so the bare base 404s wherever a plain <img src> uses it — the hub
+ * cards and the related-articles carousel. GuideFigure resolves the same base
+ * through `guideImageFile`; cards must too. A photo resolves to a single,
+ * theme-agnostic file; a diagram takes its LIGHT variant, matching the rule the
+ * social card uses (`app/guides/[slug]/page.tsx`).
+ *
+ * Anything that is already a real file (`/uploads/…` covers, external URLs)
+ * passes through unchanged, with a leading-slash guarantee so a front-matter
+ * value written without one still resolves against the site root.
+ */
+export function coverImageUrl(src: string, kind?: 'diagram' | 'photo'): string {
+  if (!src) return '';
+  // External URLs and real files pass through untouched.
+  if (/^https?:\/\//i.test(src)) return src;
+  // A missing leading slash is normalized against the site root before anything
+  // else looks at the path.
+  const path = src.startsWith('/') ? src : `/${src}`;
+  if (kind) {
+    const [theme] = guideImageThemes(kind);
+    return guideImageFallback(path, theme);
+  }
+  return path;
+}
 
 /** An imported guide, as the shared shape. */
 function guideRef(guide: GuideArticle): PublishedArticleRef {
@@ -107,7 +138,7 @@ function guideRef(guide: GuideArticle): PublishedArticleRef {
     category: guide.category,
     publishedAt: isoDay(guide.publishedAt),
     description: guide.description,
-    coverImage: guide.featuredImage?.src ?? '',
+    coverImage: guide.featuredImage ? coverImageUrl(guide.featuredImage.src, guide.featuredImage.kind) : '',
     coverImageAlt: guide.featuredImage?.alt ?? '',
     type: guide.type,
     tags: [],

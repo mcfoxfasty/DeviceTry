@@ -103,7 +103,7 @@ export function ArticleFooter({ content }: { content: FooterContent }) {
               <Link
                 key={`${article.source}-${article.slug}`}
                 href={article.href}
-                className="group block min-w-[280px] sm:min-w-[300px] md:min-w-[320px] flex-shrink-0 snap-start rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-4 transition-colors hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
+                className="group block w-[280px] max-w-[85vw] flex-shrink-0 snap-start rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-3 transition-colors hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
               >
                 <div
                   aria-hidden={!article.coverImage}
