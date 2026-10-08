@@ -7,7 +7,7 @@ coverImageAlt: How to test the performance of a microphone
 publishedAt: 2026-10-08
 author: DeviceTry team
 category: audio
-status: published
+status: draft
 tags: []
 canonicalUrl: null
 ---
