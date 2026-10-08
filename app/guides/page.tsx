@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
@@ -55,19 +56,6 @@ function kindLabel(article: PublishedArticleRef): string {
 }
 
 /**
- * The collection an article came from, named on its card.
- *
- * The two kinds of article are edited in different places and stored as different
- * things — a CMS article is Markdown written in the dashboard, a typed guide is a
- * source module — and the dashboard already labels every row. A reader who arrives
- * from `/admin` should not have to guess which kind of article they opened, so the
- * hub says it too.
- */
-function sourceLabel(article: PublishedArticleRef): string {
-  return article.source === 'cms' ? 'CMS article' : 'Typed guide';
-}
-
-/**
  * Rendered per request rather than frozen at build time.
  *
  * The list is the site's whole article set: what the build knows plus any published
@@ -116,15 +104,26 @@ export default async function GuidesHub() {
                     href={`/guides/${article.slug}`}
                     className="glass group p-4 rounded-xl border border-[#E2E8F0] dark:border-[#223043] hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] transition-all flex flex-col"
                   >
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
-                        {kindLabel(article)}
-                      </span>
-                      <span className="rounded-full border border-[#E2E8F0] dark:border-[#223043] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#7A8798] dark:text-[#8896A8]">
-                        {sourceLabel(article)}
-                      </span>
+                    <div
+                      aria-hidden={!article.coverImage}
+                      className="aspect-video w-full overflow-hidden rounded-lg border border-[#E2E8F0] dark:border-[#223043] bg-[#F1F4F7] dark:bg-[#192332] mb-3"
+                    >
+                      {article.coverImage ? (
+                        <Image
+                          src={article.coverImage}
+                          alt={article.coverImageAlt || article.title}
+                          width={1200}
+                          height={630}
+                          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
+                      ) : null}
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#8996A6]">
+                      {kindLabel(article)}
                     </span>
-                    <h3 className="mt-2 text-sm font-bold leading-snug text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
+                    <h3 className="mt-1 text-sm font-bold leading-snug text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
                       {article.title}
                     </h3>
                     {article.description ? (

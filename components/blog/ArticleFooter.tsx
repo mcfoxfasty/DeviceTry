@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, HelpCircle, Newspaper, PlayCircle } from 'lucide-react';
 import type { ArticleFooter as FooterContent } from '@/lib/blog/footers';
@@ -93,28 +94,49 @@ export function ArticleFooter({ content }: { content: FooterContent }) {
           <SectionHeading id="article-related" icon={<Newspaper className="w-4 h-4" aria-hidden="true" />}>
             Related articles
           </SectionHeading>
-          <ul className="mt-4 flex flex-col gap-3">
+          <div
+            className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 scroll-mt-24"
+            tabIndex={0}
+            aria-label="Related articles"
+          >
             {related.map((article) => (
-              <li key={`${article.source}-${article.slug}`}>
-                <Link
-                  href={article.href}
-                  className="group block rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-4 transition-colors hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
+              <Link
+                key={`${article.source}-${article.slug}`}
+                href={article.href}
+                className="group block min-w-[280px] sm:min-w-[300px] md:min-w-[320px] flex-shrink-0 snap-start rounded-xl border border-[#DFE5EB] dark:border-[#223043] bg-white dark:bg-[#131B27] p-4 transition-colors hover:border-[#0F766E]/60 dark:hover:border-[#14B8A6]/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E]"
+              >
+                <div
+                  aria-hidden={!article.coverImage}
+                  className="aspect-video w-full overflow-hidden rounded-lg border border-[#E2E8F0] dark:border-[#223043] bg-[#F1F4F7] dark:bg-[#192332] mb-3"
                 >
-                  <span className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6]">
+                  {article.coverImage ? (
+                    <Image
+                      src={article.coverImage}
+                      alt={article.coverImageAlt || article.title}
+                      width={1200}
+                      height={630}
+                      sizes="320px"
+                      className="h-full w-full object-cover"
+                      unoptimized
+                    />
+                  ) : null}
+                </div>
+                <div className="min-w-0">
+                  <span className="text-sm font-bold text-[#142033] dark:text-[#E9EEF4] group-hover:text-[#0F766E] dark:group-hover:text-[#14B8A6] line-clamp-2">
                     {article.title}
                   </span>
                   {article.description ? (
-                    <span className="mt-1.5 block text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8]">
+                    <span className="mt-1 block text-xs leading-relaxed text-[#5F6B7A] dark:text-[#9AA6B8] line-clamp-2">
                       {article.description}
                     </span>
                   ) : null}
-                  <span className="mt-2 inline-block text-[11px] font-semibold uppercase tracking-wider text-[#8996A6]">
+                  <span className="mt-2 block text-[11px] font-semibold uppercase tracking-wider text-[#8996A6]">
                     {article.reason}
                   </span>
-                </Link>
-              </li>
+                </div>
+              </Link>
             ))}
-          </ul>
+          </div>
         </section>
       ) : null}
     </div>

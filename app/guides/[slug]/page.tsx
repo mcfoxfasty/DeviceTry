@@ -218,14 +218,6 @@ export default async function GuidePage({ params }: PageProps) {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-[#14B8A6]">
                   {postCategoryLabel(post.category)}
                 </span>
-                {/* Which collection this article came from, stated on the page the
-                    way the dashboard states it on the row: a CMS article is written
-                    in the dashboard and stored as Markdown, a typed guide is a source
-                    module. A reader cross-checking the dashboard should not have to
-                    guess which kind of article they are looking at. */}
-                <span className="rounded-full border border-[#DFE5EB] dark:border-[#223043] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#5F6B7A] dark:text-[#9AA6B8]">
-                  CMS article
-                </span>
               </div>
               <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#142033] dark:text-[#E9EEF4]">
                 {post.title}

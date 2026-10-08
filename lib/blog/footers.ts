@@ -59,6 +59,9 @@ export interface RelatedArticle {
   href: string;
   source: ArticleSource;
   description: string;
+  /** The article's cover, as a public path (`/uploads/…`, `/guides/…`). Empty when it has none. */
+  coverImage: string;
+  coverImageAlt: string;
   reason: string;
 }
 
@@ -279,6 +282,8 @@ export function relatedArticlesForPost(
       href: `/guides/${entry.candidate.slug}`,
       source: entry.candidate.source,
       description: entry.candidate.description,
+      coverImage: entry.candidate.coverImage,
+      coverImageAlt: entry.candidate.coverImageAlt,
       reason: entry.reason,
     }));
 }
