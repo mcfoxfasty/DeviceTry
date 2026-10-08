@@ -7,7 +7,7 @@ coverImageAlt: 'The DeviceTry cover card, showing the DeviceTry wordmark above t
 publishedAt: 2026-10-06
 author: DeviceTry team
 category: input-gaming
-status: published
+status: archived
 tags:
   - keyboard
   - troubleshooting
