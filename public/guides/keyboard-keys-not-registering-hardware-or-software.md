@@ -65,5 +65,3 @@ The browser reports what the operating system delivered. It cannot see a key tha
 - A key that only fails after the machine wakes from sleep: a driver's power-management bug, not a broken switch.
 
 Run the test again after each change. A fault that moves is a configuration problem, and one that does not move is hardware.
-
-![The article's cover artwork: the DeviceTry wordmark with the line "Free browser-based device tests".](/uploads/keyboard-hardware-or-software.png 'Figure 1. The article cover artwork, shown inline here as an example figure with its own alt text and caption.')
