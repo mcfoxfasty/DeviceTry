@@ -29,8 +29,8 @@ export function PostBodyHtml({ content }: { content: string }): ReactNode {
   return (
     <div
       className="max-w-none"
-      // eslint-disable-next-line react/no-danger -- the renderer emits only its own
-      // tags and escapes every text run; see the header comment.
+      // Safe by construction: the renderer emits only its own tags and escapes
+      // every text run; see the header comment.
       dangerouslySetInnerHTML={{ __html: renderPreview(content) }}
     />
   );

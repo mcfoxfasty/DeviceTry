@@ -501,6 +501,12 @@ export function MicrophoneTester({
   // and releases resources directly — the same preserve-the-verdict
   // semantics as an explicit Stop, minus UI state owned by a live component.
   useEffect(() => {
+    // Cleared by the effect BODY as well as raised by the cleanup: development
+    // StrictMode mounts → runs the cleanup → mounts again, and a ref is not
+    // re-initialised by that second mount. Without this line the flag stays
+    // `true` for the page's whole life in dev, every getUserMedia result is
+    // discarded as obsolete, and the tester never leaves "Awaiting permission".
+    unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
       invalidate();

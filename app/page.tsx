@@ -38,8 +38,11 @@ function pickHomeGuides(): HomeGuidePick[] {
     type: g.type,
     // Resolved server-side to a REAL file: a featured image's src is a base
     // path (/guides/<slug>-hero) whose shipped rasters are -<width>.webp, so
-    // handing the bare base to an <img> was a guaranteed 404.
-    coverImage: g.featuredImage ? coverImageUrl(g.featuredImage.src, g.featuredImage.kind) : '',
+    // handing the bare base to an <img> was a guaranteed 404. An omitted `kind`
+    // is a diagram by the schema's default, so resolve it as one.
+    coverImage: g.featuredImage
+      ? coverImageUrl(g.featuredImage.src, g.featuredImage.kind ?? 'diagram')
+      : '',
     coverImageAlt: g.featuredImage?.alt ?? '',
   }));
 }

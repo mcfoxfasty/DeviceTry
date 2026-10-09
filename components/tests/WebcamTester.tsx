@@ -417,6 +417,11 @@ export function WebcamTester({
   // Unmount & route cleanup: invalidate + pure teardown, no setState, and the
   // completed guided result is NOT cleared.
   useEffect(() => {
+    // Cleared by the effect BODY, not only raised by the cleanup: development
+    // StrictMode mounts → cleans up → mounts again without re-initialising
+    // refs, which would leave the camera permanently "unmounted" and the
+    // tester stuck before it ever adopts a stream.
+    unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
       invalidate();

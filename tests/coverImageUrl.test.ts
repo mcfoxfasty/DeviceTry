@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { coverImageUrl } from '../lib/articles/registry';
+import { coverImageUrl, listPublishedArticles } from '../lib/articles/registry';
 
 test('cover images - a photo featured image resolves to a file that exists', () => {
   // The exact values the two imported guides with photo leads declare.
@@ -40,4 +40,22 @@ test('cover images - a CMS /uploads cover and external URLs pass through unchang
 test('cover images - a missing leading slash is normalized against the site root', () => {
   assert.equal(coverImageUrl('uploads/cover.png'), '/uploads/cover.png');
   assert.equal(coverImageUrl('guides/hero', 'photo'), '/guides/hero-480.webp');
+});
+
+test('cover images - every cover the published-article list hands to a card exists on disk', async () => {
+  // The hub, the homepage picks and the related-articles carousel all render
+  // `coverImage` verbatim, so this list decides whether a card 404s. A guide
+  // whose featuredImage OMITS `kind` is a diagram by the schema's default, and
+  // that is the case this catches: the bare resolver would pass the base path
+  // through, so the callers resolve `kind ?? 'diagram'`.
+  const refs = await listPublishedArticles();
+  assert.ok(refs.length > 0, 'the registry lists at least one article');
+
+  for (const ref of refs) {
+    if (!ref.coverImage || /^https?:/i.test(ref.coverImage)) continue;
+    assert.ok(
+      existsSync(join('public', ref.coverImage)),
+      `${ref.source} "${ref.slug}": card cover ${ref.coverImage} must exist on disk`
+    );
+  }
 });

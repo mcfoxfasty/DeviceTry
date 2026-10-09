@@ -173,9 +173,16 @@ export const PERMISSIONS_POLICY = [
  * running on the Worker through OpenNext. These are the enforcing A-targeted
  * headers, excluding HSTS (which is hostname-gated and added at the Worker
  * boundary).
+ *
+ * The CSP is deliberately omitted in development. Next.js dev mode compiles
+ * pages with webpack's eval-source-map, which emits JS via eval(), so the
+ * current policy — script-src 'self' 'unsafe-inline' https: without
+ * 'unsafe-eval' — blocks the dev server's own bundles and leaves the site
+ * dead. The policy stays exactly as-is in production; this only gates the
+ * whole header behind NODE_ENV === 'production'.
  */
 export function securityHeaders(): Array<{ key: string; value: string }> {
-  return [
+  const headers: Array<{ key: string; value: string }> = [
     { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
     // No X-Frame-Options: see the framing note above. frame-ancestors carries the
     // rule because it is the only directive that can allowlist the managed
@@ -183,6 +190,15 @@ export function securityHeaders(): Array<{ key: string; value: string }> {
     { key: 'X-Content-Type-Options', value: 'nosniff' },
     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
-    { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
   ];
+
+  // The Content-Security-Policy header is a production header only. In dev,
+  // Next.js webpack eval-source-map needs eval(), which this policy forbids,
+  // so sending it breaks every page. Never add 'unsafe-eval' to the policy
+  // itself — the production value is unchanged.
+  if (process.env.NODE_ENV === 'production') {
+    headers.push({ key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY });
+  }
+
+  return headers;
 }

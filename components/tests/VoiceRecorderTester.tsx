@@ -306,6 +306,11 @@ export function VoiceRecorderTester({ onResultUpdate }: ToolComponentProps) {
   // Unmount: invalidate pending work and release everything. A completed
   // recording (and its guided/host result) is NOT cleared — only resources.
   useEffect(() => {
+    // Cleared by the effect BODY, not only raised by the cleanup: development
+    // StrictMode remounts effects without re-initialising refs, and a stale
+    // `true` makes every getUserMedia result look superseded — the recorder
+    // would silently refuse to start.
+    unmountedRef.current = false;
     const session = sessionRef.current;
     return () => {
       unmountedRef.current = true;

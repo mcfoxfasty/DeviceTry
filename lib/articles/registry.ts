@@ -114,6 +114,11 @@ const isoDay = (date: Date): string => date.toISOString().slice(0, 10);
  * Anything that is already a real file (`/uploads/…` covers, external URLs)
  * passes through unchanged, with a leading-slash guarantee so a front-matter
  * value written without one still resolves against the site root.
+ *
+ * A guide that OMITS `kind` is a diagram by the schema's own default
+ * (content/guides/schema.ts), so its callers pass `kind ?? 'diagram'` — the
+ * same resolution the article page's social card applies. Without that, an
+ * omitted kind would hand a card the bare base path and 404 it.
  */
 export function coverImageUrl(src: string, kind?: 'diagram' | 'photo'): string {
   if (!src) return '';
@@ -138,7 +143,9 @@ function guideRef(guide: GuideArticle): PublishedArticleRef {
     category: guide.category,
     publishedAt: isoDay(guide.publishedAt),
     description: guide.description,
-    coverImage: guide.featuredImage ? coverImageUrl(guide.featuredImage.src, guide.featuredImage.kind) : '',
+    coverImage: guide.featuredImage
+      ? coverImageUrl(guide.featuredImage.src, guide.featuredImage.kind ?? 'diagram')
+      : '',
     coverImageAlt: guide.featuredImage?.alt ?? '',
     type: guide.type,
     tags: [],
