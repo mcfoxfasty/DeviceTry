@@ -32,7 +32,7 @@ export const bluetoothHeadphonesNoSoundWindows11: GuideArticle = {
     'When Windows 11 reports your Bluetooth headphones as connected and you hear nothing, the first thing to stop trusting is the word "connected". It describes the Bluetooth link. It does not describe which output device Windows is playing through, whether the application you are in has muted itself, or whether an app opened the microphone and moved playback to a lower-bandwidth profile. This guide starts with the three checks that cost about a minute, and only then explains the profile model behind them, because that model is what the later steps actually act on. Every check here also states what it cannot tell you: none of them identifies a failed component.',
   published: true,
   publishedAt: new Date('2026-09-30'),
-  updatedAt: new Date('2026-09-30'),
+  updatedAt: new Date('2026-10-08'),
   hasAffiliateLinks: false,
   featuredImage: {
     src: '/guides/bluetooth-headphones-no-sound-windows-11-hero',
