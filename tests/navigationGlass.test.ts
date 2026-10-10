@@ -37,10 +37,11 @@ test('mobile drawers have distinct destinations and route through semantic links
 });
 
 test('Liquid Glass surfaces reveal the grid softly and retain safe fallbacks', () => {
-  assert.match(globals, /\.glass\s*\{[\s\S]*?background-color:\s*rgba\(255, 255, 255, 0\.42\)[\s\S]*?backdrop-filter:\s*blur\(9px\)/);
-  assert.match(globals, /\.dark \.glass\s*\{[\s\S]*?background-color:\s*rgba\(13, 24, 34, 0\.50\)[\s\S]*?backdrop-filter:\s*blur\(9px\)/);
-  assert.match(globals, /\.glass-strong\s*\{[\s\S]*?background-color:\s*rgba\(248, 252, 252, 0\.70\)/);
-  assert.match(globals, /\.glass-pill\s*\{[\s\S]*?backdrop-filter:\s*blur\(6px\)/);
+  assert.match(globals, /\.glass\s*\{[\s\S]*?background-color:\s*rgba\(255, 255, 255, 0\.32\)[\s\S]*?radial-gradient[\s\S]*?backdrop-filter:\s*blur\(12px\)/);
+  assert.match(globals, /\.dark \.glass\s*\{[\s\S]*?background-color:\s*rgba\(9, 20, 29, 0\.34\)[\s\S]*?radial-gradient[\s\S]*?backdrop-filter:\s*blur\(12px\)/);
+  assert.match(globals, /\.glass-strong\s*\{[\s\S]*?background-color:\s*rgba\(248, 252, 252, 0\.64\)[\s\S]*?radial-gradient/);
+  assert.match(globals, /\.glass-overlay\s*\{[\s\S]*?background-color:\s*rgba\(248, 252, 252, 0\.54\)[\s\S]*?backdrop-filter:\s*blur\(18px\)/);
+  assert.match(globals, /\.glass-pill\s*\{[\s\S]*?backdrop-filter:\s*blur\(10px\)/);
   assert.match(globals, /@supports not \(\(backdrop-filter:[\s\S]*?background-image: none;/, 'unsupported browsers do not expose a sharp grid behind text');
   assert.match(globals, /prefers-reduced-transparency: reduce[\s\S]*?background-image: none;/, 'reduced-transparency preference is respected');
   assert.match(landing, /className="glass tool-card/);
