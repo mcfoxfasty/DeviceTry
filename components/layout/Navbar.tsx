@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   Menu,
   X,
   ClipboardCheck,
+  ChevronDown,
   ChevronRight,
   Grip,
   Sun,
@@ -287,10 +287,12 @@ function NavbarInner({ t }: NavbarProps) {
   const [openDrawer, setOpenDrawer] = useState<DrawerId>(null);
   const [toolsQuery, setToolsQuery] = useState<string>('');
   const [openCategory, setOpenCategory] = useState<string | null>(null);
-  const router = useRouter();
+  const [desktopCategoriesOpen, setDesktopCategoriesOpen] = useState(false);
 
   const navTriggerRef = useRef<HTMLButtonElement>(null);
   const toolsTriggerRef = useRef<HTMLButtonElement>(null);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+  const categoryTriggerRef = useRef<HTMLButtonElement>(null);
 
   // Stable identity across renders: passed as DrawerOverlay's `onClose`, it
   // must not change when the user types (a new callback identity used to
@@ -298,6 +300,7 @@ function NavbarInner({ t }: NavbarProps) {
   const closeDrawers = useCallback(() => {
     setOpenDrawer(null);
     setOpenCategory(null);
+    setDesktopCategoriesOpen(false);
   }, []);
 
   // Body scroll lock while any drawer is open.
@@ -308,10 +311,33 @@ function NavbarInner({ t }: NavbarProps) {
     };
   }, [openDrawer]);
 
+  // Keep the desktop category popover dismissible without adding a second
+  // navigation tree or trapping the visitor in an open menu.
+  useEffect(() => {
+    if (!desktopCategoriesOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!categoryMenuRef.current?.contains(event.target as Node)) {
+        setDesktopCategoriesOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDesktopCategoriesOpen(false);
+        categoryTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [desktopCategoriesOpen]);
+
   // Close if the viewport grows to desktop where drawers aren't used.
   useEffect(() => {
     if (!openDrawer) return;
-    const mq = window.matchMedia('(min-width: 768px)');
+    const mq = window.matchMedia('(min-width: 1024px)');
     const onChange = (e: MediaQueryListEvent) => {
       if (e.matches) closeDrawers();
     };
@@ -319,10 +345,7 @@ function NavbarInner({ t }: NavbarProps) {
     return () => mq.removeEventListener('change', onChange);
   }, [openDrawer, closeDrawers]);
 
-  const navigate = (href: string) => {
-    closeDrawers();
-    router.push(href);
-  };
+  const navigate = closeDrawers;
 
   const toolsByCategory = (key: string) => TOOLS_REGISTRY.filter((tool) => tool.category === key);
 
@@ -341,47 +364,50 @@ function NavbarInner({ t }: NavbarProps) {
     []
   );
 
-  // Desktop navigation is compact: Tests, Guides — Guided Checkup exists once
-  // as the CTA button (no duplicated normal link + CTA).
+  // One desktop navigation tree contains every requested destination.
   const desktopLinks = [
     { href: '/tests', label: t.nav.tools },
+    { href: '/advanced-diagnostics', label: t.nav.advancedDiagnostics },
     { href: '/guides', label: t.nav.guides ?? 'Guides' },
+    { href: '/test-history', label: t.nav.testHistory },
   ];
 
   return (
     <>
       {/* ============ Sticky glass header ============ */}
       <header className="no-print sticky top-0 z-40 w-full glass-strong border-b border-[#E8E3F2] dark:border-[#223043]">
-        {/* minmax(0,1fr) rather than 1fr: a bare 1fr track has a min-content
-            floor, so on a very narrow screen the centred logo pushed the whole
-            header (and therefore the page) wider than the viewport. The three
-            columns stay equal, so desktop is unchanged. */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
-          {/* Left: hamburger (mobile) */}
-          <div className="flex justify-start md:hidden">
+        {/* The equal grid columns keep the logo precisely centered on phones;
+            at desktop the same row becomes a flex layout with brand left and
+            navigation plus appearance control aligned to the far right. */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center lg:flex lg:justify-between">
+          {/* Mobile menu trigger; desktop branding stays at the far left. */}
+          <div className="flex items-center justify-start">
             <button
               ref={navTriggerRef}
               onClick={() => setOpenDrawer(openDrawer === 'nav' ? null : 'nav')}
-              className="inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+              className="lg:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA]/70 dark:hover:bg-[#192332]/70 transition-colors cursor-pointer"
               aria-label={t.nav.openMenu}
               aria-expanded={openDrawer === 'nav'}
               aria-controls="site-nav-drawer"
             >
               <Menu className="w-5 h-5" />
             </button>
+            <Link href="/" className="hidden lg:flex items-center gap-2" aria-label="DeviceTry home">
+              <DeviceTryLogo size={30} />
+            </Link>
           </div>
 
-          {/* Centre: logo (independently centred on mobile via grid columns) */}
-          <Link href="/" className="flex items-center justify-center gap-2 shrink-0" aria-label="DeviceTry home">
+          {/* Mobile logo stays centered between the two launchers. */}
+          <Link href="/" className="lg:hidden flex items-center justify-center gap-2 shrink-0" aria-label="DeviceTry home">
             <DeviceTryLogo size={30} />
           </Link>
 
-          {/* Right: dots grid (mobile) / links (desktop) */}
-          <div className="flex justify-end items-center">
+          {/* Right: tools launcher on mobile; full navigation and switch on desktop. */}
+          <div className="flex justify-end items-center gap-1 lg:flex-1">
             <button
               ref={toolsTriggerRef}
               onClick={() => setOpenDrawer(openDrawer === 'tools' ? null : 'tools')}
-              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+              className="lg:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-[#5F6B7A] dark:text-[#9AA6B8] hover:bg-[#F4F2FA]/70 dark:hover:bg-[#192332]/70 transition-colors cursor-pointer"
               aria-label={t.nav.openTools}
               aria-expanded={openDrawer === 'tools'}
               aria-controls="tools-drawer"
@@ -390,22 +416,63 @@ function NavbarInner({ t }: NavbarProps) {
             </button>
 
             <nav
-              className="hidden md:flex items-center gap-1 text-[13px] font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]"
+              className="hidden lg:flex items-center justify-end gap-0.5 xl:gap-1 text-xs xl:text-[13px] font-semibold text-[#5F6B7A] dark:text-[#9AA6B8]"
               aria-label="Main navigation"
             >
               {desktopLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="px-3 py-2 rounded-lg hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors"
+                  className="px-2 xl:px-2.5 py-2 rounded-lg whitespace-nowrap hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-white/45 dark:hover:bg-white/10 transition-colors"
                 >
                   {link.label}
                 </Link>
               ))}
-              {/* Single Guided Checkup CTA (desktop) — no duplicate link. */}
+              <div ref={categoryMenuRef} className="relative">
+                <button
+                  ref={categoryTriggerRef}
+                  type="button"
+                  aria-expanded={desktopCategoriesOpen}
+                  aria-haspopup="true"
+                  aria-controls="desktop-category-menu"
+                  onClick={() => setDesktopCategoriesOpen((open) => !open)}
+                  className="inline-flex items-center gap-1 px-2 xl:px-2.5 py-2 rounded-lg whitespace-nowrap hover:text-[#142033] dark:hover:text-[#E9EEF4] hover:bg-white/45 dark:hover:bg-white/10 transition-colors"
+                >
+                  {t.nav.categories}
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${desktopCategoriesOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {desktopCategoriesOpen && (
+                  <div
+                    id="desktop-category-menu"
+                    role="group"
+                    aria-label={t.nav.categories}
+                    className="glass-overlay absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-white/45 dark:border-white/10 p-2 shadow-xl"
+                  >
+                    {CATEGORY_META.map((category) => {
+                      const count = toolsByCategory(category.key).length;
+                      if (count === 0) return null;
+                      const href = category.key === 'supporting'
+                        ? '/advanced-diagnostics'
+                        : `/?category=${encodeURIComponent(category.key)}`;
+                      return (
+                        <Link
+                          key={category.key}
+                          href={href}
+                          onClick={() => setDesktopCategoriesOpen(false)}
+                          className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-[#142033] dark:text-[#E9EEF4] hover:bg-white/55 dark:hover:bg-white/10 transition-colors"
+                        >
+                          <span>{category.label}</span>
+                          <span className="text-xs text-[#5F6B7A] dark:text-[#9AA6B8]">{count}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {/* Single Guided Inspection CTA; it is not repeated as a desktop link. */}
               <Link
                 href="/inspection"
-                className="ml-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors"
+                className="ml-1 inline-flex items-center gap-1.5 px-2.5 xl:px-3 py-2 rounded-lg whitespace-nowrap bg-[#0F766E] hover:bg-[#0D665F] dark:bg-[#14B8A6] dark:hover:bg-[#0D9488] text-white dark:text-[#0B111A] transition-colors"
               >
                 <ClipboardCheck className="w-3.5 h-3.5" />
                 {t.nav.guidedInspection}
@@ -415,7 +482,7 @@ function NavbarInner({ t }: NavbarProps) {
             {/* Compact desktop theme switch — theme switching is not
                 mobile-only. Mobile keeps the labelled control in the left
                 drawer; both render the same switch on the same theme system. */}
-            <div className="hidden md:flex items-center ml-3 pl-3 border-l border-[#E8E3F2] dark:border-[#223043]">
+            <div className="hidden lg:flex items-center ml-2 pl-2 border-l border-[#E8E3F2]/70 dark:border-[#223043]/80">
               <ThemeSwitch t={t} variant="desktop" />
             </div>
           </div>
@@ -447,14 +514,15 @@ function NavbarInner({ t }: NavbarProps) {
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="space-y-1">
             {DRAWER_LINKS.map(({ href, labelKey, icon: Icon }) => (
-              <button
+              <Link
                 key={href}
-                onClick={() => navigate(href)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
+                href={href}
+                onClick={closeDrawers}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-semibold text-[#142033] dark:text-[#E9EEF4] hover:bg-white/50 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <Icon className="w-4 h-4 text-[#0F766E] dark:text-[#14B8A6]" />
                 {t.nav[labelKey]}
-              </button>
+              </Link>
             ))}
           </div>
 
@@ -502,7 +570,7 @@ function NavbarInner({ t }: NavbarProps) {
               onChange={(e) => setToolsQuery(e.target.value)}
               placeholder={t.nav.toolsDrawerSearch}
               aria-label={t.nav.toolsDrawerSearch}
-              className="w-full pl-3 pr-3 py-2 rounded-lg text-sm bg-white dark:bg-[#131B27] border border-[#DFE5EB] dark:border-[#223043] text-[#142033] dark:text-[#E9EEF4] placeholder-[#8996A6] focus:outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] transition-colors"
+              className="glass w-full pl-3 pr-3 py-2 rounded-lg text-sm border border-[#DFE5EB]/80 dark:border-[#223043]/80 text-[#142033] dark:text-[#E9EEF4] placeholder-[#8996A6] focus:outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/15 dark:focus:border-[#14B8A6] transition-colors"
             />
           </div>
         </div>
@@ -587,16 +655,17 @@ function ToolList({
 }: {
   tools: ToolDefinition[];
   t: Translations;
-  onNavigate: (href: string) => void;
+  onNavigate: () => void;
   popular?: boolean;
 }) {
   if (tools.length === 0) return null;
   return (
     <div className="space-y-1">
       {tools.map((tool) => (
-        <button
+        <Link
           key={tool.id}
-          onClick={() => onNavigate(`/test/${tool.slug}`)}
+          href={`/test/${tool.slug}`}
+          onClick={onNavigate}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[#F4F2FA] dark:hover:bg-[#192332] transition-colors cursor-pointer"
         >
           <span className="shrink-0">
@@ -610,7 +679,7 @@ function ToolList({
               <span className="block text-[11px] text-[#8996A6] truncate">{tool.shortDesc}</span>
             )}
           </span>
-        </button>
+        </Link>
       ))}
     </div>
   );

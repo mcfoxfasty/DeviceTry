@@ -472,7 +472,8 @@ test('homepage background - outlines and grid use the tool-icon green', () => {
   // Grid: same greens, gentle in light mode, calm neon bloom in dark mode.
   const lightGrid = globals.slice(globals.indexOf('.homepage-geometry {'), globals.indexOf('.dark .homepage-geometry {'));
   const darkGrid = globals.slice(globals.indexOf('.dark .homepage-geometry {'), globals.indexOf('.how-step::after'));
-  assert.match(lightGrid, /rgba\(21, 128, 61, 0\.06\)/);
+  assert.match(lightGrid, /linear-gradient\(to right, rgba\(21, 128, 61, 0\.09\)/);
+  assert.match(lightGrid, /linear-gradient\(to bottom, rgba\(21, 128, 61, 0\.09\)/);
   assert.doesNotMatch(lightGrid, /rgba\(15, 118, 110/, 'light grid is no longer teal');
   assert.doesNotMatch(lightGrid, /at 0% 0%/, 'the corner glow is a dark-mode-only treatment');
   assert.match(darkGrid, /rgba\(74, 222, 128, 0\.09\)/);
@@ -1385,7 +1386,7 @@ test('navbar - the theme switch travels within its track and stays visible on mo
   assert.match(navbarSource, /variant="desktop"/, 'desktop header must render the compact ThemeSwitch variant');
   assert.match(
     navbarSource,
-    /hidden md:flex[\s\S]{0,200}<ThemeSwitch t=\{t\} variant="desktop" \/>/,
+    /hidden lg:flex[\s\S]{0,200}<ThemeSwitch t=\{t\} variant="desktop" \/>/,
     'desktop switch must be hidden on mobile (drawer switch covers mobile)'
   );
   assert.match(navbarSource, /<ThemeSwitch t=\{t\} \/>/, 'the drawer keeps the switch');

@@ -808,8 +808,8 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                             onMouseEnter={() => setActiveIndex(idx)}
                             className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
                               idx === activeIndex
-                                ? 'bg-[#EEF7F5] dark:bg-[#133230]'
-                                : 'bg-white dark:bg-[#131B27]'
+                                ? 'bg-[#EEF7F5]/75 dark:bg-[#133230]/72'
+                                : 'bg-white/28 dark:bg-[#0D1924]/28'
                             }`}
                           >
                             <span className="shrink-0">
@@ -834,7 +834,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                       setSuggestionsOpen(false);
                       scrollToTools();
                     }}
-                    className="w-full px-4 py-2.5 text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] bg-[#F6F7F9] dark:bg-[#192332] hover:bg-[#EEF7F5] dark:hover:bg-[#133230] transition-colors cursor-pointer text-left border-t border-[#DFE5EB] dark:border-[#223043]"
+                    className="w-full px-4 py-2.5 text-xs font-bold text-[#0F766E] dark:text-[#14B8A6] bg-white/32 dark:bg-white/5 hover:bg-[#EEF7F5]/75 dark:hover:bg-[#133230]/72 transition-colors cursor-pointer text-left border-t border-[#DFE5EB]/80 dark:border-[#223043]/80"
                   >
                     View all {filteredTools.length} result{filteredTools.length === 1 ? '' : 's'}
                   </button>
@@ -852,7 +852,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                   className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
                     searchQuery === term
                       ? 'bg-[#0F766E] text-white border-[#0F766E] dark:bg-[#14B8A6] dark:border-[#14B8A6] dark:text-[#0B111A]'
-                      : 'bg-white dark:bg-[#131B27] border-[#DFE5EB] dark:border-[#223043] text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
+                      : 'glass-pill border-[#DFE5EB]/80 dark:border-[#223043]/80 text-[#5F6B7A] dark:text-[#9AA6B8] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
                   }`}
                 >
                   {term}
@@ -887,7 +887,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
             className={`min-h-[36px] px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] ${
               selectedCategory === 'all'
                 ? 'bg-[#0F766E] text-white shadow-sm dark:bg-[#14B8A6] dark:text-[#0B111A]'
-                : 'bg-white dark:bg-[#131B27] text-[#5F6B7A] dark:text-[#9AA6B8] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
+                : 'glass-pill text-[#5F6B7A] dark:text-[#9AA6B8] border border-[#DFE5EB]/80 dark:border-[#223043]/80 hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
             }`}
           >
             All ({toolCount})
@@ -901,7 +901,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
                 className={`min-h-[36px] px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F766E] ${
                   selectedCategory === c.key
                     ? 'bg-[#0F766E] text-white shadow-sm dark:bg-[#14B8A6] dark:text-[#0B111A]'
-                    : 'bg-white dark:bg-[#131B27] text-[#5F6B7A] dark:text-[#9AA6B8] border border-[#DFE5EB] dark:border-[#223043] hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
+                    : 'glass-pill text-[#5F6B7A] dark:text-[#9AA6B8] border border-[#DFE5EB]/80 dark:border-[#223043]/80 hover:border-[#0F766E] dark:hover:border-[#14B8A6] hover:text-[#0F766E] dark:hover:text-[#14B8A6]'
                 }`}
               >
                 {c.label}
@@ -919,7 +919,7 @@ export function LandingClient({ t, guides: homeGuides }: LandingClientProps) {
               <button
                 onClick={clearSearch}
                 aria-label={`Clear search query “${searchQuery.trim()}”`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#EEF7F5] dark:bg-[#132E2E] text-[#0F766E] dark:text-[#14B8A6] border border-[#0F766E]/30 hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors cursor-pointer"
+                className="glass-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#EEF7F5]/75 dark:bg-[#132E2E]/75 text-[#0F766E] dark:text-[#14B8A6] border border-[#0F766E]/30 hover:border-[#0F766E] dark:hover:border-[#14B8A6] transition-colors cursor-pointer"
               >
                 “{searchQuery.trim()}”
                 <X className="w-3 h-3" aria-hidden="true" />
